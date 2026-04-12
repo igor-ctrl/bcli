@@ -102,14 +102,14 @@ def init() -> None:
 
     console.print(f"\n[green]✓[/green] Config saved to {path}")
     console.print(f"[green]✓[/green] Standard v2.0 APIs ready ({state.registry.standard_count} entities)")
-    console.print(f"\n[dim]Try: bcapi get customers --top 5[/dim]")
+    console.print(f"\n[dim]Try: bcli get customers --top 5[/dim]")
 
 
 @app.command()
 def show() -> None:
     """Print current resolved configuration (secrets redacted)."""
     if not CONFIG_FILE.is_file():
-        console.print("[yellow]No config found. Run 'bcapi config init' first.[/yellow]")
+        console.print("[yellow]No config found. Run 'bcli config init' first.[/yellow]")
         raise typer.Exit(1)
 
     config = state.config
