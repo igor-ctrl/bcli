@@ -46,12 +46,17 @@ class AsyncBCClient:
         return self._transport
 
     @staticmethod
-    def _build_auth(profile: BCProfile) -> ClientCredentialsAuth:
+    def _build_auth(profile: BCProfile):
         """Build auth provider from profile config."""
-        if profile.auth_method != "client_credentials":
-            raise ConfigError(f"Auth method '{profile.auth_method}' not yet supported.")
+        if profile.auth_method == "device_code":
+            from bcapi.auth._device_code import DeviceCodeAuth
 
-        # Allow direct secret via env var BCAPI_CLIENT_SECRET as fallback
+            return DeviceCodeAuth(
+                tenant_id=profile.tenant_id,
+                client_id=profile.client_id or "",
+            )
+
+        # Default: client_credentials
         secret = None
         if profile.client_secret_env:
             secret_from_env = os.environ.get(profile.client_secret_env)
@@ -59,7 +64,6 @@ class AsyncBCClient:
                 secret = secret_from_env
 
         if not secret:
-            # Try generic fallback
             secret = os.environ.get("BCAPI_CLIENT_SECRET")
 
         if not secret:
@@ -170,6 +174,15 @@ class AsyncBCClient:
         """Discover all companies in the current environment."""
         transport = self._ensure_transport()
         url = build_companies_url(environment=self._profile.environment)
+        data = await transport.get(url)
+        return data.get("value", [])
+
+    async def list_environments(self) -> list[dict[str, Any]]:
+        """Discover all environments via BC Admin Center API."""
+        from bcapi._url import build_environments_url
+
+        transport = self._ensure_transport()
+        url = build_environments_url(tenant_id=self._profile.tenant_id)
         data = await transport.get(url)
         return data.get("value", [])
 

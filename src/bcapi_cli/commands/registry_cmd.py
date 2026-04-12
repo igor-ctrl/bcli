@@ -71,9 +71,39 @@ def import_registry(
         console.print(f"[dim]Saved to {path}[/dim]")
 
     elif from_metadata:
-        console.print("[yellow]$metadata import is not yet implemented (Phase 2).[/yellow]")
-        console.print("[dim]Use --from-postman or --from-json for now.[/dim]")
-        raise typer.Exit(1)
+        import asyncio
+        from bcapi.client._async import AsyncBCClient
+        from bcapi.registry._importers import import_from_metadata as _import_meta
+
+        p = state.profile
+        if not p.api_publisher or not p.api_group or not p.api_version:
+            console.print(
+                "[red]--from-metadata requires api_publisher, api_group, and api_version "
+                "to be set in your profile.[/red]"
+            )
+            console.print("[dim]Set them with: bcli config set profiles.<name>.api_publisher <value>[/dim]")
+            raise typer.Exit(1)
+
+        console.print(
+            f"[dim]Querying $metadata for {p.api_publisher}/{p.api_group}/{p.api_version}...[/dim]"
+        )
+
+        async def _do_metadata_import():
+            async with AsyncBCClient(profile=state.profile_name, config=state.config) as client:
+                transport = client._ensure_transport()
+                return await _import_meta(
+                    transport, p.environment, p.api_publisher, p.api_group, p.api_version,
+                )
+
+        endpoints = asyncio.run(_do_metadata_import())
+
+        if not endpoints:
+            console.print("[yellow]No endpoints found in $metadata.[/yellow]")
+            raise typer.Exit(1)
+
+        path = save_custom_registry(profile_name, endpoints, source="metadata")
+        console.print(f"[green]✓[/green] Discovered {len(endpoints)} endpoints from $metadata")
+        console.print(f"[dim]Saved to {path}[/dim]")
 
     else:
         console.print("[red]Specify one of: --from-postman, --from-json, --from-metadata[/red]")

@@ -83,6 +83,9 @@ class BCClient:
     def list_companies(self) -> list[dict[str, Any]]:
         return self._run(self._async.list_companies())
 
+    def list_environments(self) -> list[dict[str, Any]]:
+        return self._run(self._async.list_environments())
+
     def test_connection(self) -> bool:
         return self._run(self._async.test_connection())
 
