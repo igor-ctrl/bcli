@@ -49,7 +49,7 @@ def status() -> None:
         console.print(f"  Tenant: {profile.tenant_id}")
         console.print(f"  Client: {profile.client_id}")
     else:
-        console.print("[yellow]No valid cached token.[/yellow] Run 'bcapi auth login'.")
+        console.print("[yellow]No valid cached token.[/yellow] Run 'bcli auth login'.")
 
 
 @app.command()

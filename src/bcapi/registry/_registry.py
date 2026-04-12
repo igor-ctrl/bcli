@@ -71,7 +71,7 @@ class EndpointRegistry:
                 hint = f" Did you mean: {names}?"
             raise RegistryError(
                 f"Endpoint '{entity_set_name}' not found in any registry.{hint}"
-                " Run 'bcapi registry import' to add custom APIs,"
+                " Run 'bcli registry import' to add custom APIs,"
                 " or use --publisher/--group/--version for ad-hoc access."
             )
         return result

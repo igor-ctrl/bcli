@@ -30,7 +30,7 @@ dependencies = [
 ]
 
 [project.scripts]
-bcapi = "bcapi_cli.app:app"
+bcli = "bcapi_cli.app:app"
 
 [project.optional-dependencies]
 dev = [

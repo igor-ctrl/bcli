@@ -98,7 +98,8 @@ class Query:
         params = self.to_params()
         if not params:
             return ""
-        parts = [f"{k}={quote(v, safe=',()\'')}" for k, v in params.items()]
+        safe_chars = ",()'\""
+        parts = [f"{k}={quote(v, safe=safe_chars)}" for k, v in params.items()]
         return "?" + "&".join(parts)
 
     @property

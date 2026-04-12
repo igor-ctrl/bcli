@@ -10,7 +10,7 @@ from bcapi._version import __version__
 from bcapi_cli._state import state
 
 app = typer.Typer(
-    name="bcapi",
+    name="bcli",
     help="CLI for Microsoft Dynamics 365 Business Central APIs",
     no_args_is_help=True,
     rich_markup_mode="rich",
@@ -19,7 +19,7 @@ app = typer.Typer(
 
 def version_callback(value: bool) -> None:
     if value:
-        typer.echo(f"bcapi {__version__}")
+        typer.echo(f"bcli {__version__}")
         raise typer.Exit()
 
 

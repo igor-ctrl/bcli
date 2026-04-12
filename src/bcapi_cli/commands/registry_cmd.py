@@ -89,7 +89,7 @@ def list_registries() -> None:
 
     files = sorted(REGISTRIES_DIR.glob("*.json"))
     if not files:
-        console.print("[dim]No custom registries found. Run 'bcapi registry import' to add one.[/dim]")
+        console.print("[dim]No custom registries found. Run 'bcli registry import' to add one.[/dim]")
         return
 
     import json
