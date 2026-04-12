@@ -1,0 +1,61 @@
+"""Exception hierarchy for bcapi."""
+
+from __future__ import annotations
+
+
+class BCAPIError(Exception):
+    """Base exception for all bcapi errors."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        bc_message: str | None = None,
+        correlation_id: str | None = None,
+    ) -> None:
+        self.status_code = status_code
+        self.bc_message = bc_message
+        self.correlation_id = correlation_id
+        parts = [message]
+        if bc_message and bc_message != message:
+            parts.append(f"BC says: {bc_message}")
+        if correlation_id:
+            parts.append(f"Correlation ID: {correlation_id}")
+        super().__init__(" | ".join(parts))
+
+
+class AuthError(BCAPIError):
+    """Authentication failure (401, token acquisition)."""
+
+
+class ForbiddenError(BCAPIError):
+    """Permission denied (403)."""
+
+
+class NotFoundError(BCAPIError):
+    """Resource not found (404)."""
+
+
+class ValidationError(BCAPIError):
+    """Bad request / OData filter error (400)."""
+
+
+class ThrottledError(BCAPIError):
+    """Rate limited (429). Check retry_after attribute."""
+
+    def __init__(self, message: str, *, retry_after: float | None = None, **kwargs) -> None:
+        self.retry_after = retry_after
+        super().__init__(message, **kwargs)
+
+
+class ServerError(BCAPIError):
+    """Server error (500, 502, 503, 504)."""
+
+
+class ConfigError(BCAPIError):
+    """Configuration missing or invalid."""
+
+
+class RegistryError(BCAPIError):
+    """Endpoint not found in any registry."""
