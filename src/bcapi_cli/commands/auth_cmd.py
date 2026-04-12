@@ -1,4 +1,4 @@
-"""bcapi auth — authentication commands."""
+"""bcli auth — authentication commands."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import asyncio
 
 import typer
 from rich.console import Console
+from rich.prompt import Prompt
 
 from bcapi.auth._credentials import ClientCredentialsAuth
 from bcapi.auth._token_cache import TokenCache
@@ -51,6 +52,19 @@ def status() -> None:
     else:
         console.print("[yellow]No valid cached token.[/yellow] Run 'bcli auth login'.")
 
+    # Show keychain status
+    if ClientCredentialsAuth.has_keyring():
+        from bcapi.auth._credentials import _try_keyring_get, KEYRING_SERVICE
+
+        keyring_key = f"{profile.tenant_id}:{profile.client_id}"
+        has_secret = _try_keyring_get(KEYRING_SERVICE, keyring_key) is not None
+        if has_secret:
+            console.print(f"  Keychain: [green]secret stored[/green]")
+        else:
+            console.print(f"  Keychain: [dim]no secret stored[/dim] (run 'bcli auth store-secret')")
+    else:
+        console.print(f"  Keychain: [dim]keyring not installed[/dim] (pip install keyring)")
+
 
 @app.command()
 def logout() -> None:
@@ -59,3 +73,36 @@ def logout() -> None:
     cache = TokenCache()
     cache.clear(profile.tenant_id, profile.client_id)
     console.print(f"[green]✓[/green] Cleared tokens for profile '{state.active_profile_name}'")
+
+
+@app.command("store-secret")
+def store_secret() -> None:
+    """Store client secret in the OS keychain (macOS Keychain, Windows Credential Manager)."""
+    profile = state.profile
+
+    if not ClientCredentialsAuth.has_keyring():
+        console.print("[red]keyring library not installed.[/red]")
+        console.print("[dim]Install it: pip install keyring[/dim]")
+        raise typer.Exit(1)
+
+    secret = Prompt.ask("Client secret", password=True)
+
+    if ClientCredentialsAuth.store_secret(
+        profile.tenant_id, profile.client_id or "", secret
+    ):
+        console.print(f"[green]✓[/green] Secret stored in OS keychain for profile '{state.active_profile_name}'")
+        console.print("[dim]You can now remove client_secret_env from your config if you want.[/dim]")
+    else:
+        console.print("[red]✗ Failed to store secret in keychain.[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("delete-secret")
+def delete_secret() -> None:
+    """Remove client secret from the OS keychain."""
+    profile = state.profile
+
+    if ClientCredentialsAuth.delete_secret(profile.tenant_id, profile.client_id or ""):
+        console.print(f"[green]✓[/green] Secret removed from keychain for profile '{state.active_profile_name}'")
+    else:
+        console.print("[yellow]No secret found in keychain (or keyring not available).[/yellow]")
