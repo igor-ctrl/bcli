@@ -42,8 +42,16 @@ class CLIState:
         # Apply per-command overrides
         if self.env_override:
             p = p.model_copy(update={"environment": self.env_override})
-        if self.company_override:
-            p = p.model_copy(update={"company_id": self.company_override})
+        if self.company_override and self.company_override.lower() != "all":
+            # Resolve alias to company_id
+            try:
+                resolved_id, resolved_name = p.resolve_company(self.company_override)
+                p = p.model_copy(update={
+                    "company_id": resolved_id,
+                    "company_name": resolved_name or self.company_override,
+                })
+            except ValueError:
+                pass  # "all" — handled by get_cmd
         return p
 
     @property
