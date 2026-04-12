@@ -194,7 +194,7 @@ class AsyncBCClient:
         """Resolve entity to full URL using registry or explicit overrides."""
         if not self._profile.company_id:
             raise ConfigError(
-                "No company_id configured. Run 'bcapi config init' or 'bcapi company use <id>'."
+                "No company_id configured. Run 'bcli config init' or 'bcli company use <id>'."
             )
 
         # Explicit override takes priority
