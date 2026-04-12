@@ -56,25 +56,11 @@ class AsyncBCClient:
                 client_id=profile.client_id or "",
             )
 
-        # Default: client_credentials
-        secret = None
-        if profile.client_secret_env:
-            secret_from_env = os.environ.get(profile.client_secret_env)
-            if secret_from_env:
-                secret = secret_from_env
-
-        if not secret:
-            secret = os.environ.get("BCAPI_CLIENT_SECRET")
-
-        if not secret:
-            raise ConfigError(
-                f"No client secret found. Set the '{profile.client_secret_env}' environment variable."
-            )
-
+        # Default: client_credentials — secret resolved lazily
         return ClientCredentialsAuth(
             tenant_id=profile.tenant_id,
             client_id=profile.client_id or "",
-            client_secret=secret,
+            client_secret_env=profile.client_secret_env,
         )
 
     async def __aenter__(self) -> AsyncBCClient:
