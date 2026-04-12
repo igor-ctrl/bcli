@@ -195,6 +195,63 @@ def save_custom_registry(
     return registry_file
 
 
+async def import_from_metadata(
+    transport,
+    environment: str,
+    publisher: str,
+    group: str,
+    version: str,
+) -> list[EndpointMetadata]:
+    """Discover custom API endpoints from the live BC $metadata endpoint.
+
+    Parses the OData XML $metadata to extract EntitySet names.
+    """
+    from bcapi._url import build_metadata_url
+
+    url = build_metadata_url(
+        environment=environment,
+        publisher=publisher,
+        group=group,
+        version=version,
+    )
+
+    # $metadata returns XML, not JSON — use raw GET
+    import httpx
+
+    auth_headers = await transport._inject_auth()
+    async with httpx.AsyncClient(timeout=30) as http:
+        response = await http.get(url, headers=auth_headers)
+        response.raise_for_status()
+        xml_text = response.text
+
+    # Parse EntitySet elements from the EDMX XML
+    endpoints: list[EndpointMetadata] = []
+    # Pattern: <EntitySet Name="entitySetName" EntityType="...entityName"/>
+    entity_set_pattern = re.compile(
+        r'<EntitySet\s+Name="([^"]+)"\s+EntityType="[^"]*\.(\w+)"',
+    )
+
+    for match in entity_set_pattern.finditer(xml_text):
+        entity_set_name = match.group(1)
+        entity_type = match.group(2)
+
+        # Skip internal/system entity sets
+        if entity_set_name.startswith("$"):
+            continue
+
+        endpoints.append(EndpointMetadata(
+            entity_set_name=entity_set_name,
+            entity_name=entity_type,
+            api_publisher=publisher,
+            api_group=group,
+            api_version=version,
+            supports=["GET"],  # Conservative default — metadata doesn't always tell us
+            key_field="systemId",
+        ))
+
+    return sorted(endpoints, key=lambda e: e.entity_set_name)
+
+
 def _singularize(name: str) -> str:
     """Naive singularization for entity names."""
     if name.endswith("ies"):
