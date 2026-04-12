@@ -156,6 +156,27 @@ def set_value(key: str, value: str) -> None:
     console.print(f"[green]✓[/green] Set {key} = {value}")
 
 
+@app.command("use")
+def use_profile(
+    name: str = typer.Argument(help="Profile name to set as default"),
+) -> None:
+    """Switch the active profile."""
+    config = state.config
+
+    if name not in config.profiles:
+        available = ", ".join(config.profiles.keys()) or "(none)"
+        console.print(f"[red]Profile '{name}' not found. Available: {available}[/red]")
+        raise typer.Exit(1)
+
+    config.defaults.profile = name
+    save_config(config)
+
+    profile = config.profiles[name]
+    console.print(f"[green]✓[/green] Switched to profile '{name}'")
+    console.print(f"  Environment: {profile.environment}")
+    console.print(f"  Company: {profile.company_name or profile.company_id or '(not set)'}")
+
+
 async def _discover_companies(transport: BCTransport, environment: str) -> list[dict]:
     url = build_companies_url(environment=environment)
     data = await transport.get(url)
