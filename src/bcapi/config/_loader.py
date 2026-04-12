@@ -116,5 +116,13 @@ def save_config(config: BCConfig) -> Path:
             lines.append(f'api_version = "{profile.api_version}"')
         lines.append("")
 
+        # Company aliases
+        for alias, company in profile.companies.items():
+            lines.append(f"[profiles.{name}.companies.{alias}]")
+            lines.append(f'id = "{company.id}"')
+            if company.name:
+                lines.append(f'name = "{company.name}"')
+            lines.append("")
+
     CONFIG_FILE.write_text("\n".join(lines))
     return CONFIG_FILE

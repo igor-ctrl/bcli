@@ -1,4 +1,4 @@
-"""bcapi get — query Business Central entities."""
+"""bcli get — query Business Central entities."""
 
 from __future__ import annotations
 
@@ -51,7 +51,6 @@ def get_command(
         query.count()
 
     if state.verbose:
-        # Show what we're about to do
         meta = state.registry.get(endpoint)
         if meta:
             console.print(f"[dim]Endpoint: {endpoint} ({meta.route_display})[/dim]")
@@ -62,6 +61,22 @@ def get_command(
     if state.dry_run:
         console.print("[yellow]--dry-run: would execute GET, skipping.[/yellow]")
         raise typer.Exit()
+
+    # Check if --company all was passed (via global flag)
+    company_override = state.company_override
+    if company_override and company_override.lower() == "all":
+        try:
+            records = asyncio.run(
+                _execute_get_all_companies(
+                    endpoint, query, top,
+                    publisher=publisher, group=group, version=version,
+                )
+            )
+            format_output(records, state.format)
+        except Exception as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+        return
 
     try:
         records = asyncio.run(
@@ -74,6 +89,75 @@ def get_command(
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
+
+
+async def _execute_get_all_companies(
+    endpoint: str,
+    query: Query,
+    top: int | None,
+    *,
+    publisher: str | None = None,
+    group: str | None = None,
+    version: str | None = None,
+) -> list[dict]:
+    """Query across all company aliases, tagging each record with _company."""
+    profile = state.config.get_profile(state.profile_name)
+    companies = profile.all_companies()
+
+    if not companies:
+        console.print("[yellow]No company aliases configured. Use 'bcli company alias' first.[/yellow]")
+        return []
+
+    all_records: list[dict] = []
+
+    async with AsyncBCClient(profile=state.profile_name, config=state.config) as client:
+        for alias, company_id, company_name in companies:
+            display = alias or company_name or company_id[:8]
+            console.print(f"[dim]Querying {endpoint} in {display}...[/dim]")
+
+            # Override the company for this query
+            url = client._resolve_url(
+                endpoint,
+                publisher=publisher,
+                group=group,
+                version=version,
+            )
+            # Replace the company_id in the URL
+            from bcapi._url import build_url
+            ep = client.registry.get(endpoint)
+            if ep and ep.is_custom:
+                url = build_url(
+                    environment=profile.environment,
+                    company_id=company_id,
+                    entity_set_name=endpoint,
+                    publisher=ep.api_publisher,
+                    group=ep.api_group,
+                    version=ep.api_version,
+                )
+            else:
+                url = build_url(
+                    environment=profile.environment,
+                    company_id=company_id,
+                    entity_set_name=endpoint,
+                    publisher=publisher,
+                    group=group,
+                    version=version,
+                )
+
+            transport = client._ensure_transport()
+            params = query.to_params()
+            data = await transport.get(url, params=params)
+            records = data.get("value", [])
+
+            # Tag each record with _company
+            for record in records:
+                record["_company"] = alias
+                record["_company_name"] = company_name
+
+            all_records.extend(records)
+            console.print(f"[dim]  → {len(records)} record(s) from {display}[/dim]")
+
+    return all_records
 
 
 async def _execute_get(
@@ -91,12 +175,10 @@ async def _execute_get(
         config=state.config,
     ) as client:
         if all_pages:
-            # Follow pagination
             all_records: list[dict] = []
             bound = client.query(endpoint)
             if publisher and group and version:
                 bound.route(publisher, group, version)
-            # Apply query params
             if not query.is_empty:
                 for f in query._params.filters:
                     bound.filter(f)
@@ -120,6 +202,5 @@ async def _execute_get(
                 version=version,
             )
             if record_id:
-                # Single record — wrap in list for formatter
                 return [response.raw] if response.raw else []
             return response.value
