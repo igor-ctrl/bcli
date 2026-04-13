@@ -74,9 +74,11 @@ class BrowserAuth:
         redirect_uri = f"http://localhost:{port}"
 
         # MSAL handles PKCE automatically via initiate_auth_code_flow
+        # prompt="select_account" forces the account picker every time
         flow = app.initiate_auth_code_flow(
             scopes=[BC_SCOPE],
             redirect_uri=redirect_uri,
+            prompt="select_account",
         )
 
         if "auth_uri" not in flow:
