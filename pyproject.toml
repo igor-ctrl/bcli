@@ -37,6 +37,7 @@ cli = [
     "rich>=13.0",
     "pyyaml>=6.0",
     "keyring>=25.0",
+    "workos>=5.0",
 ]
 dev = [
     "bcli[cli]",
