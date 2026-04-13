@@ -2,6 +2,7 @@
 
 from bcli._version import __version__
 from bcli.client import AsyncBCClient, BCClient
+from bcli.client._safety import DomainRule, SafeContext
 from bcli.config import BCConfig, load_config
 from bcli.errors import (
     AuthError,
@@ -10,6 +11,7 @@ from bcli.errors import (
     ForbiddenError,
     NotFoundError,
     RegistryError,
+    SafetyError,
     ServerError,
     ThrottledError,
     ValidationError,
@@ -25,11 +27,14 @@ __all__ = [
     "BCClient",
     "BCConfig",
     "ConfigError",
+    "DomainRule",
     "EndpointRegistry",
     "ForbiddenError",
     "NotFoundError",
     "Query",
     "RegistryError",
+    "SafeContext",
+    "SafetyError",
     "ServerError",
     "ThrottledError",
     "ValidationError",
