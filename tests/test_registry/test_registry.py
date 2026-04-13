@@ -1,7 +1,7 @@
 """Tests for endpoint registry."""
 
-from bcapi.registry._registry import EndpointRegistry
-from bcapi.registry._schema import EndpointMetadata
+from bcli.registry._registry import EndpointRegistry
+from bcli.registry._schema import EndpointMetadata
 
 
 def test_standard_registry_loads():
@@ -32,7 +32,7 @@ def test_not_found_returns_none():
 
 def test_resolve_raises_on_not_found():
     import pytest
-    from bcapi.errors import RegistryError
+    from bcli.errors import RegistryError
 
     registry = EndpointRegistry()
     with pytest.raises(RegistryError, match="not found"):

@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from bcapi.registry._importers import import_from_json, import_from_postman
+from bcli.registry._importers import import_from_json, import_from_postman
 
 
 def test_import_from_postman_real_collection():
@@ -46,8 +46,8 @@ def test_import_from_json_bcmcp_format():
         assert ep.api_version
 
 
-def test_import_from_json_bcapi_format():
-    """Test bcapi-native format."""
+def test_import_from_json_bcli_format():
+    """Test bcli-native format."""
     data = {
         "endpoints": [
             {

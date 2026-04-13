@@ -25,13 +25,13 @@ uv run ruff check src/
 
 ```
 src/
-├── bcapi/           # Python SDK (importable library)
+├── bcli/            # Python SDK (importable library)
 │   ├── auth/        # MSAL auth (client credentials, device code, token cache)
 │   ├── client/      # HTTP client (async-first, sync wrapper, transport)
 │   ├── config/      # TOML config (model, loader, defaults)
 │   ├── odata/       # OData query builder, pagination, response wrapper
 │   └── registry/    # Endpoint registry, importers, standard_v2.json
-├── bcapi_cli/       # CLI layer (Typer)
+├── bcli_cli/       # CLI layer (Typer)
 │   ├── commands/    # One file per command group
 │   └── output/      # Formatters (table, json, csv, ndjson)
 └── tests/
@@ -39,7 +39,7 @@ src/
 
 ## Architecture Principles
 
-**SDK/CLI split** — The SDK (`bcapi`) is a standalone library with no CLI dependency. The CLI (`bcapi_cli`) is a thin Typer layer that calls the SDK. This lets MCP servers, DAGs, and scripts import `bcapi` directly.
+**SDK/CLI split** — The SDK (`bcli`) is a standalone library with no CLI dependency. The CLI (`bcli_cli`) is a thin Typer layer that calls the SDK. This lets MCP servers, DAGs, and scripts import `bcli` directly.
 
 **Async-first** — `AsyncBCClient` is the primary implementation. `BCClient` wraps it for sync contexts. New SDK features should be implemented in `_async.py` first.
 
@@ -51,15 +51,15 @@ src/
 
 ## Adding a New Command
 
-1. Create `src/bcapi_cli/commands/mycommand_cmd.py`
+1. Create `src/bcli_cli/commands/mycommand_cmd.py`
 2. Define a Typer `app` and commands
-3. Register in `src/bcapi_cli/app.py`
+3. Register in `src/bcli_cli/app.py`
 
 ## Adding a New SDK Feature
 
-1. Add the async method to `src/bcapi/client/_async.py`
-2. Add the sync wrapper to `src/bcapi/client/_sync.py`
-3. Export from `src/bcapi/__init__.py` if it's part of the public API
+1. Add the async method to `src/bcli/client/_async.py`
+2. Add the sync wrapper to `src/bcli/client/_sync.py`
+3. Export from `src/bcli/__init__.py` if it's part of the public API
 4. Write tests in `tests/`
 
 ## Test Organization

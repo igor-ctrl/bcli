@@ -1,6 +1,6 @@
 """Tests for URL builder."""
 
-from bcapi._url import build_companies_url, build_url
+from bcli._url import build_companies_url, build_url
 
 
 def test_standard_v2_url():

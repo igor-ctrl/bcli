@@ -110,13 +110,13 @@ bcli registry import --from-postman ./collection.json --profile production
 bcli registry import --from-postman ./collection.json --profile sandbox
 ```
 
-Registries are stored at `~/.config/bcapi/registries/<profile-name>.json`.
+Registries are stored at `~/.config/bcli/registries/<profile-name>.json`.
 
 ## How Route Resolution Works
 
 When you run `bcli get someEntity`:
 
-1. **Custom registry** — Checks `~/.config/bcapi/registries/<profile>.json` first. If found, uses the entity's `api_publisher/api_group/api_version` to build the URL.
+1. **Custom registry** — Checks `~/.config/bcli/registries/<profile>.json` first. If found, uses the entity's `api_publisher/api_group/api_version` to build the URL.
 2. **Standard v2.0** — Falls back to the built-in standard registry. Routes to `/api/v2.0/`.
 3. **Not found** — Shows an error with fuzzy search suggestions and hints to import a registry.
 

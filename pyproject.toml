@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "bcapi"
+name = "bcli"
 version = "0.1.0"
 description = "Python SDK and CLI for Microsoft Dynamics 365 Business Central APIs"
 readme = "README.md"
@@ -32,7 +32,7 @@ dependencies = [
 ]
 
 [project.scripts]
-bcli = "bcapi_cli.app:app"
+bcli = "bcli_cli.app:app"
 
 [project.optional-dependencies]
 dev = [
@@ -43,7 +43,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/bcapi", "src/bcapi_cli"]
+packages = ["src/bcli", "src/bcli_cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

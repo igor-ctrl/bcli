@@ -10,10 +10,10 @@
 
 ```bash
 # Recommended
-uv tool install bcapi
+uv tool install bcli
 
 # Or via pip
-pip install bcapi
+pip install bcli
 ```
 
 Verify the installation:
@@ -38,7 +38,7 @@ You'll be prompted for:
 | Tenant ID | Your Azure AD tenant ID (GUID) |
 | Environment name | BC environment name (e.g., `Production`, `Sandbox`) |
 | Client ID | The app registration's Application (client) ID |
-| Client secret env var name | Name of an env var holding the secret (e.g., `BCAPI_SECRET`) |
+| Client secret env var name | Name of an env var holding the secret (e.g., `BCLI_SECRET`) |
 
 After authenticating, bcli discovers all companies in your environment and lets you pick a default:
 
@@ -52,7 +52,7 @@ After authenticating, bcli discovers all companies in your environment and lets 
 
 ? Select default company [1]: 1
 
-✓ Config saved to ~/.config/bcapi/config.toml
+✓ Config saved to ~/.config/bcli/config.toml
 ✓ Standard v2.0 APIs ready (79 entities)
 ```
 
