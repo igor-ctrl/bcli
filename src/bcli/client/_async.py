@@ -81,6 +81,14 @@ class AsyncBCClient:
     @staticmethod
     def _build_auth(profile: BCProfile, programmatic_secret: str | None = None):
         """Build auth provider from profile config or programmatic credentials."""
+        if profile.auth_method == "browser":
+            from bcli.auth._browser import BrowserAuth
+
+            return BrowserAuth(
+                tenant_id=profile.tenant_id,
+                client_id=profile.client_id or "",
+            )
+
         if profile.auth_method == "device_code":
             from bcli.auth._device_code import DeviceCodeAuth
 
