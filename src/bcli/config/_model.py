@@ -35,6 +35,9 @@ class BCProfile(BaseModel):
     api_group: str | None = None
     api_version: str | None = None
 
+    # Registry control
+    disable_standard_api: bool = False
+
     model_config = {"extra": "allow"}
 
     def resolve_company(self, alias_or_id: str | None = None) -> tuple[str, str | None]:

@@ -118,6 +118,8 @@ def save_config(config: BCConfig) -> Path:
                 ptable.add("api_group", profile.api_group)
             if profile.api_version:
                 ptable.add("api_version", profile.api_version)
+            if profile.disable_standard_api:
+                ptable.add("disable_standard_api", True)
 
             # Company aliases
             if profile.companies:
