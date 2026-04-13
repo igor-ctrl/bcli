@@ -20,7 +20,7 @@ console = Console()
 def login(
     method: str | None = typer.Option(
         None, "--method", "-m",
-        help="Auth method: browser, device, client_credentials (default: profile's auth_method)",
+        help="Auth method: workos, browser, device, client_credentials (default: profile's auth_method)",
     ),
 ) -> None:
     """Authenticate and cache a token.
@@ -28,6 +28,7 @@ def login(
     \b
     Examples:
       bcli auth login                         # uses profile's auth_method
+      bcli auth login --method workos         # WorkOS SSO → role-based BC access
       bcli auth login --method browser        # browser OAuth (user's BC permissions)
       bcli auth login --method device         # device code flow
       bcli auth login --method client_credentials  # service-to-service
@@ -35,7 +36,22 @@ def login(
     profile = state.profile
     auth_method = method or profile.auth_method
 
-    if auth_method == "browser":
+    if auth_method == "workos":
+        console.print(f"[dim]WorkOS auth for tenant {profile.tenant_id}...[/dim]")
+        from bcli.auth._workos import WorkOSAuth
+
+        workos_cfg = state.config.workos
+        if not workos_cfg.api_key:
+            console.print("[red]WorkOS requires [workos] section in config.toml with api_key and client_id.[/red]")
+            raise typer.Exit(1)
+        auth = WorkOSAuth(
+            tenant_id=profile.tenant_id,
+            workos_api_key=workos_cfg.api_key,
+            workos_client_id=workos_cfg.client_id,
+            role_mapping=workos_cfg.get_role_mapping(),
+            default_bc_client_id=profile.client_id or "",
+        )
+    elif auth_method == "browser":
         console.print(f"[dim]Browser auth for tenant {profile.tenant_id}...[/dim]")
         from bcli.auth._browser import BrowserAuth
 
