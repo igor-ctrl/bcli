@@ -66,6 +66,7 @@ def import_from_postman(postman_file: Path) -> list[EndpointMetadata]:
                 api_publisher=publisher,
                 api_group=group,
                 api_version=version,
+                category=group,
                 description=description,
                 source_table=source_table,
                 supports=[method],
@@ -156,12 +157,14 @@ def import_from_json(json_file: Path) -> list[EndpointMetadata]:
         if not isinstance(items, list):
             continue
         for entry in items:
+            api_group = entry.get("api_group", group_name)
             meta = EndpointMetadata(
                 entity_set_name=entry.get("entity_set_name", ""),
                 entity_name=entry.get("entity_name", ""),
                 api_publisher=entry.get("api_publisher", ""),
-                api_group=entry.get("api_group", group_name),
+                api_group=api_group,
                 api_version=entry.get("api_version", ""),
+                category=entry.get("category", api_group),
                 description=entry.get("description", ""),
                 source_table=entry.get("source_table", ""),
                 page_number=entry.get("page_number", ""),
@@ -245,6 +248,7 @@ async def import_from_metadata(
             api_publisher=publisher,
             api_group=group,
             api_version=version,
+            category=group,
             supports=["GET"],  # Conservative default — metadata doesn't always tell us
             key_field="systemId",
         ))
