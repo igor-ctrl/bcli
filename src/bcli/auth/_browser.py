@@ -8,7 +8,6 @@ Business Central enforces their permission sets on every API call.
 from __future__ import annotations
 
 import logging
-import socket
 import sys
 import threading
 import webbrowser
@@ -25,13 +24,7 @@ from bcli.errors import AuthError
 logger = logging.getLogger(__name__)
 
 _AUTH_TIMEOUT = 120  # seconds to wait for browser callback
-
-
-def _find_available_port() -> int:
-    """Find an available port on localhost."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+_DEFAULT_PORT = 8400  # fixed port — register http://localhost:8400 in Entra ID
 
 
 class BrowserAuth:
@@ -77,7 +70,7 @@ class BrowserAuth:
                 return result["access_token"]
 
         # Start browser auth flow
-        port = _find_available_port()
+        port = _DEFAULT_PORT
         redirect_uri = f"http://localhost:{port}"
 
         # MSAL handles PKCE automatically via initiate_auth_code_flow
