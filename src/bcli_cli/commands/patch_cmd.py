@@ -22,11 +22,16 @@ def patch_command(
     record_id: str = typer.Argument(help="Record ID to update"),
     data: str = typer.Option(..., "--data", "-d", help="JSON data or @filename"),
     etag: str = typer.Option("*", "--etag", help="ETag for optimistic concurrency"),
+    format: Optional[str] = typer.Option(None, "--format", "-f", help="Output format: table, json, csv, ndjson, raw"),
     publisher: Optional[str] = typer.Option(None, "--publisher"),
     group: Optional[str] = typer.Option(None, "--group"),
     version: Optional[str] = typer.Option(None, "--version"),
 ) -> None:
     """PATCH (update) an existing record."""
+    output_format = format or state.format
+    if output_format in ("json", "csv", "ndjson", "raw"):
+        state.quiet = True
+
     print_context_banner()
 
     body = _parse_data(data)
@@ -40,7 +45,7 @@ def patch_command(
         result = asyncio.run(
             _execute_patch(endpoint, record_id, body, etag=etag, publisher=publisher, group=group, version=version)
         )
-        format_output([result] if result else [], state.format)
+        format_output([result] if result else [], output_format)
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)

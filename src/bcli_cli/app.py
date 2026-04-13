@@ -54,6 +54,7 @@ from bcli_cli.commands import (  # noqa: E402
     batch_cmd,
     company_cmd,
     config_cmd,
+    context_cmd,
     delete_cmd,
     endpoint_cmd,
     env_cmd,
@@ -76,6 +77,7 @@ app.command(name="get")(get_cmd.get_command)
 app.command(name="post")(post_cmd.post_command)
 app.command(name="patch")(patch_cmd.patch_command)
 app.command(name="delete")(delete_cmd.delete_command)
+app.command(name="ai-context")(context_cmd.ai_context_command)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ console = Console(stderr=True)
 
 
 def get_command(
-    endpoint: str = typer.Argument(help="Entity set name (e.g., 'customers', 'engineOverviews')"),
+    endpoint: str = typer.Argument(help="Entity set name (e.g., 'customers', 'vendors')"),
     record_id: Optional[str] = typer.Argument(None, help="Record ID for single-record GET"),
     filter: Optional[str] = typer.Option(None, "--filter", help="OData $filter expression"),
     select: Optional[str] = typer.Option(None, "--select", help="Comma-separated field names"),
@@ -27,11 +27,25 @@ def get_command(
     skip: Optional[int] = typer.Option(None, "--skip", help="Records to skip"),
     count: bool = typer.Option(False, "--count", help="Include total record count"),
     all_pages: bool = typer.Option(False, "--all", help="Follow pagination to get all records"),
+    format: Optional[str] = typer.Option(None, "--format", "-f", help="Output format: table, json, csv, ndjson, raw"),
     publisher: Optional[str] = typer.Option(None, "--publisher", help="Custom API publisher override"),
     group: Optional[str] = typer.Option(None, "--group", help="Custom API group override"),
     version: Optional[str] = typer.Option(None, "--version", help="Custom API version override"),
 ) -> None:
-    """GET records from a Business Central entity."""
+    """GET records from a Business Central entity.
+
+    \b
+    Examples:
+      bcli get customers --top 5 -f json
+      bcli get vendors --filter "displayName eq 'Fabrikam'"
+      bcli get items --filter "unitPrice gt 100" --all
+      bcli get salesInvoices --select number,totalAmountIncludingTax --orderby "number desc"
+    """
+    # Local --format overrides global
+    output_format = format or state.format
+    if output_format in ("json", "csv", "ndjson", "raw"):
+        state.quiet = True
+
     print_context_banner()
 
     query = Query()
@@ -43,9 +57,9 @@ def get_command(
         query.expand(*[e.strip() for e in expand.split(",")])
     if orderby:
         query.orderby(orderby)
-    if top:
+    if top is not None:
         query.top(top)
-    if skip:
+    if skip is not None:
         query.skip(skip)
     if count:
         query.count()
@@ -72,7 +86,7 @@ def get_command(
                     publisher=publisher, group=group, version=version,
                 )
             )
-            format_output(records, state.format)
+            format_output(records, output_format)
         except Exception as e:
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1)
@@ -85,7 +99,7 @@ def get_command(
                 publisher=publisher, group=group, version=version,
             )
         )
-        format_output(records, state.format)
+        format_output(records, output_format)
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
