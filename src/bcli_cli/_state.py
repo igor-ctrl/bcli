@@ -62,6 +62,8 @@ class CLIState:
             self._registry = EndpointRegistry(
                 profile_name=name,
                 disable_standard=profile.disable_standard_api,
+                allowed_categories=profile.allowed_categories or None,
+                allowed_endpoints=profile.allowed_endpoints or None,
             )
         return self._registry
 
