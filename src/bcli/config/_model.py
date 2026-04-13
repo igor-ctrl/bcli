@@ -37,6 +37,8 @@ class BCProfile(BaseModel):
 
     # Registry control
     disable_standard_api: bool = False
+    allowed_categories: list[str] = Field(default_factory=list)
+    allowed_endpoints: list[str] = Field(default_factory=list)
 
     model_config = {"extra": "allow"}
 
