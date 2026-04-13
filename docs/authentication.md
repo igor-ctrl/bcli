@@ -25,7 +25,7 @@ bcli never stores secrets in config files. Instead, it resolves secrets at runti
 
 1. **OS Keychain** (recommended) — macOS Keychain, Windows Credential Manager
 2. **Environment variable** — Referenced by name in `client_secret_env`
-3. **Generic fallback** — `BCAPI_SECRET` or `BCAPI_CLIENT_SECRET` env vars
+3. **Generic fallback** — `BCLI_SECRET` or `BCLI_CLIENT_SECRET` env vars
 
 #### Store in Keychain (Recommended)
 
@@ -44,12 +44,12 @@ This is the best option because:
 
 ```bash
 # In your shell profile (~/.zshrc or ~/.bashrc)
-export BCAPI_SECRET="your-secret-here"
+export BCLI_SECRET="your-secret-here"
 ```
 
 ### Token Caching
 
-After authentication, bcli caches the access token at `~/.config/bcapi/tokens.json`. Tokens are reused until 5 minutes before expiry (~55 minutes for BC tokens). While a cached token is valid, no secret is needed.
+After authentication, bcli caches the access token at `~/.config/bcli/tokens.json`. Tokens are reused until 5 minutes before expiry (~55 minutes for BC tokens). While a cached token is valid, no secret is needed.
 
 ```bash
 # Check token status
@@ -101,7 +101,7 @@ For CI/CD pipelines, use environment variables:
 ```yaml
 # GitHub Actions example
 env:
-  BCAPI_SECRET: ${{ secrets.BC_CLIENT_SECRET }}
+  BCLI_SECRET: ${{ secrets.BC_CLIENT_SECRET }}
 
 steps:
   - run: bcli get customers --top 1 -f json -q
