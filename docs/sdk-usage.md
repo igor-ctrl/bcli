@@ -1,17 +1,17 @@
 # SDK Usage
 
-The `bcapi` Python SDK can be used directly in your code — MCP servers, Airflow DAGs, scripts, or any Python application.
+The `bcli` Python SDK can be used directly in your code — MCP servers, Airflow DAGs, scripts, or any Python application.
 
 ## Install
 
 ```bash
-pip install bcapi
+pip install bcli
 ```
 
 ## Sync Client
 
 ```python
-from bcapi import BCClient
+from bcli import BCClient
 
 client = BCClient(profile="production")
 
@@ -44,7 +44,7 @@ client.delete("customers", "a1b2c3d4-...")
 For MCP servers and async applications:
 
 ```python
-from bcapi import AsyncBCClient
+from bcli import AsyncBCClient
 
 async with AsyncBCClient(profile="production") as client:
     # Fluent query
@@ -95,7 +95,7 @@ if client.test_connection():
 ## Endpoint Registry
 
 ```python
-from bcapi import EndpointRegistry
+from bcli import EndpointRegistry
 
 registry = EndpointRegistry(profile_name="production")
 
@@ -137,7 +137,7 @@ response = client.get(
 The `Query` class can be used standalone:
 
 ```python
-from bcapi.odata import Query
+from bcli.odata import Query
 
 q = Query() \
     .filter("status eq 'Active'") \
@@ -161,8 +161,8 @@ qs = q.to_query_string()
 ## Error Handling
 
 ```python
-from bcapi import BCClient
-from bcapi.errors import (
+from bcli import BCClient
+from bcli.errors import (
     AuthError,
     NotFoundError,
     ThrottledError,
@@ -188,7 +188,7 @@ except ValidationError as e:
 
 ```python
 from mcp import Server
-from bcapi import AsyncBCClient
+from bcli import AsyncBCClient
 
 server = Server("bc-mcp")
 
@@ -204,11 +204,11 @@ async def query_bc(endpoint: str, filter: str = None, top: int = 10):
 
 ## Configuration
 
-The SDK uses the same config as the CLI (`~/.config/bcapi/config.toml`). You can also pass config programmatically:
+The SDK uses the same config as the CLI (`~/.config/bcli/config.toml`). You can also pass config programmatically:
 
 ```python
-from bcapi import BCClient, BCConfig
-from bcapi.config import BCProfile, BCDefaults
+from bcli import BCClient, BCConfig
+from bcli.config import BCProfile, BCDefaults
 
 config = BCConfig(
     defaults=BCDefaults(profile="custom"),

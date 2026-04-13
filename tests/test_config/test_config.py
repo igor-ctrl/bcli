@@ -1,6 +1,6 @@
 """Tests for configuration loading."""
 
-from bcapi.config._model import BCConfig, BCDefaults, BCProfile
+from bcli.config._model import BCConfig, BCDefaults, BCProfile
 
 
 def test_default_config():
@@ -34,7 +34,7 @@ def test_get_profile_default():
 
 def test_get_profile_not_found():
     import pytest
-    from bcapi.errors import ConfigError
+    from bcli.errors import ConfigError
 
     config = BCConfig()
     with pytest.raises(ConfigError, match="not found"):

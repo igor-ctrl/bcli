@@ -1,6 +1,6 @@
 """Tests for OData query builder."""
 
-from bcapi.odata._query import Query
+from bcli.odata._query import Query
 
 
 def test_empty_query():
