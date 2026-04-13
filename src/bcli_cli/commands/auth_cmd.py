@@ -22,6 +22,10 @@ def login(
         None, "--method", "-m",
         help="Auth method: workos, browser, device, client_credentials (default: profile's auth_method)",
     ),
+    incognito: bool = typer.Option(
+        False, "--incognito", "-i",
+        help="Open browser in incognito/private mode (fresh session, no cached login)",
+    ),
 ) -> None:
     """Authenticate and cache a token.
 
@@ -29,6 +33,7 @@ def login(
     Examples:
       bcli auth login                         # uses profile's auth_method
       bcli auth login --method workos         # WorkOS SSO → role-based BC access
+      bcli auth login --method workos -i      # incognito — log in as a different user
       bcli auth login --method browser        # browser OAuth (user's BC permissions)
       bcli auth login --method device         # device code flow
       bcli auth login --method client_credentials  # service-to-service
@@ -50,6 +55,7 @@ def login(
             workos_client_id=workos_cfg.client_id,
             role_mapping=workos_cfg.get_role_mapping(),
             default_bc_client_id=profile.client_id or "",
+            incognito=incognito,
         )
     elif auth_method == "browser":
         console.print(f"[dim]Browser auth for tenant {profile.tenant_id}...[/dim]")
@@ -58,6 +64,7 @@ def login(
         auth = BrowserAuth(
             tenant_id=profile.tenant_id,
             client_id=profile.client_id or "",
+            incognito=incognito,
         )
     elif auth_method in ("device", "device_code"):
         console.print(f"[dim]Device code auth for tenant {profile.tenant_id}...[/dim]")
