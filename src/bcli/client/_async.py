@@ -66,6 +66,7 @@ class AsyncBCClient:
             self._programmatic_secret = None
             self._registry = EndpointRegistry(
                 profile_name=profile or self._config.defaults.profile,
+                disable_standard=self._profile.disable_standard_api,
             )
 
         self._transport: BCTransport | None = None
