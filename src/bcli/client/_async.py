@@ -74,13 +74,36 @@ class AsyncBCClient:
 
     def _ensure_transport(self) -> BCTransport:
         if self._transport is None:
-            auth = self._build_auth(self._profile, self._programmatic_secret)
+            auth = self._build_auth(self._profile, self._programmatic_secret, self._config)
             self._transport = BCTransport(auth, timeout=self._timeout)
         return self._transport
 
     @staticmethod
-    def _build_auth(profile: BCProfile, programmatic_secret: str | None = None):
+    def _build_auth(
+        profile: BCProfile,
+        programmatic_secret: str | None = None,
+        config: BCConfig | None = None,
+    ):
         """Build auth provider from profile config or programmatic credentials."""
+        if profile.auth_method == "workos":
+            from bcli.auth._workos import WorkOSAuth
+
+            workos_cfg = config.workos if config else None
+            if not workos_cfg or not workos_cfg.api_key:
+                from bcli.errors import ConfigError
+                raise ConfigError(
+                    "WorkOS auth requires [workos] section in config.toml with api_key and client_id."
+                )
+            role_mapping = workos_cfg.get_role_mapping()
+            # Default BC client_id comes from the profile
+            return WorkOSAuth(
+                tenant_id=profile.tenant_id,
+                workos_api_key=workos_cfg.api_key,
+                workos_client_id=workos_cfg.client_id,
+                role_mapping=role_mapping,
+                default_bc_client_id=profile.client_id or "",
+            )
+
         if profile.auth_method == "browser":
             from bcli.auth._browser import BrowserAuth
 
