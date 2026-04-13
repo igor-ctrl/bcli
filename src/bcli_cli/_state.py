@@ -58,7 +58,11 @@ class CLIState:
     def registry(self) -> EndpointRegistry:
         if self._registry is None:
             name = self.profile_name or self.config.defaults.profile
-            self._registry = EndpointRegistry(profile_name=name)
+            profile = self.config.get_profile(self.profile_name)
+            self._registry = EndpointRegistry(
+                profile_name=name,
+                disable_standard=profile.disable_standard_api,
+            )
         return self._registry
 
     @property
