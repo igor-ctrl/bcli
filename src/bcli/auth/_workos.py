@@ -16,13 +16,12 @@ import json
 import logging
 import sys
 import threading
-import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from bcli.auth._browser import BrowserAuth
+from bcli.auth._browser import BrowserAuth, _open_browser
 from bcli.auth._token_cache import TokenCache
 from bcli.config._defaults import CONFIG_DIR
 from bcli.errors import AuthError
@@ -57,12 +56,14 @@ class WorkOSAuth:
         role_mapping: dict[str, str],
         default_bc_client_id: str,
         token_cache: TokenCache | None = None,
+        incognito: bool = False,
     ) -> None:
         self._tenant_id = tenant_id
         self._workos_api_key = workos_api_key
         self._workos_client_id = workos_client_id
         self._role_mapping = role_mapping  # {role_slug: bc_client_id}
         self._default_bc_client_id = default_bc_client_id
+        self._incognito = incognito
         self._token_cache = token_cache or TokenCache()
         self._bc_auth: BrowserAuth | None = None
 
@@ -91,6 +92,7 @@ class WorkOSAuth:
             client_id=bc_client_id,
             token_cache=self._token_cache,
             login_hint=email,
+            incognito=self._incognito,
         )
         return await self._bc_auth.get_access_token()
 
@@ -149,9 +151,10 @@ class WorkOSAuth:
         server = HTTPServer(("127.0.0.1", _WORKOS_PORT), CallbackHandler)
         server.timeout = _AUTH_TIMEOUT
 
-        print("\nOpening browser for WorkOS login...", file=sys.stderr)
+        mode = " (incognito)" if self._incognito else ""
+        print(f"\nOpening browser for WorkOS login{mode}...", file=sys.stderr)
         print(f"If the browser doesn't open, visit:\n  {auth_url}\n", file=sys.stderr)
-        webbrowser.open(auth_url)
+        _open_browser(auth_url, incognito=self._incognito)
 
         server_thread = threading.Thread(target=server.handle_request, daemon=True)
         server_thread.start()
