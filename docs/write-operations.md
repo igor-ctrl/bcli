@@ -66,6 +66,6 @@ bcli --dry-run post customers --data '{"displayName": "Test"}'
 For custom endpoints not in the registry:
 
 ```bash
-bcli post engineUtilizations --publisher acme --group technical --version v1.5 \
-  --data '{"esn": "ESN-123456", "period": "2026-03", "flightHours": 350.5}'
+bcli post warehouseEntries --publisher contoso --group logistics --version v2.0 \
+  --data '{"itemNumber": "1000", "quantity": 50, "locationCode": "WEST"}'
 ```
