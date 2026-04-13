@@ -20,11 +20,11 @@ def test_custom_api_url():
         environment="SBEnvOct25T",
         company_id="abc-123",
         entity_set_name="engineOverviews",
-        publisher="acme",
+        publisher="contoso",
         group="technical",
         version="v1.5",
     )
-    assert "api/acme/technical/v1.5" in url
+    assert "api/contoso/technical/v1.5" in url
     assert "SBEnvOct25T" in url
     assert url.endswith("/engineOverviews")
 

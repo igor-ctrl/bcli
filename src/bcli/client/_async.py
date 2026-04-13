@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from bcli._url import build_companies_url, build_url
 from bcli.auth._credentials import ClientCredentialsAuth
+from bcli.client._safety import SafeContext
 from bcli.client._transport import BCTransport
 from bcli.config import BCConfig, BCProfile, load_config
 from bcli.errors import ConfigError
@@ -19,35 +19,67 @@ from bcli.registry._registry import EndpointRegistry
 class AsyncBCClient:
     """Async client for Business Central APIs.
 
-    Usage:
+    Two construction modes:
+
+    1. Profile-based (reads TOML config):
         async with AsyncBCClient(profile="production") as client:
-            response = await client.query("customers").top(5).execute()
-            for record in response:
-                print(record)
+            ...
+
+    2. Programmatic (no config files needed):
+        async with AsyncBCClient(
+            tenant_id="...", client_id="...", client_secret="...",
+            environment="Production", company_id="...",
+        ) as client:
+            ...
     """
 
     def __init__(
         self,
         *,
+        # Profile-based construction
         profile: str | None = None,
         config: BCConfig | None = None,
+        # Programmatic construction (no config file needed)
+        tenant_id: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        environment: str | None = None,
+        company_id: str | None = None,
+        # Shared options
         timeout: int | None = None,
     ) -> None:
-        self._config = config or load_config()
-        self._profile = self._config.get_profile(profile)
-        self._registry = EndpointRegistry(profile_name=profile or self._config.defaults.profile)
+        if tenant_id is not None:
+            # Programmatic mode — build a synthetic profile
+            self._config = BCConfig()
+            self._profile = BCProfile(
+                tenant_id=tenant_id,
+                environment=environment or "Production",
+                company_id=company_id,
+                client_id=client_id,
+            )
+            self._programmatic_secret = client_secret
+            self._registry = EndpointRegistry()
+        else:
+            # Profile-based mode — read from config
+            self._config = config or load_config()
+            self._profile = self._config.get_profile(profile)
+            self._programmatic_secret = None
+            self._registry = EndpointRegistry(
+                profile_name=profile or self._config.defaults.profile,
+            )
+
         self._transport: BCTransport | None = None
         self._timeout = timeout or self._config.defaults.timeout
 
     def _ensure_transport(self) -> BCTransport:
         if self._transport is None:
-            auth = self._build_auth(self._profile)
+            auth = self._build_auth(self._profile, self._programmatic_secret)
             self._transport = BCTransport(auth, timeout=self._timeout)
         return self._transport
 
     @staticmethod
-    def _build_auth(profile: BCProfile):
-        """Build auth provider from profile config."""
+    def _build_auth(profile: BCProfile, programmatic_secret: str | None = None):
+        """Build auth provider from profile config or programmatic credentials."""
         if profile.auth_method == "device_code":
             from bcli.auth._device_code import DeviceCodeAuth
 
@@ -56,11 +88,12 @@ class AsyncBCClient:
                 client_id=profile.client_id or "",
             )
 
-        # Default: client_credentials — secret resolved lazily
+        # Client credentials — programmatic secret takes priority over env var
         return ClientCredentialsAuth(
             tenant_id=profile.tenant_id,
             client_id=profile.client_id or "",
             client_secret_env=profile.client_secret_env,
+            client_secret=programmatic_secret,
         )
 
     async def __aenter__(self) -> AsyncBCClient:
@@ -179,6 +212,28 @@ class AsyncBCClient:
             return len(companies) > 0
         except Exception:
             return False
+
+    def safe_write(
+        self,
+        environment: str,
+        company_id: str,
+        *,
+        confirm_production: bool = False,
+        domain_rules: dict | None = None,
+    ) -> SafeContext:
+        """Create a SafeContext for gated write operations.
+
+        Usage:
+            async with client.safe_write("Sandbox", "company-id") as sw:
+                await sw.post("salesInvoices", body={...}, domain="finance")
+        """
+        return SafeContext(
+            client=self,
+            environment=environment,
+            company_id=company_id,
+            confirm_production=confirm_production,
+            domain_rules=domain_rules,
+        )
 
     # ─── Internal ────────────────────────────────────────────────
 

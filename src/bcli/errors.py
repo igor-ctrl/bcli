@@ -59,3 +59,7 @@ class ConfigError(BCLIError):
 
 class RegistryError(BCLIError):
     """Endpoint not found in any registry."""
+
+
+class SafetyError(BCLIError):
+    """Write safety check failed (missing environment, company, or production confirmation)."""

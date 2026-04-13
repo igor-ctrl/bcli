@@ -2,20 +2,37 @@
 
 A Python SDK and CLI for Microsoft Dynamics 365 Business Central APIs.
 
-**bcli** gives you a single command to query any Business Central API — standard or custom — without constructing URLs, managing tokens, or writing scripts. It ships with 79 standard v2.0 entities ready to go and supports importing custom APIs from Postman collections.
+## SDK Quick Start
 
-## Features
+```python
+from bcli import AsyncBCClient
 
-- **Works out of the box** — 79 standard BC v2.0 entities (customers, vendors, items, GL entries, ...) with zero configuration beyond auth
-- **Custom API support** — Import your custom API pages from Postman collections, JSON, or live `$metadata`
-- **Multi-company** — Assign aliases to companies ("LLC", "Corp") and query across all entities with `--company all`
-- **OData query builder** — `--filter`, `--select`, `--expand`, `--orderby`, `--top`, `--skip` on every query
-- **Multiple output formats** — table, JSON, CSV, NDJSON for pipeline use
-- **Secure auth** — OS keychain integration (macOS Keychain, Windows Credential Manager), token caching, client credentials + device code flows
-- **Batch operations** — Execute sequences of API calls from YAML files
-- **Python SDK** — Use `from bcli import BCClient` in your own code, MCP servers, or Airflow DAGs
+# Programmatic auth — no config files needed
+async with AsyncBCClient(
+    tenant_id="your-tenant-id",
+    client_id="your-app-id",
+    client_secret="your-secret",
+    environment="Sandbox",
+    company_id="your-company-id",
+) as client:
+    # Query with fluent OData builder
+    customers = await client.query("customers").filter("city eq 'Chicago'").top(10).get()
 
-## Quick Start
+    # Write with safety gate
+    async with client.safe_write("Sandbox", "your-company-id") as sw:
+        await sw.post("salesInvoices", body={"customerNumber": "10000"}, domain="finance")
+```
+
+Or use TOML profiles for the CLI and repeated SDK use:
+
+```python
+from bcli import AsyncBCClient
+
+async with AsyncBCClient(profile="production") as client:
+    vendors = await client.query("vendors").select("displayName", "balance").get()
+```
+
+## CLI Quick Start
 
 ```bash
 # Install
@@ -35,16 +52,33 @@ bcli get salesInvoices --select number,totalAmountIncludingTax --top 10
 bcli registry import --from-postman ./my_collection.json
 
 # Query custom endpoints (route auto-resolved)
-bcli get engineOverviews --top 5
+bcli get myCustomEntities --top 5
 ```
+
+## Features
+
+- **Works out of the box** — 79 standard BC v2.0 entities (customers, vendors, items, GL entries, ...) with zero configuration beyond auth
+- **Custom API support** — Import your custom API pages from Postman collections, JSON, or live `$metadata`
+- **Three-tier endpoint resolution** — Custom registry -> standard v2.0 -> fuzzy suggestions
+- **Multi-company** — Assign aliases to companies and query across all entities
+- **OData query builder** — `--filter`, `--select`, `--expand`, `--orderby`, `--top`, `--skip` on every query
+- **Multiple output formats** — table, JSON, CSV, NDJSON for pipeline use
+- **Secure auth** — OS keychain integration (macOS Keychain, Windows Credential Manager), token caching, client credentials + device code flows
+- **Write safety** — SafeContext gate prevents wrong-environment writes, enforces draft status on financial documents
+- **Programmatic auth** — Pass credentials directly for MCP servers, Airflow DAGs, and containers (no config files required)
+- **Batch operations** — Execute sequences of API calls from YAML files
+- **Structured logging** — JSON request logs with correlation IDs for observability
 
 ## Installation
 
 Requires Python 3.11+.
 
 ```bash
-# Via pip
+# SDK only (for libraries, MCP servers, Airflow DAGs)
 pip install bcli
+
+# SDK + CLI
+pip install "bcli[cli]"
 
 # Via uv (recommended)
 uv tool install bcli
@@ -52,7 +86,7 @@ uv tool install bcli
 # From source
 git clone https://github.com/igor-ctrl/bc-cli.git
 cd bc-cli
-uv tool install -e .
+pip install -e ".[dev]"
 ```
 
 ## Documentation
@@ -70,23 +104,6 @@ uv tool install -e .
 | [SDK Usage](docs/sdk-usage.md) | Python SDK for developers and MCP servers |
 | [Command Reference](docs/command-reference.md) | Complete CLI command reference |
 | [Contributing](docs/contributing.md) | Development setup, architecture, testing |
-
-## SDK Usage (Quick)
-
-```python
-from bcli import BCClient
-
-client = BCClient(profile="production")
-
-# Query with fluent OData builder
-records = client.query("customers").filter("city eq 'Chicago'").top(10).get()
-
-# Async for MCP servers
-from bcli import AsyncBCClient
-
-async with AsyncBCClient(profile="production") as client:
-    vendors = await client.query("vendors").select("displayName", "balance").get()
-```
 
 ## License
 

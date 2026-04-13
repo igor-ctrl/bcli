@@ -62,9 +62,9 @@ def test_endpoint_metadata_is_custom():
 
     custom = EndpointMetadata(
         entity_set_name="engineOverviews",
-        api_publisher="acme",
+        api_publisher="contoso",
         api_group="technical",
         api_version="v1.5",
     )
     assert custom.is_custom
-    assert "acme" in custom.route_display
+    assert "contoso" in custom.route_display
