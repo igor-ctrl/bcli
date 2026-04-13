@@ -39,11 +39,13 @@ class BrowserAuth:
         tenant_id: str,
         client_id: str,
         token_cache: TokenCache | None = None,
+        login_hint: str | None = None,
     ) -> None:
         self._tenant_id = tenant_id
         self._client_id = client_id
         self._token_cache = token_cache or TokenCache()
         self._authority = f"{ENTRA_AUTHORITY_BASE}/{tenant_id}"
+        self._login_hint = login_hint
 
     async def get_access_token(self) -> str:
         """Get a valid access token, using cache or browser flow."""
@@ -74,11 +76,18 @@ class BrowserAuth:
         redirect_uri = f"http://localhost:{port}"
 
         # MSAL handles PKCE automatically via initiate_auth_code_flow
-        # prompt="select_account" forces the account picker every time
+        flow_kwargs: dict[str, str] = {}
+        if self._login_hint:
+            # Pre-fill the email and skip account picker (coming from WorkOS)
+            flow_kwargs["login_hint"] = self._login_hint
+        else:
+            # Standalone browser auth — show account picker
+            flow_kwargs["prompt"] = "select_account"
+
         flow = app.initiate_auth_code_flow(
             scopes=[BC_SCOPE],
             redirect_uri=redirect_uri,
-            prompt="select_account",
+            **flow_kwargs,
         )
 
         if "auth_uri" not in flow:
