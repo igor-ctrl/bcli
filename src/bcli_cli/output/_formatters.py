@@ -11,12 +11,13 @@ from rich.console import Console
 from rich.table import Table
 
 console = Console()
+stderr_console = Console(stderr=True)
 
 
 def format_output(records: list[dict[str, Any]], fmt: str = "table") -> None:
     """Format and print records."""
     if not records:
-        console.print("[dim]No records found.[/dim]")
+        stderr_console.print("[dim]No records found.[/dim]")
         return
 
     formatter = _FORMATTERS.get(fmt, _format_table)
@@ -49,7 +50,7 @@ def _format_table(records: list[dict[str, Any]]) -> None:
         table.add_row(*row)
 
     console.print(table)
-    console.print(f"[dim]{len(records)} record(s)[/dim]")
+    stderr_console.print(f"[dim]{len(records)} record(s)[/dim]")
 
 
 def _format_json(records: list[dict[str, Any]]) -> None:
