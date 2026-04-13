@@ -64,15 +64,19 @@ def init() -> None:
     # Try to authenticate and discover companies
     console.print("\n[dim]Authenticating...[/dim]")
     try:
-        auth = ClientCredentialsAuth(
-            tenant_id=tenant_id,
-            client_id=client_id,
-            client_secret_env=secret_env,
-        )
-        transport = BCTransport(auth)
+        async def _discover_and_close():
+            auth = ClientCredentialsAuth(
+                tenant_id=tenant_id,
+                client_id=client_id,
+                client_secret_env=secret_env,
+            )
+            transport = BCTransport(auth)
+            try:
+                return await _discover_companies(transport, environment)
+            finally:
+                await transport.close()
 
-        companies = asyncio.run(_discover_companies(transport, environment))
-        asyncio.run(transport.close())
+        companies = asyncio.run(_discover_and_close())
 
         if companies:
             console.print(f"[green]✓[/green] Found {len(companies)} company(ies)\n")
