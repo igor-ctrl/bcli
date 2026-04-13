@@ -43,7 +43,9 @@ def main(
     state.verbose = verbose
     state.debug = debug
     state.dry_run = dry_run
-    state.quiet = quiet
+    # Auto-quiet for machine-readable formats (banner goes to stderr but still
+    # confuses piped output when both streams are captured together)
+    state.quiet = quiet or format in ("json", "csv", "ndjson", "raw")
 
 
 # Import and register command groups
