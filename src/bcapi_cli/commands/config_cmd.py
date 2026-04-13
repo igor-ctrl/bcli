@@ -13,7 +13,7 @@ from rich.table import Table
 from bcapi._url import build_companies_url
 from bcapi.auth._credentials import ClientCredentialsAuth
 from bcapi.client._transport import BCTransport
-from bcapi.config import BCConfig, BCDefaults, BCProfile, save_config
+from bcapi.config import BCConfig, BCDefaults, BCProfile, load_config, save_config
 from bcapi.config._defaults import CONFIG_FILE
 from bcapi_cli._state import state
 
@@ -114,8 +114,8 @@ def init() -> None:
         console.print(f"[yellow]⚠ Could not connect: {e}[/yellow]")
         console.print("[dim]Saving config anyway — you can test the connection later.[/dim]")
 
-    # Save config
-    config = state.config if state._config else BCConfig()
+    # Save config — load existing to preserve other profiles
+    config = load_config()
     config.defaults.profile = profile_name
     config.profiles[profile_name] = profile
     path = save_config(config)
