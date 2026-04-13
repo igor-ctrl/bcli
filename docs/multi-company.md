@@ -84,7 +84,7 @@ bcli company use REDACTED-COMPANY-ID
 
 ## Config Format
 
-Aliases are stored in the profile section of `~/.config/bcapi/config.toml`:
+Aliases are stored in the profile section of `~/.config/bcli/config.toml`:
 
 ```toml
 [profiles.production.companies.LLC]

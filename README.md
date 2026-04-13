@@ -13,15 +13,15 @@ A Python SDK and CLI for Microsoft Dynamics 365 Business Central APIs.
 - **Multiple output formats** — table, JSON, CSV, NDJSON for pipeline use
 - **Secure auth** — OS keychain integration (macOS Keychain, Windows Credential Manager), token caching, client credentials + device code flows
 - **Batch operations** — Execute sequences of API calls from YAML files
-- **Python SDK** — Use `from bcapi import BCClient` in your own code, MCP servers, or Airflow DAGs
+- **Python SDK** — Use `from bcli import BCClient` in your own code, MCP servers, or Airflow DAGs
 
 ## Quick Start
 
 ```bash
 # Install
-pip install bcapi
+pip install bcli
 # or
-uv tool install bcapi
+uv tool install bcli
 
 # Configure (interactive — discovers companies automatically)
 bcli config init
@@ -44,10 +44,10 @@ Requires Python 3.11+.
 
 ```bash
 # Via pip
-pip install bcapi
+pip install bcli
 
 # Via uv (recommended)
-uv tool install bcapi
+uv tool install bcli
 
 # From source
 git clone https://github.com/igor-ctrl/bc-cli.git
@@ -74,7 +74,7 @@ uv tool install -e .
 ## SDK Usage (Quick)
 
 ```python
-from bcapi import BCClient
+from bcli import BCClient
 
 client = BCClient(profile="production")
 
@@ -82,7 +82,7 @@ client = BCClient(profile="production")
 records = client.query("customers").filter("city eq 'Chicago'").top(10).get()
 
 # Async for MCP servers
-from bcapi import AsyncBCClient
+from bcli import AsyncBCClient
 
 async with AsyncBCClient(profile="production") as client:
     vendors = await client.query("vendors").select("displayName", "balance").get()
