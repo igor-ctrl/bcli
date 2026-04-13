@@ -69,20 +69,41 @@ CLI flags (`--profile`, `--env`, `--company`) override at runtime via `CLIState`
 
 ### Auth
 
-Secrets are never stored in config. The TOML profile stores `client_secret_env = "BCLI_SECRET"` — the env var name. `ClientCredentialsAuth` reads the env var at runtime. Token cache lives at `~/.config/bcli/tokens.json` with 5-minute expiry buffer. `DeviceCodeAuth` uses MSAL public client for interactive browser auth.
+Two construction modes for `AsyncBCClient`:
+1. **Profile-based** — reads TOML config: `AsyncBCClient(profile="production")`
+2. **Programmatic** — no config files: `AsyncBCClient(tenant_id=..., client_id=..., client_secret=...)`
+
+Secret resolution order: direct parameter → OS keychain → env var (`BCLI_SECRET`). Secrets are never stored in config. Token cache lives at `~/.config/bcli/tokens.json` with 5-minute expiry buffer. `DeviceCodeAuth` uses MSAL public client for interactive browser auth.
+
+### Write Safety (SafeContext)
+
+`SafeContext` (`src/bcli/client/_safety.py`) gates write operations:
+- Requires explicit `environment` + `company_id` on all writes
+- Production writes require `confirm_production=True`
+- Domain rules: `finance` = draft-only by default, configurable via `DomainRule`
+
+### Dependency Split
+
+SDK core deps (httpx, msal, pydantic, tomlkit) in base install. CLI deps (typer, rich, pyyaml, keyring) in `[cli]` extra. `pip install bcli` gets SDK only; `pip install "bcli[cli]"` adds CLI.
+
+### Structured Logging
+
+Every HTTP request logs structured JSON to the `bcli.http` logger: method, url, status, retry_count, latency_ms, correlation_id. Transport accepts `log_context` dict for endpoint_tier/environment metadata.
 
 ## Key Paths
 
 | Path | Purpose |
 |------|---------|
-| `src/bcli/__init__.py` | Public SDK API: BCClient, AsyncBCClient, Query, EndpointRegistry |
-| `src/bcli/client/_transport.py` | HTTP layer — retry, auth injection, BC error parsing |
-| `src/bcli/client/_async.py` | AsyncBCClient — `_build_auth()` selects auth provider, `_resolve_url()` does registry lookup |
+| `src/bcli/__init__.py` | Public SDK API: BCClient, AsyncBCClient, SafeContext, Query, EndpointRegistry |
+| `src/bcli/client/_transport.py` | HTTP layer — retry, auth injection, BC error parsing, structured logging |
+| `src/bcli/client/_async.py` | AsyncBCClient — profile-based + programmatic auth, `_resolve_url()` |
+| `src/bcli/client/_safety.py` | SafeContext — write safety gate with configurable domain rules |
 | `src/bcli/registry/_registry.py` | EndpointRegistry — three-tier lookup, fuzzy search |
 | `src/bcli/registry/_importers.py` | Postman/JSON/$metadata parsers |
+| `src/bcli/registry/_schema.py` | EndpointMetadata with domain tag (standard/finance/technical) |
 | `src/bcli/registry/standard_v2.json` | Built-in standard v2.0 entity definitions |
 | `src/bcli/odata/_query.py` | Fluent query builder (filter/select/expand/orderby/top/skip) |
-| `src/bcli/config/_loader.py` | Config loading with `_deep_merge()` across layers |
+| `src/bcli/config/_loader.py` | Config loading with `_deep_merge()`, tomlkit serialization |
 | `src/bcli_cli/app.py` | Typer root — registers all command groups, global options callback |
 | `src/bcli_cli/_state.py` | CLIState singleton — lazy config/registry, per-command overrides |
 

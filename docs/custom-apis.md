@@ -15,9 +15,9 @@ The importer parses each request's URL to extract the API publisher, group, vers
 **Example output:**
 ```
 ✓ Imported 92 custom endpoints
-  acme/finance/v1.5: 46 endpoints
-  acme/standard/v1.0: 23 endpoints
-  acme/technical/v1.5: 23 endpoints
+  contoso/finance/v1.5: 46 endpoints
+  contoso/standard/v1.0: 23 endpoints
+  contoso/technical/v1.5: 23 endpoints
 ```
 
 ### Postman URL Format

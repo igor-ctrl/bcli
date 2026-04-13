@@ -11,8 +11,8 @@ bcli company list
 Output:
 ```
   #  Alias  Company Name              Company ID
-  1  LLC    Acme Power Systems    f99bd320-b400-...  ◄ default
-  2  Corp   Acme Corp             a1b2c3d4-e5f6-...
+  1  LLC    Contoso Ltd    f99bd320-b400-...  ◄ default
+  2  Corp   Northwind Traders             a1b2c3d4-e5f6-...
 ```
 
 ## Assign Aliases
@@ -20,8 +20,8 @@ Output:
 Give companies short, memorable names:
 
 ```bash
-bcli company alias LLC f99bd320-b400-4189-b3c1-c62c05d4e7a5 --name "Acme Power Systems LLC"
-bcli company alias Corp a1b2c3d4-e5f6-7890-abcd-ef1234567890 --name "Acme Corp"
+bcli company alias LLC f99bd320-b400-4189-b3c1-c62c05d4e7a5 --name "Contoso Ltd"
+bcli company alias Corp a1b2c3d4-e5f6-7890-abcd-ef1234567890 --name "Northwind Traders"
 ```
 
 View all aliases:
@@ -55,9 +55,9 @@ Output:
     → 3 record(s) from Corp
 
   _company  _company_name              displayName      ...
-  LLC       Acme Power Systems     Customer A       ...
-  LLC       Acme Power Systems     Customer B       ...
-  Corp      Acme Corp              Customer X       ...
+  LLC       Contoso Ltd     Customer A       ...
+  LLC       Contoso Ltd     Customer B       ...
+  Corp      Northwind Traders              Customer X       ...
 ```
 
 ### Export Across All Companies
@@ -89,9 +89,9 @@ Aliases are stored in the profile section of `~/.config/bcli/config.toml`:
 ```toml
 [profiles.production.companies.LLC]
 id = "f99bd320-b400-4189-b3c1-c62c05d4e7a5"
-name = "Acme Power Systems LLC"
+name = "Contoso Ltd"
 
 [profiles.production.companies.Corp]
 id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-name = "Acme Corp"
+name = "Northwind Traders"
 ```
