@@ -19,11 +19,15 @@ def delete_command(
     endpoint: str = typer.Argument(help="Entity set name"),
     record_id: str = typer.Argument(help="Record ID to delete"),
     etag: str = typer.Option("*", "--etag", help="ETag for optimistic concurrency"),
+    format: Optional[str] = typer.Option(None, "--format", "-f", help="Output format (unused, for flag consistency)"),
     publisher: Optional[str] = typer.Option(None, "--publisher"),
     group: Optional[str] = typer.Option(None, "--group"),
     version: Optional[str] = typer.Option(None, "--version"),
 ) -> None:
     """DELETE a record."""
+    if format and format in ("json", "csv", "ndjson", "raw"):
+        state.quiet = True
+
     print_context_banner()
 
     if state.dry_run:
