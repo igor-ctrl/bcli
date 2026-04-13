@@ -18,3 +18,8 @@ htmlcov/
 .coverage
 *.log
 .DS_Store
+
+# Internal planning docs (not part of OSS release)
+PRD-*.md
+TODOS.md
+bcapi_cli_prd.md
