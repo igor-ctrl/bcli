@@ -30,10 +30,27 @@ def init() -> None:
     tenant_id = Prompt.ask("Tenant ID (Azure AD)")
     environment = Prompt.ask("Environment name", default="Production")
     client_id = Prompt.ask("Client ID (App Registration)")
-    secret_env = Prompt.ask(
-        "Client secret env var name",
-        default="BCAPI_SECRET",
-    )
+
+    # Secret handling — offer keychain first
+    from bcapi.auth._credentials import ClientCredentialsAuth
+
+    secret_env = None
+    if ClientCredentialsAuth.has_keyring():
+        use_keychain = Confirm.ask("Store client secret in OS keychain? (recommended)", default=True)
+        if use_keychain:
+            secret_value = Prompt.ask("Client secret", password=True)
+            ClientCredentialsAuth.store_secret(tenant_id, client_id, secret_value)
+            console.print("[green]✓[/green] Secret stored in OS keychain")
+        else:
+            secret_env = Prompt.ask(
+                "Environment variable name holding the secret (not the secret itself)",
+                default="BCAPI_SECRET",
+            )
+    else:
+        secret_env = Prompt.ask(
+            "Environment variable name holding the secret (not the secret itself)",
+            default="BCAPI_SECRET",
+        )
 
     # Build profile
     profile = BCProfile(
