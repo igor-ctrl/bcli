@@ -23,9 +23,13 @@ class EndpointRegistry:
         profile_name: str | None = None,
         *,
         disable_standard: bool = False,
+        allowed_categories: list[str] | None = None,
+        allowed_endpoints: list[str] | None = None,
     ) -> None:
         self._standard: dict[str, EndpointMetadata] = {}
         self._custom: dict[str, EndpointMetadata] = {}
+        self._allowed_categories = {c.lower() for c in allowed_categories} if allowed_categories else None
+        self._allowed_endpoints = {e.lower() for e in allowed_endpoints} if allowed_endpoints else None
         if not disable_standard:
             self._load_standard()
         if profile_name:
@@ -59,10 +63,21 @@ class EndpointRegistry:
             count += 1
         return count
 
+    def _is_allowed(self, meta: EndpointMetadata) -> bool:
+        """Check if an endpoint passes the allowlist filters."""
+        if self._allowed_endpoints and meta.entity_set_name.lower() in self._allowed_endpoints:
+            return True  # Explicitly allowed by name always passes
+        if self._allowed_categories and meta.category.lower() not in self._allowed_categories:
+            return False  # Category not in allowlist
+        return True
+
     def get(self, entity_set_name: str) -> EndpointMetadata | None:
         """Look up an endpoint. Custom takes priority over standard."""
         key = entity_set_name.lower()
-        return self._custom.get(key) or self._standard.get(key)
+        result = self._custom.get(key) or self._standard.get(key)
+        if result and not self._is_allowed(result):
+            return None
+        return result
 
     def resolve(self, entity_set_name: str) -> EndpointMetadata:
         """Look up an endpoint, raising RegistryError if not found."""
@@ -88,6 +103,8 @@ class EndpointRegistry:
         results: list[tuple[int, EndpointMetadata]] = []
 
         for meta in [*self._custom.values(), *self._standard.values()]:
+            if not self._is_allowed(meta):
+                continue
             score = 0
             name_lower = meta.entity_set_name.lower()
             desc_lower = meta.description.lower()
@@ -111,9 +128,15 @@ class EndpointRegistry:
         """List all registered endpoints."""
         results: list[EndpointMetadata] = []
         if not standard_only:
-            results.extend(sorted(self._custom.values(), key=lambda m: m.entity_set_name))
+            results.extend(sorted(
+                (m for m in self._custom.values() if self._is_allowed(m)),
+                key=lambda m: m.entity_set_name,
+            ))
         if not custom_only:
-            results.extend(sorted(self._standard.values(), key=lambda m: m.entity_set_name))
+            results.extend(sorted(
+                (m for m in self._standard.values() if self._is_allowed(m)),
+                key=lambda m: m.entity_set_name,
+            ))
         return results
 
     @property
