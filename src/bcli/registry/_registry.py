@@ -18,10 +18,16 @@ class EndpointRegistry:
     2. Standard v2.0 registry (ships with package)
     """
 
-    def __init__(self, profile_name: str | None = None) -> None:
+    def __init__(
+        self,
+        profile_name: str | None = None,
+        *,
+        disable_standard: bool = False,
+    ) -> None:
         self._standard: dict[str, EndpointMetadata] = {}
         self._custom: dict[str, EndpointMetadata] = {}
-        self._load_standard()
+        if not disable_standard:
+            self._load_standard()
         if profile_name:
             self._load_custom(profile_name)
 
