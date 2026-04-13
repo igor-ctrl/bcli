@@ -102,9 +102,9 @@ class WorkOSAuth:
         """Run WorkOS browser auth, get user role, return BC client_id."""
         try:
             from workos import WorkOS
-        except ImportError:
+        except ImportError as e:
             raise AuthError(
-                "WorkOS SDK not installed. Run: pip install workos",
+                f"WorkOS SDK not available: {e}. Run: pip install workos",
                 status_code=401,
             )
 
