@@ -174,7 +174,8 @@ class WorkOSAuth:
         role_slug = "member"  # default
         for membership in memberships.data:
             if membership.status == "active":
-                role_slug = membership.role.slug
+                role = membership.role
+                role_slug = role["slug"] if isinstance(role, dict) else getattr(role, "slug", "member")
                 break
 
         # Map role to BC client_id
