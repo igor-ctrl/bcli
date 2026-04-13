@@ -8,7 +8,7 @@ from bcli.registry._importers import import_from_json, import_from_postman
 
 
 def test_import_from_postman_real_collection():
-    """Test against the real BeauTech Postman collection."""
+    """Test against the real sample Postman collection."""
     postman_file = Path("/Users/igor/Projects/Fivetran/fivetran_bc_api.postman_collection.json")
     if not postman_file.is_file():
         import pytest

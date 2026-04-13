@@ -53,12 +53,12 @@ def test_profile_model():
         environment="Production",
         client_id="xyz",
         client_secret_env="MY_SECRET",
-        api_publisher="beautech",
+        api_publisher="contoso",
         api_group="technical",
         api_version="v1.5",
     )
     assert p.auth_method == "client_credentials"
-    assert p.api_publisher == "beautech"
+    assert p.api_publisher == "contoso"
 
 
 # ── _deep_merge ───────────────────────────────────────────────────────────
@@ -171,13 +171,13 @@ def test_save_config_round_trip(monkeypatch, tmp_path):
                 tenant_id="t-abc",
                 environment="Production",
                 company_id="c-123",
-                company_name="BeauTech LLC",
+                company_name="Contoso Ltd",
                 auth_method="client_credentials",
                 client_id="app-id",
                 client_secret_env="BCLI_SECRET",
                 companies={
-                    "LLC": CompanyAlias(id="c-123", name="BeauTech LLC"),
-                    "Corp": CompanyAlias(id="c-456", name="BeauTech Corp"),
+                    "LLC": CompanyAlias(id="c-123", name="Contoso Ltd"),
+                    "Corp": CompanyAlias(id="c-456", name="Northwind Traders"),
                 },
             ),
         },
@@ -208,8 +208,8 @@ def _profile_with_companies() -> BCProfile:
         company_id="default-guid-000",
         company_name="Default Co",
         companies={
-            "LLC": CompanyAlias(id="guid-llc", name="BeauTech LLC"),
-            "Corp": CompanyAlias(id="guid-corp", name="BeauTech Corp"),
+            "LLC": CompanyAlias(id="guid-llc", name="Contoso Ltd"),
+            "Corp": CompanyAlias(id="guid-corp", name="Northwind Traders"),
         },
     )
 
@@ -237,7 +237,7 @@ def test_resolve_company_alias():
     p = _profile_with_companies()
     cid, name = p.resolve_company("LLC")
     assert cid == "guid-llc"
-    assert name == "BeauTech LLC"
+    assert name == "Contoso Ltd"
 
 
 def test_resolve_company_alias_case_insensitive():
