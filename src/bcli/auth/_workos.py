@@ -75,15 +75,22 @@ class WorkOSAuth:
             return cached
 
         # Need to authenticate — determine BC client_id from WorkOS identity
+        email: str | None = None
+        identity = _load_workos_identity()
+        if identity:
+            email = identity.get("email")
+
         if bc_client_id == self._default_bc_client_id:
             # No cached WorkOS identity — do the full WorkOS flow
-            bc_client_id = self._workos_login()
+            bc_client_id, email = self._workos_login()
 
         # Now do BC browser auth with the resolved client_id
+        # Pass email as login_hint to skip the account picker
         self._bc_auth = BrowserAuth(
             tenant_id=self._tenant_id,
             client_id=bc_client_id,
             token_cache=self._token_cache,
+            login_hint=email,
         )
         return await self._bc_auth.get_access_token()
 
@@ -98,8 +105,8 @@ class WorkOSAuth:
                 return bc_client_id
         return self._default_bc_client_id
 
-    def _workos_login(self) -> str:
-        """Run WorkOS browser auth, get user role, return BC client_id."""
+    def _workos_login(self) -> tuple[str, str | None]:
+        """Run WorkOS browser auth, get user role, return (bc_client_id, email)."""
         try:
             from workos import WorkOSClient as WorkOS
         except ImportError as e:
@@ -191,7 +198,7 @@ class WorkOSAuth:
             "bc_client_id": bc_client_id,
         })
 
-        return bc_client_id
+        return bc_client_id, user.email
 
     def clear_cache(self) -> None:
         """Clear BC token cache and WorkOS identity."""
