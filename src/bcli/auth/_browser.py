@@ -8,6 +8,8 @@ Business Central enforces their permission sets on every API call.
 from __future__ import annotations
 
 import logging
+import platform
+import subprocess
 import sys
 import threading
 import webbrowser
@@ -27,6 +29,58 @@ _AUTH_TIMEOUT = 120  # seconds to wait for browser callback
 _DEFAULT_PORT = 8400  # fixed port — register http://localhost:8400 in Entra ID
 
 
+def _open_browser(url: str, *, incognito: bool = False) -> None:
+    """Open a URL in the browser, optionally in incognito/private mode."""
+    if not incognito:
+        webbrowser.open(url)
+        return
+
+    system = platform.system()
+    try:
+        if system == "Darwin":
+            # Try Chrome first, fall back to Safari private
+            for app, flag in [
+                ("/Applications/Google Chrome.app", "--incognito"),
+                ("/Applications/Microsoft Edge.app", "--inprivate"),
+                ("/Applications/Brave Browser.app", "--incognito"),
+            ]:
+                try:
+                    subprocess.Popen([
+                        "open", "-na", app, "--args", flag, url,
+                    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return
+                except (FileNotFoundError, OSError):
+                    continue
+            # Safari doesn't support incognito via CLI, fall back to default
+            webbrowser.open(url)
+        elif system == "Windows":
+            for exe, flag in [
+                ("chrome", "--incognito"),
+                ("msedge", "--inprivate"),
+            ]:
+                try:
+                    subprocess.Popen([exe, flag, url])
+                    return
+                except FileNotFoundError:
+                    continue
+            webbrowser.open(url)
+        else:
+            # Linux
+            for exe, flag in [
+                ("google-chrome", "--incognito"),
+                ("chromium-browser", "--incognito"),
+                ("firefox", "--private-window"),
+            ]:
+                try:
+                    subprocess.Popen([exe, flag, url])
+                    return
+                except FileNotFoundError:
+                    continue
+            webbrowser.open(url)
+    except Exception:
+        webbrowser.open(url)
+
+
 class BrowserAuth:
     """Interactive browser-based auth via authorization code flow with PKCE.
 
@@ -40,12 +94,14 @@ class BrowserAuth:
         client_id: str,
         token_cache: TokenCache | None = None,
         login_hint: str | None = None,
+        incognito: bool = False,
     ) -> None:
         self._tenant_id = tenant_id
         self._client_id = client_id
         self._token_cache = token_cache or TokenCache()
         self._authority = f"{ENTRA_AUTHORITY_BASE}/{tenant_id}"
         self._login_hint = login_hint
+        self._incognito = incognito
 
     async def get_access_token(self) -> str:
         """Get a valid access token, using cache or browser flow."""
@@ -132,9 +188,10 @@ class BrowserAuth:
 
         # Open browser
         auth_url = flow["auth_uri"]
-        print(f"\nOpening browser for authentication...", file=sys.stderr)
+        mode = " (incognito)" if self._incognito else ""
+        print(f"\nOpening browser for authentication{mode}...", file=sys.stderr)
         print(f"If the browser doesn't open, visit:\n  {auth_url}\n", file=sys.stderr)
-        webbrowser.open(auth_url)
+        _open_browser(auth_url, incognito=self._incognito)
 
         # Wait for single callback request
         server_thread = threading.Thread(target=server.handle_request, daemon=True)
