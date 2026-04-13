@@ -20,6 +20,9 @@ class EndpointMetadata(BaseModel):
     api_group: str | None = None
     api_version: str | None = None
 
+    # Domain classification: "standard", "finance", "technical"
+    domain: str = "standard"
+
     # Optional metadata from imports
     source_table: str = ""
     page_number: str = ""

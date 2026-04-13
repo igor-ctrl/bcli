@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -19,6 +21,7 @@ from bcli.errors import (
 )
 
 logger = logging.getLogger(__name__)
+_request_logger = logging.getLogger("bcli.http")
 
 # Status code → exception class mapping
 _ERROR_MAP: dict[int, type[BCLIError]] = {
@@ -78,10 +81,12 @@ class BCTransport:
         params: dict[str, str] | None = None,
         json_body: dict[str, Any] | None = None,
         etag: str | None = None,
+        log_context: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Execute an HTTP request with retry and error handling."""
         last_error: Exception | None = None
         backoff = INITIAL_BACKOFF
+        t0 = time.monotonic()
 
         for attempt in range(self._max_retries + 1):
             try:
@@ -100,7 +105,13 @@ class BCTransport:
                     headers=headers,
                 )
 
+                correlation_id = response.headers.get("x-ms-correlation-request-id")
+
                 if response.is_success:
+                    self._emit_request_log(
+                        method, url, response.status_code, attempt,
+                        time.monotonic() - t0, correlation_id, log_context,
+                    )
                     if response.status_code == 204 or not response.content:
                         return {}
                     return response.json()
@@ -121,6 +132,13 @@ class BCTransport:
                     await asyncio.sleep(wait)
                     backoff *= 2
                     continue
+
+                # Log failed request
+                self._emit_request_log(
+                    method, url, status, attempt,
+                    time.monotonic() - t0, correlation_id, log_context,
+                    error=bc_message,
+                )
 
                 # Raise appropriate error
                 error_cls = _ERROR_MAP.get(status, BCLIError)
@@ -148,11 +166,44 @@ class BCTransport:
                     await asyncio.sleep(backoff)
                     backoff *= 2
                     continue
+                self._emit_request_log(
+                    method, url, 0, attempt,
+                    time.monotonic() - t0, None, log_context,
+                    error=str(e),
+                )
                 raise ServerError(
                     f"Network error after {self._max_retries + 1} attempts: {e}",
                 ) from e
 
         raise ServerError(f"Request failed after {self._max_retries + 1} attempts") from last_error
+
+    @staticmethod
+    def _emit_request_log(
+        method: str,
+        url: str,
+        status: int,
+        retry_count: int,
+        latency_s: float,
+        correlation_id: str | None,
+        context: dict[str, str] | None,
+        *,
+        error: str | None = None,
+    ) -> None:
+        """Emit structured JSON log for every HTTP request."""
+        record: dict[str, Any] = {
+            "event": "bc_http_request",
+            "method": method,
+            "url": url,
+            "status": status,
+            "retry_count": retry_count,
+            "latency_ms": round(latency_s * 1000, 1),
+            "correlation_id": correlation_id,
+        }
+        if context:
+            record.update(context)
+        if error:
+            record["error"] = error
+        _request_logger.info(json.dumps(record, default=str))
 
     # Convenience methods
 

@@ -6,6 +6,8 @@ import os
 import tomllib
 from pathlib import Path
 
+import tomlkit
+
 from bcli.config._defaults import CONFIG_DIR, CONFIG_FILE, PROJECT_CONFIG_FILE
 from bcli.config._model import BCConfig, BCDefaults, BCProfile
 from bcli.errors import ConfigError
@@ -81,48 +83,55 @@ def load_config() -> BCConfig:
 
 
 def save_config(config: BCConfig) -> Path:
-    """Save configuration to the global config file."""
+    """Save configuration to the global config file using tomlkit for proper TOML output."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-    lines: list[str] = []
+    doc = tomlkit.document()
 
     # Defaults section
-    lines.append("[defaults]")
-    lines.append(f'profile = "{config.defaults.profile}"')
-    lines.append(f'format = "{config.defaults.format}"')
-    lines.append(f"page_size = {config.defaults.page_size}")
-    lines.append(f"timeout = {config.defaults.timeout}")
-    lines.append("")
+    defaults = tomlkit.table()
+    defaults.add("profile", config.defaults.profile)
+    defaults.add("format", config.defaults.format)
+    defaults.add("page_size", config.defaults.page_size)
+    defaults.add("timeout", config.defaults.timeout)
+    doc.add("defaults", defaults)
 
     # Profile sections
-    for name, profile in config.profiles.items():
-        lines.append(f"[profiles.{name}]")
-        lines.append(f'tenant_id = "{profile.tenant_id}"')
-        lines.append(f'environment = "{profile.environment}"')
-        if profile.company_id:
-            lines.append(f'company_id = "{profile.company_id}"')
-        if profile.company_name:
-            lines.append(f'company_name = "{profile.company_name}"')
-        lines.append(f'auth_method = "{profile.auth_method}"')
-        if profile.client_id:
-            lines.append(f'client_id = "{profile.client_id}"')
-        if profile.client_secret_env:
-            lines.append(f'client_secret_env = "{profile.client_secret_env}"')
-        if profile.api_publisher:
-            lines.append(f'api_publisher = "{profile.api_publisher}"')
-        if profile.api_group:
-            lines.append(f'api_group = "{profile.api_group}"')
-        if profile.api_version:
-            lines.append(f'api_version = "{profile.api_version}"')
-        lines.append("")
+    if config.profiles:
+        profiles = tomlkit.table(is_super_table=True)
+        for name, profile in config.profiles.items():
+            ptable = tomlkit.table()
+            ptable.add("tenant_id", profile.tenant_id)
+            ptable.add("environment", profile.environment)
+            if profile.company_id:
+                ptable.add("company_id", profile.company_id)
+            if profile.company_name:
+                ptable.add("company_name", profile.company_name)
+            ptable.add("auth_method", profile.auth_method)
+            if profile.client_id:
+                ptable.add("client_id", profile.client_id)
+            if profile.client_secret_env:
+                ptable.add("client_secret_env", profile.client_secret_env)
+            if profile.api_publisher:
+                ptable.add("api_publisher", profile.api_publisher)
+            if profile.api_group:
+                ptable.add("api_group", profile.api_group)
+            if profile.api_version:
+                ptable.add("api_version", profile.api_version)
 
-        # Company aliases
-        for alias, company in profile.companies.items():
-            lines.append(f"[profiles.{name}.companies.{alias}]")
-            lines.append(f'id = "{company.id}"')
-            if company.name:
-                lines.append(f'name = "{company.name}"')
-            lines.append("")
+            # Company aliases
+            if profile.companies:
+                companies = tomlkit.table(is_super_table=True)
+                for alias, company in profile.companies.items():
+                    ctable = tomlkit.table()
+                    ctable.add("id", company.id)
+                    if company.name:
+                        ctable.add("name", company.name)
+                    companies.add(alias, ctable)
+                ptable.add("companies", companies)
 
-    CONFIG_FILE.write_text("\n".join(lines))
+            profiles.add(name, ptable)
+        doc.add("profiles", profiles)
+
+    CONFIG_FILE.write_text(tomlkit.dumps(doc))
     return CONFIG_FILE
