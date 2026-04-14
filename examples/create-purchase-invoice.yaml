@@ -1,0 +1,37 @@
+name: "Create Draft Purchase Invoice — AAR Supply Chain"
+# Run: bcli batch run examples/create-purchase-invoice.yaml
+# This creates a draft invoice with two lines. Nothing gets posted.
+
+steps:
+  # 1. Create the invoice header
+  - action: post
+    endpoint: purchaseHeaders
+    data:
+      documentType: "Invoice"
+      buyFromVendorNo: "V00011"
+      postingDescription: "Engine inspection services — March 2026"
+
+  # 2. Add first line (inspection fee)
+  # Note: replace documentNo with the number from step 1's output
+  - action: post
+    endpoint: purchaseLines
+    data:
+      documentType: "Invoice"
+      documentNo: "REPLACE_WITH_INVOICE_NO"
+      type: "G_x002F_L_x0020_Account"
+      no: "6260-000000-000"
+      description: "CF34-10E borescope inspection"
+      quantity: 1
+      directUnitCost: 4500
+
+  # 3. Add second line (travel expenses)
+  - action: post
+    endpoint: purchaseLines
+    data:
+      documentType: "Invoice"
+      documentNo: "REPLACE_WITH_INVOICE_NO"
+      type: "G_x002F_L_x0020_Account"
+      no: "6260-000000-000"
+      description: "Travel and per diem"
+      quantity: 1
+      directUnitCost: 1200
