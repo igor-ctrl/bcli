@@ -1,0 +1,37 @@
+name: "AP Monthly Review — March 2026"
+# Run: bcli batch run examples/ap-monthly-review.yaml
+# Dry run first: bcli batch run examples/ap-monthly-review.yaml --dry-run
+
+steps:
+  - name: Open Purchase Invoices
+    action: get
+    endpoint: purchaseHeaders
+    params:
+      filter: "documentType eq 'Invoice' and status eq 'Open'"
+      select: "no,buyFromVendorNo,buyFromVendorName,amount,postingDate,dueDate,poDescription"
+      orderby: "dueDate asc"
+
+  - name: Vendor Ledger (March open)
+    action: get
+    endpoint: vendLedgEntries
+    params:
+      filter: "postingDate ge 2026-03-01 and postingDate le 2026-03-31 and open eq true"
+      select: "vendorNo,vendorName,documentType,documentNo,amount,dueDate"
+      orderby: "dueDate asc"
+
+  - name: GL Entries (AP journal, March)
+    action: get
+    endpoint: glEntries
+    params:
+      filter: "postingDate ge 2026-03-01 and sourceCode eq 'PURCHJNL'"
+      select: "postingDate,documentNo,description,amount,sourceCode"
+      top: "50"
+      orderby: "postingDate desc"
+
+  - name: Overdue Items
+    action: get
+    endpoint: vendLedgEntries
+    params:
+      filter: "open eq true and dueDate lt 2026-03-31"
+      select: "vendorNo,vendorName,documentNo,amount,dueDate"
+      orderby: "dueDate asc"
