@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 import typer
@@ -66,6 +67,11 @@ def sync(
     pipeline_name: str = typer.Option("bcli_etl", "--pipeline", help="Pipeline name for state tracking"),
     full_refresh: bool = typer.Option(False, "--full-refresh", help="Ignore cursor, reload everything"),
     include_standard: bool = typer.Option(False, "--include-standard", help="Also sync standard v2.0 entities"),
+    file_format: str = typer.Option("jsonl", "--file-format", help="Filesystem loader file format: jsonl or parquet"),
+    polaris_uri: Optional[str] = typer.Option(None, "--polaris-uri", envvar="BCLI_POLARIS_URI", help="Polaris REST catalog URI. Enables post-sync Iceberg registration."),
+    polaris_warehouse: Optional[str] = typer.Option(None, "--polaris-warehouse", envvar="BCLI_POLARIS_WAREHOUSE", help="Polaris catalog (warehouse) name"),
+    polaris_credential: Optional[str] = typer.Option(None, "--polaris-credential", envvar="BCLI_POLARIS_CREDENTIAL", help="Polaris OAuth credential in 'client_id:client_secret' form"),
+    polaris_namespace: str = typer.Option("bc_raw", "--polaris-namespace", envvar="BCLI_POLARIS_NAMESPACE", help="Iceberg namespace inside the Polaris warehouse"),
 ) -> None:
     """Extract Business Central data and load to a destination via dlt.
 
@@ -101,12 +107,19 @@ def sync(
 
     sync_count = len(entity_list) if entity_list else len(available)
 
+    polaris_enabled = bool(polaris_uri and polaris_warehouse and polaris_credential)
+    if polaris_enabled and file_format != "parquet":
+        file_format = "parquet"
+
     console.print("[bold]ETL Sync[/bold]")
     console.print(f"  Profile: {profile}")
     console.print(f"  Destination: {destination}")
     console.print(f"  Dataset: {dataset}")
     console.print(f"  Entities: {', '.join(entity_list) if entity_list else f'all ({sync_count} custom)'}")
     console.print(f"  Mode: {'full refresh' if full_refresh else 'incremental (systemModifiedAt)'}")
+    console.print(f"  File format: {file_format}")
+    if polaris_enabled:
+        console.print(f"  Polaris: {polaris_uri} → {polaris_warehouse}.{polaris_namespace}")
     console.print()
 
     try:
@@ -119,6 +132,11 @@ def sync(
             include_standard=include_standard,
         )
 
+        if destination == "filesystem":
+            os.environ.setdefault(
+                "DESTINATION__FILESYSTEM__LOADER_FILE_FORMAT", file_format
+            )
+
         pipeline = dlt.pipeline(
             pipeline_name=pipeline_name,
             destination=destination,
@@ -126,10 +144,22 @@ def sync(
         )
 
         console.print("[dim]Running pipeline...[/dim]")
-        load_info = pipeline.run(source)
+        load_info = pipeline.run(source, loader_file_format=file_format) if destination == "filesystem" else pipeline.run(source)
 
         console.print("\n[green]✓[/green] Pipeline complete")
         console.print(f"[dim]{load_info}[/dim]")
+
+        if polaris_enabled:
+            _register_polaris(
+                load_info=load_info,
+                pipeline=pipeline,
+                uri=polaris_uri,
+                warehouse=polaris_warehouse,
+                credential=polaris_credential,
+                namespace=polaris_namespace,
+                entity_list=entity_list,
+                available=available,
+            )
 
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
@@ -137,3 +167,52 @@ def sync(
     except Exception as e:
         console.print(f"[red]ETL failed:[/red] {e}")
         raise typer.Exit(1)
+
+
+def _register_polaris(
+    *,
+    load_info,
+    pipeline,
+    uri: str,
+    warehouse: str,
+    credential: str,
+    namespace: str,
+    entity_list: list[str] | None,
+    available: list,
+) -> None:
+    """Register just-loaded parquet files in Polaris and print a summary."""
+    from bcli.etl import PolarisConfig, register_load_with_polaris
+
+    # Map selected entity names → destination table names dlt wrote.
+    # dlt normalizes camelCase to snake_case (e.g. glEntries → gl_entries).
+    from dlt.common.normalizers.naming.snake_case import NamingConvention
+
+    naming = NamingConvention()
+    selected = set(entity_list) if entity_list else {e.name for e in available}
+    entity_table_names = {naming.normalize_identifier(name) for name in selected}
+
+    config = PolarisConfig(
+        uri=uri,
+        warehouse=warehouse,
+        credential=credential,
+        namespace=namespace,
+    )
+
+    console.print(f"\n[dim]Registering load with Polaris ({uri})...[/dim]")
+    try:
+        summary = register_load_with_polaris(
+            load_info,
+            pipeline=pipeline,
+            config=config,
+            entity_table_names=entity_table_names,
+        )
+    except ImportError as e:
+        console.print(f"[yellow]Polaris skipped:[/yellow] {e}")
+        return
+
+    if not summary:
+        console.print("[dim]Polaris: nothing to register (no parquet files in load).[/dim]")
+        return
+
+    for table, count in sorted(summary.items()):
+        console.print(f"[green]✓[/green] Polaris: {namespace}.{table} ← {count} file(s)")

@@ -33,6 +33,7 @@ from bcli.etl._auth import (
 )
 from bcli.etl._bridge import bcli_profile, load_entities_from_bcli_registry
 from bcli.etl._generic import EntityDef, business_central
+from bcli.etl._polaris import PolarisConfig, register_load_with_polaris
 from bcli.etl._stampers import (
     Stamper,
     audit_stamper,
@@ -56,4 +57,7 @@ __all__ = [
     # bcli bridge
     "bcli_profile",
     "load_entities_from_bcli_registry",
+    # Polaris integration
+    "PolarisConfig",
+    "register_load_with_polaris",
 ]
