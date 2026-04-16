@@ -99,7 +99,7 @@ def status() -> None:
 
     cached = cache.get(profile.tenant_id, profile.client_id or "")
     if cached:
-        console.print(f"[green]✓[/green] Valid cached token found")
+        console.print("[green]✓[/green] Valid cached token found")
         console.print(f"  Profile: {state.active_profile_name}")
         console.print(f"  Auth method: {profile.auth_method}")
         console.print(f"  Tenant: {profile.tenant_id}")
@@ -114,11 +114,11 @@ def status() -> None:
         keyring_key = f"{profile.tenant_id}:{profile.client_id}"
         has_secret = _try_keyring_get(KEYRING_SERVICE, keyring_key) is not None
         if has_secret:
-            console.print(f"  Keychain: [green]secret stored[/green]")
+            console.print("  Keychain: [green]secret stored[/green]")
         else:
-            console.print(f"  Keychain: [dim]no secret stored[/dim] (run 'bcli auth store-secret')")
+            console.print("  Keychain: [dim]no secret stored[/dim] (run 'bcli auth store-secret')")
     else:
-        console.print(f"  Keychain: [dim]keyring not installed[/dim] (pip install keyring)")
+        console.print("  Keychain: [dim]keyring not installed[/dim] (pip install keyring)")
 
 
 @app.command()
