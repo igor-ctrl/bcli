@@ -79,6 +79,13 @@ app.command(name="patch")(patch_cmd.patch_command)
 app.command(name="delete")(delete_cmd.delete_command)
 app.command(name="ai-context")(context_cmd.ai_context_command)
 
+# ETL command — optional, only available when dlt is installed
+try:
+    from bcli_cli.commands import etl_cmd
+    app.add_typer(etl_cmd.app, name="etl", help="ETL pipeline (requires dlt)")
+except ImportError:
+    pass
+
 
 if __name__ == "__main__":
     app()
