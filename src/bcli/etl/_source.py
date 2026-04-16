@@ -65,24 +65,30 @@ def _stamp_fivetran_fields(page: list[dict[str, Any]]) -> list[dict[str, Any]]:
 async def _async_extract_all_companies(
     entity: EntityDef, profile: str, since: str | None
 ) -> list[list[dict[str, Any]]]:
-    """Extract all pages from a BC entity across ALL companies."""
+    """Extract all pages from a BC entity across ALL companies.
+
+    Gracefully skips companies where the entity doesn't exist (404).
+    """
     from bcli import AsyncBCClient
+    from bcli.errors import NotFoundError
 
     all_pages: list[list[dict[str, Any]]] = []
 
     async with AsyncBCClient(profile=profile) as client:
-        # Get all companies in the environment
         companies = await client.list_companies()
 
         for company in companies:
             company_id = company.get("id", "")
-            # Swap company_id on the profile for this iteration
+            company_name = company.get("displayName", company.get("name", company_id[:12]))
             original_company_id = client._profile.company_id
             client._profile.company_id = company_id
 
             try:
                 pages = await _extract_pages(client, entity, since, company_id)
                 all_pages.extend(pages)
+            except NotFoundError:
+                # Entity doesn't exist in this company — normal for custom APIs
+                pass
             finally:
                 client._profile.company_id = original_company_id
 
