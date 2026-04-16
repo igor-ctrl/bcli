@@ -15,6 +15,7 @@ from bcli.errors import (
     ServerError,
     ThrottledError,
     ValidationError,
+    WorkflowError,
 )
 from bcli.odata import Query
 from bcli.registry import EndpointRegistry
@@ -38,5 +39,6 @@ __all__ = [
     "ServerError",
     "ThrottledError",
     "ValidationError",
+    "WorkflowError",
     "load_config",
 ]
