@@ -1,37 +1,59 @@
 name: "Create Draft Purchase Invoice — AAR Supply Chain"
-# Run: bcli batch run examples/create-purchase-invoice.yaml
-# This creates a draft invoice with two lines. Nothing gets posted.
+# Run: bcli batch run examples/create-purchase-invoice.yaml --set vendor_no=V00011
+# Dry run: bcli batch run examples/create-purchase-invoice.yaml --set vendor_no=V00011 --dry-run
+#
+# Step chaining: the invoice number from step 1 flows into steps 2 and 3
+# via ${{ steps.create_header.no }}.
+
+params:
+  vendor_no:
+    description: "Vendor number (e.g. V00011)"
+    required: true
+  posting_desc:
+    description: "Invoice posting description"
+    default: "Engine inspection services — March 2026"
+  inspection_desc:
+    description: "Description for the inspection line"
+    default: "CF34-10E borescope inspection"
+  inspection_cost:
+    description: "Inspection cost"
+    default: 4500
+  travel_cost:
+    description: "Travel expenses"
+    default: 1200
 
 steps:
   # 1. Create the invoice header
-  - action: post
+  - name: create_header
+    action: post
     endpoint: purchaseHeaders
     data:
       documentType: "Invoice"
-      buyFromVendorNo: "V00011"
-      postingDescription: "Engine inspection services — March 2026"
+      buyFromVendorNo: "${{ params.vendor_no }}"
+      postingDescription: "${{ params.posting_desc }}"
 
   # 2. Add first line (inspection fee)
-  # Note: replace documentNo with the number from step 1's output
-  - action: post
+  - name: add_inspection_line
+    action: post
     endpoint: purchaseLines
     data:
       documentType: "Invoice"
-      documentNo: "REPLACE_WITH_INVOICE_NO"
+      documentNo: "${{ steps.create_header.no }}"
       type: "G_x002F_L_x0020_Account"
       no: "6260-000000-000"
-      description: "CF34-10E borescope inspection"
+      description: "${{ params.inspection_desc }}"
       quantity: 1
-      directUnitCost: 4500
+      directUnitCost: ${{ params.inspection_cost }}
 
   # 3. Add second line (travel expenses)
-  - action: post
+  - name: add_travel_line
+    action: post
     endpoint: purchaseLines
     data:
       documentType: "Invoice"
-      documentNo: "REPLACE_WITH_INVOICE_NO"
+      documentNo: "${{ steps.create_header.no }}"
       type: "G_x002F_L_x0020_Account"
       no: "6260-000000-000"
       description: "Travel and per diem"
       quantity: 1
-      directUnitCost: 1200
+      directUnitCost: ${{ params.travel_cost }}

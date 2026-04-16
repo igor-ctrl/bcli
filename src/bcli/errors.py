@@ -63,3 +63,7 @@ class RegistryError(BCLIError):
 
 class SafetyError(BCLIError):
     """Write safety check failed (missing environment, company, or production confirmation)."""
+
+
+class WorkflowError(BCLIError):
+    """Workflow template resolution or execution error."""
