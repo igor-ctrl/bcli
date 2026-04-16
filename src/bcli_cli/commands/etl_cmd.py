@@ -24,10 +24,10 @@ def list_entities(
     By default shows only custom API endpoints from the registry for the
     active profile. Use --include-standard to also show standard v2.0 entities.
     """
-    from bcli.etl._entities import load_entities_from_registry
+    from bcli.etl._bridge import load_entities_from_bcli_registry
 
     profile = state.profile_name or "default"
-    entities = load_entities_from_registry(profile, custom_only=not include_standard)
+    entities = load_entities_from_bcli_registry(profile, custom_only=not include_standard)
 
     if not entities:
         console.print(f"[yellow]No custom endpoints found for profile '{profile}'.[/yellow]")
@@ -91,9 +91,9 @@ def sync(
     entity_list = [e.strip() for e in entities.split(",")] if entities else None
 
     # Preview what will be synced
-    from bcli.etl._entities import load_entities_from_registry
+    from bcli.etl._bridge import load_entities_from_bcli_registry
 
-    available = load_entities_from_registry(profile, custom_only=not include_standard)
+    available = load_entities_from_bcli_registry(profile, custom_only=not include_standard)
     if not available:
         console.print(f"[yellow]No custom endpoints found for profile '{profile}'.[/yellow]")
         console.print("[dim]Import endpoints first: bcli registry import --from-postman <file>[/dim]")
@@ -110,9 +110,9 @@ def sync(
     console.print()
 
     try:
-        from bcli.etl._source import business_central
+        from bcli.etl import bcli_profile
 
-        source = business_central(
+        source = bcli_profile(
             profile=profile,
             entities=entity_list,
             full_refresh=full_refresh,
