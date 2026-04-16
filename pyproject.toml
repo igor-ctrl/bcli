@@ -7,19 +7,22 @@ name = "bcli"
 version = "0.1.0"
 description = "Python SDK and CLI for Microsoft Dynamics 365 Business Central APIs"
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.11"
 authors = [{ name = "Igor" }]
-keywords = ["business-central", "dynamics-365", "odata", "cli", "sdk"]
+keywords = ["business-central", "dynamics-365", "odata", "cli", "sdk", "etl", "dlt"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Office/Business :: Financial :: Accounting",
 ]
 dependencies = [
     "httpx>=0.27",
@@ -27,6 +30,12 @@ dependencies = [
     "pydantic>=2.0",
     "tomlkit>=0.13",
 ]
+
+[project.urls]
+Homepage = "https://github.com/igor-ctrl/bcli"
+Repository = "https://github.com/igor-ctrl/bcli"
+Issues = "https://github.com/igor-ctrl/bcli/issues"
+Documentation = "https://github.com/igor-ctrl/bcli/tree/main/docs"
 
 [project.scripts]
 bcli = "bcli_cli.app:app"
