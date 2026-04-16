@@ -49,7 +49,12 @@ cli = [
     "workos>=5.0",
 ]
 etl = [
-    "dlt>=1.0",
+    "dlt[parquet,filesystem,s3]>=1.0",
+]
+polaris = [
+    "bcli[etl]",
+    "pyarrow>=16.0",
+    "pyiceberg[s3fs]>=0.7",
 ]
 dev = [
     "bcli[cli]",
