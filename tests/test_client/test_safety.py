@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from bcli.client._safety import DEFAULT_DOMAIN_RULES, DomainRule, SafeContext
+from bcli.client._safety import DomainRule, SafeContext
 from bcli.errors import SafetyError
 
 
@@ -145,7 +145,7 @@ class TestSafeContextDelegation:
         async with SafeContext(
             client=client, environment="Sandbox", company_id="c-1",
         ) as sw:
-            result = await sw.post("items", body={"name": "Widget"})
+            await sw.post("items", body={"name": "Widget"})
 
         client.post.assert_called_once_with(
             "items", {"name": "Widget"},

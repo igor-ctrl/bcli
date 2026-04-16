@@ -45,8 +45,8 @@ def build_companies_url(*, environment: str) -> str:
 def build_environments_url(*, tenant_id: str) -> str:
     """Build URL for BC Admin Center environments API."""
     return (
-        f"https://api.businesscentral.dynamics.com"
-        f"/admin/v2.1/applications/businesscentral/environments"
+        "https://api.businesscentral.dynamics.com"
+        "/admin/v2.1/applications/businesscentral/environments"
     )
 
 
