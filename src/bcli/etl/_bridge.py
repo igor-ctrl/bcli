@@ -48,7 +48,7 @@ def _build_token_provider(profile: str):
         async with AsyncBCClient(profile=profile) as client:
             transport = client._ensure_transport()
             # bcli's transport handles caching + refresh internally
-            return await transport._auth.get_token()
+            return await transport._auth.get_access_token()
 
     return _token
 
