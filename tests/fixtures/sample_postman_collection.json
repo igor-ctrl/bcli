@@ -1,0 +1,119 @@
+{
+  "info": {
+    "name": "Sample BC Custom API Collection",
+    "description": "Synthetic fixture for testing Postman import logic. Uses a fictional publisher 'acme' with three API groups.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Finance",
+      "description": "**Source Table:** \"GL Account\"\nFinancial entities exposed as a custom API.",
+      "item": [
+        {
+          "name": "Get GL Accounts",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "https://api.businesscentral.dynamics.com/v2.0/{{env}}/api/acme/finance/v1.0/companies({{company_id}})/glAccounts",
+              "path": [
+                "v2.0",
+                "{{env}}",
+                "api",
+                "acme",
+                "finance",
+                "v1.0",
+                "companies({{company_id}})",
+                "glAccounts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Post GL Entry",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "https://api.businesscentral.dynamics.com/v2.0/{{env}}/api/acme/finance/v1.0/companies({{company_id}})/glEntries",
+              "path": [
+                "v2.0",
+                "{{env}}",
+                "api",
+                "acme",
+                "finance",
+                "v1.0",
+                "companies({{company_id}})",
+                "glEntries"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Standard",
+      "description": "**Source Table:** \"Customer\"\nCustomer and vendor master data.",
+      "item": [
+        {
+          "name": "Get Customers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "path": [
+                "v2.0",
+                "{{env}}",
+                "api",
+                "acme",
+                "standard",
+                "v1.0",
+                "companies({{company_id}})",
+                "customers"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Vendors",
+          "request": {
+            "method": "GET",
+            "url": {
+              "path": [
+                "v2.0",
+                "{{env}}",
+                "api",
+                "acme",
+                "standard",
+                "v1.0",
+                "companies({{company_id}})",
+                "vendors"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Technical",
+      "description": "**Source Table:** \"Engine Overview\"\nTechnical data for equipment tracking.",
+      "item": [
+        {
+          "name": "Get Equipment Records",
+          "request": {
+            "method": "GET",
+            "url": {
+              "path": [
+                "v2.0",
+                "{{env}}",
+                "api",
+                "acme",
+                "technical",
+                "v1.0",
+                "companies({{company_id}})",
+                "equipmentRecords"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

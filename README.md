@@ -1,6 +1,10 @@
 # bcli
 
-A Python SDK and CLI for Microsoft Dynamics 365 Business Central APIs.
+[![Tests](https://github.com/igor-ctrl/bcli/actions/workflows/tests.yml/badge.svg)](https://github.com/igor-ctrl/bcli/actions/workflows/tests.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
+
+A Python SDK and CLI for Microsoft Dynamics 365 Business Central APIs, with a built-in [dlt](https://dlthub.com) source for ETL backup pipelines.
 
 ## SDK Quick Start
 
@@ -67,7 +71,50 @@ bcli get myCustomEntities --top 5
 - **Write safety** — SafeContext gate prevents wrong-environment writes, enforces draft status on financial documents
 - **Programmatic auth** — Pass credentials directly for MCP servers, Airflow DAGs, and containers (no config files required)
 - **Batch operations** — Execute sequences of API calls from YAML files
+- **ETL pipeline** — Built-in [dlt](https://dlthub.com) source for incremental backup to Parquet / DuckDB / Iceberg / Postgres
 - **Structured logging** — JSON request logs with correlation IDs for observability
+
+## ETL Pipeline (dlt source)
+
+Sync BC data incrementally to any [dlt-supported destination](https://dlthub.com/docs/dlt-ecosystem/destinations/) — useful as a Fivetran backup, a warehouse backfill tool, or a standalone ETL runner.
+
+Standalone (any BC tenant, no bcli config required):
+
+```python
+import dlt
+from bcli.etl import business_central, EntityDef, fivetran_stamper
+
+source = business_central(
+    tenant_id="...", client_id="...", client_secret="...",
+    environment="Production",
+    entities=[
+        EntityDef(name="customers"),
+        EntityDef(name="vendors"),
+    ],
+    multi_company=True,             # iterate all BC companies
+    stampers=[fivetran_stamper()],  # add _fivetran_synced / _fivetran_deleted
+)
+
+pipeline = dlt.pipeline(destination="duckdb", dataset_name="bc_raw")
+pipeline.run(source)
+```
+
+Or use the bcli bridge (reuses your profile and custom-API registry):
+
+```bash
+# List entities the pipeline will sync
+bcli --profile prod etl entities
+
+# Incremental sync (uses systemModifiedAt cursor)
+bcli --profile prod etl sync --destination filesystem
+
+# Full refresh
+bcli --profile prod etl sync --destination filesystem --full-refresh
+
+# Schedule via cron (every 10 min incremental, nightly full refresh)
+*/10 * * * * bcli --profile prod etl sync --destination filesystem
+0 0 * * *    bcli --profile prod etl sync --destination filesystem --full-refresh
+```
 
 ## Installation
 
@@ -80,13 +127,19 @@ pip install bcli
 # SDK + CLI
 pip install "bcli[cli]"
 
+# SDK + ETL (dlt source for backup pipelines)
+pip install "bcli[etl]"
+
+# Everything
+pip install "bcli[cli,etl]"
+
 # Via uv (recommended)
 uv tool install bcli
 
 # From source
-git clone https://github.com/igor-ctrl/bc-cli.git
-cd bc-cli
-pip install -e ".[dev]"
+git clone https://github.com/igor-ctrl/bcli.git
+cd bcli
+pip install -e ".[dev,etl]"
 ```
 
 ## Documentation

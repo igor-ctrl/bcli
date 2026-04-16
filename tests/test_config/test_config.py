@@ -1,7 +1,5 @@
 """Tests for configuration loading, merging, and company resolution."""
 
-import os
-from pathlib import Path
 
 import pytest
 
