@@ -19,6 +19,13 @@ htmlcov/
 *.log
 .DS_Store
 
+# dlt pipeline state and secrets
+.dlt/
+*.duckdb
+*.duckdb.wal
+TRASH/
+TRASH-FILES.md
+
 # Internal planning docs (not part of OSS release)
 PRD-*.md
 TODOS.md
