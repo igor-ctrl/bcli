@@ -39,6 +39,9 @@ cli = [
     "keyring>=25.0",
     "workos>=5.0",
 ]
+etl = [
+    "dlt>=1.0",
+]
 dev = [
     "bcli[cli]",
     "pytest>=8.0",
