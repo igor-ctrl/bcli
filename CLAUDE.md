@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 uv pip install -e ".[dev]"
 
 # Install globally (puts `bcli` on PATH)
-uv tool install -e /Users/igor/Projects/bc-cli --force
+uv tool install -e . --force
 
 # Run tests
 uv run pytest tests/ -v
