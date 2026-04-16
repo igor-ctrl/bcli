@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any
-from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -17,7 +16,6 @@ from bcli.client._transport import (
 )
 from bcli.errors import (
     AuthError,
-    BCLIError,
     NotFoundError,
     ServerError,
     ThrottledError,

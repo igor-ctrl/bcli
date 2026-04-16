@@ -9,8 +9,7 @@ from pathlib import Path
 import tomlkit
 
 from bcli.config._defaults import CONFIG_DIR, CONFIG_FILE, PROJECT_CONFIG_FILE
-from bcli.config._model import BCConfig, BCDefaults, BCProfile
-from bcli.errors import ConfigError
+from bcli.config._model import BCConfig
 
 
 def _find_project_config() -> Path | None:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -13,7 +12,7 @@ from rich.table import Table
 from bcli._url import build_companies_url
 from bcli.auth._credentials import ClientCredentialsAuth
 from bcli.client._transport import BCTransport
-from bcli.config import BCConfig, BCDefaults, BCProfile, load_config, save_config
+from bcli.config import BCProfile, load_config, save_config
 from bcli.config._defaults import CONFIG_FILE
 from bcli_cli._state import state
 
@@ -32,7 +31,6 @@ def init() -> None:
     client_id = Prompt.ask("Client ID (App Registration)")
 
     # Secret handling — offer keychain first
-    from bcli.auth._credentials import ClientCredentialsAuth
 
     secret_env = None
     if ClientCredentialsAuth.has_keyring():
@@ -123,7 +121,7 @@ def init() -> None:
 
     console.print(f"\n[green]✓[/green] Config saved to {path}")
     console.print(f"[green]✓[/green] Standard v2.0 APIs ready ({state.registry.standard_count} entities)")
-    console.print(f"\n[dim]Try: bcli get customers --top 5[/dim]")
+    console.print("\n[dim]Try: bcli get customers --top 5[/dim]")
 
 
 @app.command()
