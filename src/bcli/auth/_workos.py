@@ -17,7 +17,6 @@ import logging
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
