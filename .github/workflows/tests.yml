@@ -21,12 +21,13 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          python-version: ${{ matrix.python-version }}
 
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
+      - name: Create virtualenv
+        run: uv venv
 
       - name: Install dependencies
-        run: uv pip install --system -e ".[dev,etl]"
+        run: uv pip install -e ".[dev,etl]"
 
       - name: Lint with ruff
         run: uv run ruff check src/ tests/
