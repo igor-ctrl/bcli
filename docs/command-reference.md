@@ -72,8 +72,25 @@ bcli config use <profile-name>
 Authenticate and cache a token.
 
 ```bash
-bcli auth login
+bcli auth login [--method <method>] [--incognito]
 ```
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--method <method>` | `-m` | `workos`, `browser`, `device`, or `client_credentials` (default: profile's `auth_method`) |
+| `--incognito` | `-i` | Open the browser in incognito/private mode — useful for logging in as a different user |
+
+Examples:
+```bash
+bcli auth login                              # uses profile's auth_method
+bcli auth login --method workos              # WorkOS SSO → role-based BC access
+bcli auth login --method workos -i           # incognito — log in as a different user
+bcli auth login --method browser             # browser OAuth (user's BC permissions, PKCE)
+bcli auth login --method device              # device code flow
+bcli auth login --method client_credentials  # service-to-service
+```
+
+See [Authentication](authentication.md) for method details.
 
 ### auth status
 
@@ -301,8 +318,82 @@ bcli test endpoint <entity-set-name>
 
 ### batch run
 
-Execute a YAML batch file.
+Execute a YAML batch file. Supports workflow-style step chaining, parameters, and result capture.
 
 ```bash
-bcli batch run <file.yaml> [--dry-run]
+bcli batch run <file.yaml> [options]
+```
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--dry-run` | | Print resolved requests without executing |
+| `--output <path>` | `-o` | Save full results (all steps + records + metadata) to a JSON file |
+| `--format <fmt>` | `-f` | Print each step's returned data inline (`table`, `json`, `csv`, `ndjson`) |
+| `--set key=value` | | Set a workflow parameter (repeatable). Values auto-typed (YAML scalar rules). |
+| `--params <file>` | | Load workflow parameters from a YAML mapping file |
+
+Examples:
+```bash
+# Preview only
+bcli batch run workflow.yaml --dry-run
+
+# Run with parameters and save JSON
+bcli batch run workflow.yaml --set vendor=V00011 --set month=2026-03 -o results.json
+
+# Run with a params file and print each step's rows as a table
+bcli batch run workflow.yaml --params month-end.yaml -f table
+```
+
+See [Batch Operations](batch-operations.md) for step chaining, parameter syntax, and `${{ steps.<id>.data }}` references.
+
+---
+
+## ai-context
+
+Dump LLM-ready usage instructions for the CLI. Useful for priming Claude / agents.
+
+```bash
+bcli ai-context [--format json|text]
+```
+
+Emits a compact reference covering command syntax, OData filter quirks, output formats, and common workflows. Pipe the output into a system prompt or save it as context for LLM agents.
+
+---
+
+## etl (optional — requires `bcli[etl]`)
+
+Extract Business Central data via `dlt` pipelines. Available only when the `etl` extra is installed (`pip install 'bcli[etl]'`).
+
+### etl entities
+
+List entities available for ETL extraction.
+
+```bash
+bcli etl entities [--include-standard]
+```
+
+By default shows only custom API endpoints for the active profile. Pass `--include-standard` to include the 79 built-in v2.0 entities.
+
+### etl sync
+
+Extract data and load to a `dlt` destination.
+
+```bash
+bcli etl sync [options]
+```
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--entities <list>` | | Comma-separated entity names (default: all custom endpoints) |
+| `--destination <dest>` | `-d` | dlt destination: `filesystem`, `duckdb`, `iceberg` (default: `filesystem`) |
+| `--dataset <name>` | | Dataset name in destination (default: `bc_raw`) |
+| `--pipeline <name>` | | Pipeline name for state tracking (default: `bcli_etl`) |
+| `--full-refresh` | | Ignore cursor; reload everything |
+| `--include-standard` | | Also sync standard v2.0 entities (skipped by default — usually handled by Fivetran) |
+
+Examples:
+```bash
+bcli etl sync --destination filesystem
+bcli etl sync --entities customers,vendors --destination duckdb
+bcli etl sync --full-refresh --destination iceberg
 ```

@@ -1,13 +1,25 @@
 # Batch Operations
 
-Execute sequences of API calls from YAML files.
+Execute sequences of API calls from YAML files. Batch files can be simple linear scripts or parameterized workflows with step-to-step value references.
 
 ## Usage
 
 ```bash
-bcli batch run operations.yaml
-bcli batch run operations.yaml --dry-run
+bcli batch run operations.yaml                          # Run all steps
+bcli batch run operations.yaml --dry-run                # Preview without executing
+bcli batch run operations.yaml -o results.json          # Save full result bundle
+bcli batch run operations.yaml -f table                 # Print each step's rows inline
+bcli batch run workflow.yaml --set vendor=V00011 --set month=2026-03
+bcli batch run workflow.yaml --params month-end.yaml
 ```
+
+| Flag | Short | Purpose |
+|------|-------|---------|
+| `--dry-run` | | Resolve references and parameters, print resolved requests, do not execute |
+| `--output <path>` | `-o` | Save full results to a JSON file — one entry per step with status, data, and metadata |
+| `--format <fmt>` | `-f` | Print each step's returned data inline (`table`, `json`, `csv`, `ndjson`) |
+| `--set key=value` | | Set a workflow parameter (repeatable). Values auto-typed via YAML scalar rules (`"4500"` → int, `"true"` → bool, `"V00011"` → str) |
+| `--params <file>` | | Load workflow parameters from a YAML mapping file |
 
 ## Batch File Format
 
@@ -123,4 +135,89 @@ If a step fails, the error is reported and subsequent steps continue:
   Step 3: POST engineUtilizations... ✗ HTTP 400: Duplicate record
 
 ✓ Batch complete: 2/3 steps succeeded
+```
+
+## Parameterized Workflows
+
+Batch files can declare named `params` and reference them with `${{ params.<name> }}` inside step fields. Parameters are supplied at run time via `--set key=value` (repeatable) or a `--params <file.yaml>`.
+
+```yaml
+# month-end-recon.yaml
+name: "Month-End AP Reconciliation"
+params:
+  vendor:
+    required: true
+  month:
+    required: true
+  tolerance:
+    default: 0.01
+
+steps:
+  - id: invoices
+    action: get
+    endpoint: purchaseInvoices
+    params:
+      filter: "vendorNumber eq '${{ params.vendor }}' and postingDate ge ${{ params.month }}-01"
+      select: "number,vendorNumber,amount,currencyCode,externalDocumentNumber"
+      top: 500
+
+  - id: ledger
+    action: get
+    endpoint: vendorLedgerEntries
+    params:
+      filter: "vendorNumber eq '${{ params.vendor }}' and postingDate ge ${{ params.month }}-01"
+      select: "documentNumber,amount,currencyCode"
+      top: 500
+```
+
+Run it:
+
+```bash
+bcli batch run month-end-recon.yaml --set vendor=V00011 --set month=2026-03 -o recon.json
+# Or from a params file:
+bcli batch run month-end-recon.yaml --params march.yaml -o recon.json
+```
+
+`--dry-run` prints each step with references resolved, so you can verify substitution before executing.
+
+## Step Chaining
+
+Steps can reference results from previous steps via `${{ steps.<step-id>.data }}`. Give a step an `id:` to make its results addressable.
+
+```yaml
+name: "Chain: find vendor, then list their invoices"
+steps:
+  - id: find-vendor
+    action: get
+    endpoint: vendors
+    params:
+      filter: "displayName eq 'Fabrikam'"
+      select: "number"
+      top: 1
+
+  - id: invoices
+    action: get
+    endpoint: purchaseInvoices
+    params:
+      filter: "vendorNumber eq '${{ steps.find-vendor.data[0].number }}'"
+      top: 50
+```
+
+Step references are resolved at execution time — when a step fails, downstream steps that reference its data will fail to resolve and will be skipped with a clear error.
+
+## Result Capture
+
+Pass `--output` / `-o` to save the full result bundle as JSON:
+
+```bash
+bcli batch run workflow.yaml -o results.json
+```
+
+The bundle contains one entry per step with the step id, action, endpoint, resolved params, returned data, record counts, and timing. Use `jq` or any JSON consumer (Claude, Python, Airflow) to work with it downstream.
+
+Pass `--format` / `-f` to additionally print each step's data inline in the chosen format:
+
+```bash
+bcli batch run workflow.yaml -f table    # Each step's rows as a table
+bcli batch run workflow.yaml -f ndjson   # Streaming-friendly
 ```
