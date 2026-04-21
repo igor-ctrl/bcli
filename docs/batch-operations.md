@@ -153,7 +153,7 @@ params:
     default: 0.01
 
 steps:
-  - id: invoices
+  - name: invoices
     action: get
     endpoint: purchaseInvoices
     params:
@@ -161,7 +161,7 @@ steps:
       select: "number,vendorNumber,amount,currencyCode,externalDocumentNumber"
       top: 500
 
-  - id: ledger
+  - name: ledger
     action: get
     endpoint: vendorLedgerEntries
     params:
@@ -182,12 +182,19 @@ bcli batch run month-end-recon.yaml --params march.yaml -o recon.json
 
 ## Step Chaining
 
-Steps can reference results from previous steps via `${{ steps.<step-id>.data }}`. Give a step an `id:` to make its results addressable.
+Steps can reference results from previous steps via `${{ steps.<step_name>.<path> }}`. Give a step a `name:` to make its results addressable. Step names must use word characters only (`[A-Za-z0-9_]`) — no hyphens.
+
+Path traversal rules:
+
+- **GET** returns a list → index with integers: `${{ steps.find_vendor.0.number }}`
+- **POST / PATCH** returns a single record → access fields directly: `${{ steps.create_header.no }}`
+- Nested fields use dots: `${{ steps.find_vendor.0.address.city }}`
+- List length: `${{ steps.find_vendor.length }}`
 
 ```yaml
 name: "Chain: find vendor, then list their invoices"
 steps:
-  - id: find-vendor
+  - name: find_vendor
     action: get
     endpoint: vendors
     params:
@@ -195,15 +202,17 @@ steps:
       select: "number"
       top: 1
 
-  - id: invoices
+  - name: invoices
     action: get
     endpoint: purchaseInvoices
     params:
-      filter: "vendorNumber eq '${{ steps.find-vendor.data[0].number }}'"
+      filter: "vendorNumber eq '${{ steps.find_vendor.0.number }}'"
       top: 50
 ```
 
 Step references are resolved at execution time — when a step fails, downstream steps that reference its data will fail to resolve and will be skipped with a clear error.
+
+> **Note:** `id:` on a step is reserved for the *record id* used by `patch` and `delete` actions. It is **not** a step identifier. Use `name:` to identify steps for chaining.
 
 ## Result Capture
 
