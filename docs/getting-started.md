@@ -110,3 +110,4 @@ bcli test endpoint customers   # Test a specific endpoint
 - [Authentication](authentication.md) — Device code flow, keychain details
 - [Custom APIs](custom-apis.md) — Import your custom API pages
 - [Multi-Company](multi-company.md) — Set up company aliases
+- [Demo Setup (CRONUS)](demo-setup.md) — Stand up a free sandbox with Microsoft's demo company
