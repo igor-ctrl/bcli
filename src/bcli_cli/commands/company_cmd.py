@@ -133,6 +133,98 @@ def list_aliases() -> None:
     console.print(table)
 
 
+@app.command("aliases-import")
+def import_aliases(
+    from_profile: str = typer.Option(
+        ..., "--from", help="Source profile to copy aliases from"
+    ),
+    overwrite: bool = typer.Option(
+        False, "--overwrite", help="Replace aliases with the same key in the target profile"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Print the plan without writing to the config file"
+    ),
+) -> None:
+    """Copy company aliases from another profile into the active profile."""
+    config = state.config
+    target_name = state.active_profile_name
+
+    if from_profile == target_name:
+        console.print(
+            f"[red]Source and target are the same profile ('{target_name}'). "
+            "Use --profile to select a different target.[/red]"
+        )
+        raise typer.Exit(1)
+
+    if from_profile not in config.profiles:
+        available = ", ".join(config.profiles.keys()) or "(none)"
+        console.print(
+            f"[red]Source profile '{from_profile}' not found. Available: {available}[/red]"
+        )
+        raise typer.Exit(1)
+
+    if target_name not in config.profiles:
+        console.print(f"[red]Target profile '{target_name}' not found.[/red]")
+        raise typer.Exit(1)
+
+    source = config.profiles[from_profile]
+    target = config.profiles[target_name]
+
+    if not source.companies:
+        console.print(
+            f"[yellow]Source profile '{from_profile}' has no aliases to copy.[/yellow]"
+        )
+        return
+
+    copied: list[str] = []
+    overwritten: list[str] = []
+    skipped: list[str] = []
+
+    for key, alias in source.companies.items():
+        if key in target.companies:
+            if overwrite:
+                target.companies[key] = alias.model_copy()
+                overwritten.append(key)
+            else:
+                skipped.append(key)
+        else:
+            target.companies[key] = alias.model_copy()
+            copied.append(key)
+
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Alias", style="cyan")
+    table.add_column("Status")
+    table.add_column("Company ID")
+    for key in copied:
+        table.add_row(key, "[green]copied[/green]", source.companies[key].id)
+    for key in overwritten:
+        table.add_row(key, "[yellow]overwritten[/yellow]", source.companies[key].id)
+    for key in skipped:
+        table.add_row(key, "[dim]skipped (use --overwrite)[/dim]", target.companies[key].id)
+    console.print(table)
+
+    written = len(copied) + len(overwritten)
+    if dry_run:
+        console.print(
+            f"[dim]--dry-run: would write {written} alias(es) to '{target_name}', "
+            f"skipped {len(skipped)}. Config unchanged.[/dim]"
+        )
+        return
+
+    if written == 0:
+        console.print(
+            f"[dim]Nothing to write — all {len(skipped)} alias(es) already exist "
+            f"on '{target_name}'. Re-run with --overwrite to replace them.[/dim]"
+        )
+        return
+
+    save_config(config)
+    console.print(
+        f"[green]✓[/green] Wrote {written} alias(es) to '{target_name}' "
+        f"(copied: {len(copied)}, overwritten: {len(overwritten)}, skipped: {len(skipped)})"
+    )
+
+
 async def _fetch_companies() -> list[dict]:
     async with AsyncBCClient(profile=state.profile_name, config=state.config) as client:
         return await client.list_companies()
