@@ -10,7 +10,6 @@ from typing import Optional
 import typer
 from rich.console import Console
 
-from bcli.client._async import AsyncBCClient
 from bcli_cli._state import state
 from bcli_cli.output import format_output, print_context_banner
 
@@ -52,7 +51,7 @@ def patch_command(
 
 
 async def _execute_patch(endpoint, record_id, body, **kwargs):
-    async with AsyncBCClient(profile=state.profile_name, config=state.config) as client:
+    async with state.make_async_client() as client:
         return await client.patch(endpoint, record_id, body, **kwargs)
 
 

@@ -7,7 +7,6 @@ import asyncio
 import typer
 from rich.console import Console
 
-from bcli.client._async import AsyncBCClient
 from bcli.odata._query import Query
 from bcli_cli._state import state
 from bcli_cli.output import print_context_banner
@@ -85,12 +84,12 @@ def test_endpoint(
 
 
 async def _test_connection() -> bool:
-    async with AsyncBCClient(profile=state.profile_name, config=state.config) as client:
+    async with state.make_async_client() as client:
         return await client.test_connection()
 
 
 async def _test_endpoint(name: str) -> list[dict]:
-    async with AsyncBCClient(profile=state.profile_name, config=state.config) as client:
+    async with state.make_async_client() as client:
         query = Query().top(1)
         response = await client.get(name, query=query)
         return response.value

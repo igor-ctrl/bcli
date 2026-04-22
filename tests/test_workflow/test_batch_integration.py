@@ -113,16 +113,23 @@ class TestExecuteBatchWorkflow:
         ]
 
         steps = [
-            {"name": "create_header", "action": "post", "endpoint": "purchaseHeaders",
-             "data": {"documentType": "Invoice", "buyFromVendorNo": "V00011"}},
-            {"name": "add_line", "action": "post", "endpoint": "purchaseLines",
-             "data": {"documentNo": "${{ steps.create_header.no }}", "quantity": 1}},
+            {
+                "name": "create_header",
+                "action": "post",
+                "endpoint": "purchaseHeaders",
+                "data": {"documentType": "Invoice", "buyFromVendorNo": "V00011"},
+            },
+            {
+                "name": "add_line",
+                "action": "post",
+                "endpoint": "purchaseLines",
+                "data": {"documentNo": "${{ steps.create_header.no }}", "quantity": 1},
+            },
         ]
         context = WorkflowContext(params={})
 
-        with patch("bcli_cli.commands.batch_cmd.AsyncBCClient", return_value=client):
-            with patch("bcli_cli.commands.batch_cmd.state"):
-                results = await _execute_batch(steps, context=context, output_format=None)
+        with patch("bcli_cli.commands.batch_cmd.state.make_async_client", return_value=client):
+            results = await _execute_batch(steps, context=context, output_format=None)
 
         assert len(results) == 2
         assert results[0]["status"] == "ok"
@@ -139,14 +146,17 @@ class TestExecuteBatchWorkflow:
         client.post.return_value = {"id": "new-1"}
 
         steps = [
-            {"name": "s1", "action": "post", "endpoint": "items",
-             "data": {"vendorNo": "${{ params.vendor_no }}"}},
+            {
+                "name": "s1",
+                "action": "post",
+                "endpoint": "items",
+                "data": {"vendorNo": "${{ params.vendor_no }}"},
+            },
         ]
         context = WorkflowContext(params={"vendor_no": "V00011"})
 
-        with patch("bcli_cli.commands.batch_cmd.AsyncBCClient", return_value=client):
-            with patch("bcli_cli.commands.batch_cmd.state"):
-                results = await _execute_batch(steps, context=context)
+        with patch("bcli_cli.commands.batch_cmd.state.make_async_client", return_value=client):
+            results = await _execute_batch(steps, context=context)
 
         assert results[0]["status"] == "ok"
         post_body = client.post.call_args[0][1]
@@ -161,14 +171,17 @@ class TestExecuteBatchWorkflow:
 
         steps = [
             {"name": "fetch_vendor", "action": "get", "endpoint": "vendors", "params": {"top": 1}},
-            {"name": "create_entry", "action": "post", "endpoint": "entries",
-             "data": {"vendorId": "${{ steps.fetch_vendor.0.id }}"}},
+            {
+                "name": "create_entry",
+                "action": "post",
+                "endpoint": "entries",
+                "data": {"vendorId": "${{ steps.fetch_vendor.0.id }}"},
+            },
         ]
         context = WorkflowContext(params={})
 
-        with patch("bcli_cli.commands.batch_cmd.AsyncBCClient", return_value=client):
-            with patch("bcli_cli.commands.batch_cmd.state"):
-                results = await _execute_batch(steps, context=context)
+        with patch("bcli_cli.commands.batch_cmd.state.make_async_client", return_value=client):
+            results = await _execute_batch(steps, context=context)
 
         assert results[0]["status"] == "ok"
         assert results[1]["status"] == "ok"
@@ -183,14 +196,17 @@ class TestExecuteBatchWorkflow:
 
         steps = [
             {"name": "create_header", "action": "post", "endpoint": "items", "data": {"x": 1}},
-            {"name": "add_line", "action": "post", "endpoint": "lines",
-             "data": {"ref": "${{ steps.create_header.no }}"}},
+            {
+                "name": "add_line",
+                "action": "post",
+                "endpoint": "lines",
+                "data": {"ref": "${{ steps.create_header.no }}"},
+            },
         ]
         context = WorkflowContext(params={})
 
-        with patch("bcli_cli.commands.batch_cmd.AsyncBCClient", return_value=client):
-            with patch("bcli_cli.commands.batch_cmd.state"):
-                results = await _execute_batch(steps, context=context)
+        with patch("bcli_cli.commands.batch_cmd.state.make_async_client", return_value=client):
+            results = await _execute_batch(steps, context=context)
 
         assert results[0]["status"] == "error"
         assert results[1]["status"] == "error"
@@ -206,9 +222,8 @@ class TestExecuteBatchWorkflow:
             {"action": "get", "endpoint": "items", "params": {}},
         ]
 
-        with patch("bcli_cli.commands.batch_cmd.AsyncBCClient", return_value=client):
-            with patch("bcli_cli.commands.batch_cmd.state"):
-                results = await _execute_batch(steps, context=None)
+        with patch("bcli_cli.commands.batch_cmd.state.make_async_client", return_value=client):
+            results = await _execute_batch(steps, context=None)
 
         assert len(results) == 1
         assert results[0]["status"] == "ok"
