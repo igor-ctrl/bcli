@@ -8,7 +8,6 @@ from typing import Optional
 import typer
 from rich.console import Console
 
-from bcli.client._async import AsyncBCClient
 from bcli.odata._query import Query
 from bcli_cli._state import state
 from bcli_cli.output import format_output, print_context_banner
@@ -124,7 +123,7 @@ async def _execute_get_all_companies(
 
     all_records: list[dict] = []
 
-    async with AsyncBCClient(profile=state.profile_name, config=state.config) as client:
+    async with state.make_async_client() as client:
         for alias, company_id, company_name in companies:
             display = alias or company_name or company_id[:8]
             console.print(f"[dim]Querying {endpoint} in {display}...[/dim]")
@@ -184,10 +183,7 @@ async def _execute_get(
     group: str | None = None,
     version: str | None = None,
 ) -> list[dict]:
-    async with AsyncBCClient(
-        profile=state.profile_name,
-        config=state.config,
-    ) as client:
+    async with state.make_async_client() as client:
         if all_pages:
             all_records: list[dict] = []
             bound = client.query(endpoint)

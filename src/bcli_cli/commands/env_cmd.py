@@ -8,7 +8,6 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from bcli.client._async import AsyncBCClient
 from bcli.config import save_config
 from bcli_cli._state import state
 from bcli_cli.output import print_context_banner
@@ -83,5 +82,5 @@ def use_environment(
 
 
 async def _fetch_environments() -> list[dict]:
-    async with AsyncBCClient(profile=state.profile_name, config=state.config) as client:
+    async with state.make_async_client() as client:
         return await client.list_environments()

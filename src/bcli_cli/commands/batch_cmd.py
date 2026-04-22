@@ -10,7 +10,6 @@ from typing import Any
 import typer
 from rich.console import Console
 
-from bcli.client._async import AsyncBCClient
 from bcli_cli._state import state
 from bcli_cli.output import format_output, print_context_banner
 
@@ -267,7 +266,7 @@ async def _execute_batch(
     from bcli.workflow._resolver import resolve_references
 
     results = []
-    async with AsyncBCClient(profile=state.profile_name, config=state.config) as client:
+    async with state.make_async_client() as client:
         for i, step in enumerate(steps, 1):
             # Resolve workflow references if in workflow mode
             if context is not None:
