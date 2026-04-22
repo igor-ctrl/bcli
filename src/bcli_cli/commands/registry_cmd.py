@@ -72,7 +72,6 @@ def import_registry(
 
     elif from_metadata:
         import asyncio
-        from bcli.client._async import AsyncBCClient
         from bcli.registry._importers import import_from_metadata as _import_meta
 
         p = state.profile
@@ -89,7 +88,7 @@ def import_registry(
         )
 
         async def _do_metadata_import():
-            async with AsyncBCClient(profile=state.profile_name, config=state.config) as client:
+            async with state.make_async_client() as client:
                 transport = client._ensure_transport()
                 return await _import_meta(
                     transport, p.environment, p.api_publisher, p.api_group, p.api_version,

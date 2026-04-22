@@ -144,11 +144,7 @@ def endpoint_fields(
 
 
 async def _fetch_one_record(entity_set_name: str) -> dict | None:
-    from bcli.client._async import AsyncBCClient
-
-    async with AsyncBCClient(
-        profile=state.profile_name, config=state.config,
-    ) as client:
+    async with state.make_async_client() as client:
         response = await client.get(entity_set_name, query=None)
         records = response.value
         return records[0] if records else None
