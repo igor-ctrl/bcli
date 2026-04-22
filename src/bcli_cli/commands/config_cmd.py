@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
 
 import typer
 from rich.console import Console
@@ -194,6 +196,40 @@ def use_profile(
     console.print(f"[green]✓[/green] Switched to profile '{name}'")
     console.print(f"  Environment: {profile.environment}")
     console.print(f"  Company: {profile.company_name or profile.company_id or '(not set)'}")
+
+
+@app.command()
+def path() -> None:
+    """Print the path to the config file."""
+    typer.echo(str(CONFIG_FILE))
+
+
+@app.command()
+def edit() -> None:
+    """Open the config file in $EDITOR and re-validate on save."""
+    if not CONFIG_FILE.is_file():
+        console.print("[yellow]No config found. Run 'bcli config init' first.[/yellow]")
+        raise typer.Exit(1)
+
+    editor = os.environ.get("EDITOR", "vi")
+    try:
+        subprocess.run([editor, str(CONFIG_FILE)], check=True)
+    except FileNotFoundError as e:
+        console.print(f"[red]Editor '{editor}' not found.[/red] Set $EDITOR to a valid command.")
+        raise typer.Exit(1) from e
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]Editor exited with status {e.returncode}[/red]")
+        raise typer.Exit(e.returncode) from e
+
+    try:
+        load_config()
+    except Exception as e:
+        console.print(f"[red]Config is now invalid:[/red] {e}")
+        console.print(f"[dim]Fix with 'bcli config edit' or revert {CONFIG_FILE}[/dim]")
+        raise typer.Exit(1) from e
+
+    state._config = None
+    console.print("[green]✓[/green] Config saved and valid")
 
 
 async def _discover_companies(transport: BCTransport, environment: str) -> list[dict]:
