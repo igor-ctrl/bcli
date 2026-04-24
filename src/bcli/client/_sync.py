@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 from bcli.client._async import AsyncBCClient
@@ -79,6 +80,17 @@ class BCClient:
 
     def delete(self, entity_set_name: str, record_id: str, **kwargs) -> dict[str, Any]:
         return self._run(self._async.delete(entity_set_name, record_id, **kwargs))
+
+    def upload_attachment(
+        self,
+        parent_type: str,
+        parent_id: str,
+        file_path: str | Path,
+        **kwargs,
+    ) -> dict[str, Any]:
+        return self._run(
+            self._async.upload_attachment(parent_type, parent_id, file_path, **kwargs)
+        )
 
     def list_companies(self) -> list[dict[str, Any]]:
         return self._run(self._async.list_companies())

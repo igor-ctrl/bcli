@@ -52,6 +52,7 @@ def main(
 from bcli_cli.commands import (  # noqa: E402
     auth_cmd,
     batch_cmd,
+    acme_cmd,
     company_cmd,
     config_cmd,
     context_cmd,
@@ -73,6 +74,7 @@ app.add_typer(endpoint_cmd.app, name="endpoint", help="Endpoint discovery")
 app.add_typer(registry_cmd.app, name="registry", help="Custom API registry management")
 app.add_typer(test_cmd.app, name="test", help="Connection and endpoint testing")
 app.add_typer(batch_cmd.app, name="batch", help="Batch operations from YAML files")
+app.add_typer(acme_cmd.app, name="acme", help="Acme-scoped workflows")
 app.command(name="get")(get_cmd.get_command)
 app.command(name="post")(post_cmd.post_command)
 app.command(name="patch")(patch_cmd.patch_command)
