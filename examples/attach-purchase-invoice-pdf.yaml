@@ -1,0 +1,37 @@
+name: "Create Draft Purchase Invoice"
+# This YAML covers ONLY the purchase-invoice-creation step.
+#
+# Attaching a PDF requires a two-phase upload (JSON metadata POST + binary
+# PATCH to /attachmentContent) which bcli's batch runner doesn't express in
+# YAML. For the attachment, run this CLI command AFTER this batch completes:
+#
+#     bcli acme attach ./invoice.pdf \
+#         --parent-id <invoice-systemId-from-this-batch> \
+#         --parent-type "Purchase Invoice"
+#
+# Or run the full end-to-end flow in a single command:
+#
+#     bcli acme test-attach ./invoice.pdf --vendor-id <vendor-systemId>
+#
+# Permission prerequisite:
+#   Service user needs RIMD on BOTH:
+#     - "Attachment Entity Buffer"  (required — without it, POST 400s)
+#     - "Document Attachment" (1173)  (where bytes ultimately land)
+#   The API page is buffer-backed with SourceTableTemporary=true; the OnInsert
+#   trigger copies into 1173.
+
+params:
+  vendor_id:
+    description: "Vendor systemId"
+    required: true
+  invoice_date:
+    description: "Invoice document date"
+    default: "2026-04-21"
+
+steps:
+  - name: create_invoice
+    action: post
+    endpoint: purchaseInvoices
+    data:
+      vendorId: "${{ params.vendor_id }}"
+      invoiceDate: "${{ params.invoice_date }}"

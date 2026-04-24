@@ -80,10 +80,24 @@ class BCTransport:
         *,
         params: dict[str, str] | None = None,
         json_body: dict[str, Any] | None = None,
+        content: bytes | None = None,
+        content_type: str | None = None,
         etag: str | None = None,
         log_context: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """Execute an HTTP request with retry and error handling."""
+        """Execute an HTTP request with retry and error handling.
+
+        Request body handling:
+        - ``json_body`` is sent via httpx's ``json=`` (Content-Type: application/json).
+        - ``content`` (raw bytes) is sent via httpx's ``content=`` with the
+          ``content_type`` header overriding the client default (defaults to
+          ``application/octet-stream`` when ``content`` is set but ``content_type``
+          isn't). Used for binary uploads (e.g. PATCH /content on attachments).
+        - Passing both is an error — the caller should pick one.
+        """
+        if json_body is not None and content is not None:
+            raise ValueError("BCTransport._request: pass either json_body or content, not both")
+
         last_error: Exception | None = None
         backoff = INITIAL_BACKOFF
         t0 = time.monotonic()
@@ -94,16 +108,27 @@ class BCTransport:
                 headers = dict(auth_headers)
                 if etag:
                     headers["If-Match"] = etag
+                if content is not None:
+                    headers["Content-Type"] = content_type or "application/octet-stream"
 
                 logger.debug("%s %s (attempt %d)", method, url, attempt + 1)
 
-                response = await self._client.request(
-                    method,
-                    url,
-                    params=params,
-                    json=json_body,
-                    headers=headers,
-                )
+                if content is not None:
+                    response = await self._client.request(
+                        method,
+                        url,
+                        params=params,
+                        content=content,
+                        headers=headers,
+                    )
+                else:
+                    response = await self._client.request(
+                        method,
+                        url,
+                        params=params,
+                        json=json_body,
+                        headers=headers,
+                    )
 
                 correlation_id = response.headers.get("x-ms-correlation-request-id")
 
@@ -155,7 +180,12 @@ class BCTransport:
                     **kwargs,
                 )
 
-            except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout) as e:
+            except (
+                httpx.ConnectError,
+                httpx.ReadTimeout,
+                httpx.WriteTimeout,
+                httpx.RemoteProtocolError,
+            ) as e:
                 last_error = e
                 if attempt < self._max_retries:
                     logger.warning(
@@ -221,6 +251,19 @@ class BCTransport:
         self, url: str, *, json_body: dict[str, Any], etag: str = "*"
     ) -> dict[str, Any]:
         return await self._request("PATCH", url, json_body=json_body, etag=etag)
+
+    async def patch_binary(
+        self,
+        url: str,
+        *,
+        content: bytes,
+        content_type: str = "application/octet-stream",
+        etag: str = "*",
+    ) -> dict[str, Any]:
+        """PATCH raw binary bytes with a custom Content-Type (e.g. attachments/content)."""
+        return await self._request(
+            "PATCH", url, content=content, content_type=content_type, etag=etag,
+        )
 
     async def delete(self, url: str, *, etag: str = "*") -> dict[str, Any]:
         return await self._request("DELETE", url, etag=etag)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from bcli._url import build_companies_url, build_url
@@ -9,7 +10,7 @@ from bcli.auth._credentials import ClientCredentialsAuth
 from bcli.client._safety import SafeContext
 from bcli.client._transport import BCTransport
 from bcli.config import BCConfig, BCProfile, load_config
-from bcli.errors import ConfigError
+from bcli.errors import BCLIError, ConfigError
 from bcli.odata._pagination import PageIterator
 from bcli.odata._query import Query
 from bcli.odata._response import ODataResponse
@@ -222,6 +223,149 @@ class AsyncBCClient:
             publisher=publisher, group=group, version=version,
         )
         return await transport.delete(url, etag=etag)
+
+    async def upload_attachment(
+        self,
+        parent_type: str,
+        parent_id: str,
+        file_path: str | Path,
+        *,
+        file_name: str | None = None,
+        content_type: str | None = None,
+        publisher: str | None = None,
+        group: str | None = None,
+        version: str | None = None,
+        force_standard: bool = False,
+    ) -> dict[str, Any]:
+        """Upload a file as a documentAttachment linked to a parent record (two-phase).
+
+        Uses the canonical BC two-phase binary upload pattern that lands bytes in
+        table 1173 (``Document Attachment``) — the table your BC page/fact-box
+        reads from:
+
+        1. POST ``documentAttachments`` with ``{parentType, parentId, fileName}``
+           → returns ``id`` + ``@odata.etag``. No ``attachmentContent`` in this
+           body — single-POST base64-inline triggers a stream double-read on
+           many tenants.
+        2. PATCH ``documentAttachments(<id>)/attachmentContent`` with the raw file
+           bytes. ``Content-Type`` defaults to a mimetype guess from the filename
+           (``application/pdf`` for a .pdf) and falls back to
+           ``application/octet-stream``. ``If-Match`` uses the ETag from step 1.
+
+        Routing:
+        - Default: registry resolution — custom entries for ``documentAttachments``
+          take priority over built-ins. A Acme tenant that publishes
+          ``documentAttachments`` on ``acme/finance/v1.5`` will automatically
+          route there.
+        - ``publisher`` + ``group`` + ``version``: force a specific custom route.
+        - ``force_standard=True``: bypass the registry entirely and POST/PATCH
+          against Microsoft's standard v2.0 ``/api/v2.0/documentAttachments``.
+          Use this when a custom registry entry points at a page that doesn't
+          persist (e.g. ``SourceTableTemporary = true`` without an
+          ``OnInsertRecord`` trigger → zero-GUID ids). Cannot be combined with
+          explicit ``publisher/group/version``.
+
+        BC permission prerequisite: RIMD on ``Attachment Entity Buffer`` AND
+        ``Document Attachment`` (1173) — the API page is buffer-backed and the
+        OnInsert trigger copies into 1173.
+
+        Does not go through SafeContext.
+        """
+        import mimetypes
+
+        if force_standard and (publisher or group or version):
+            raise ValueError(
+                "force_standard=True cannot be combined with publisher/group/version — "
+                "pick one routing mode."
+            )
+
+        path = Path(file_path)
+        raw = path.read_bytes()
+        final_name = file_name or path.name
+
+        transport = self._ensure_transport()
+
+        # Phase 1: POST metadata (no attachmentContent — avoids stream double-read)
+        metadata_body = {
+            "parentType": parent_type,
+            "parentId": parent_id,
+            "fileName": final_name,
+        }
+        if force_standard:
+            if not self._profile.company_id:
+                raise ConfigError(
+                    "No company_id configured. Run 'bcli config init' or 'bcli company use <id>'."
+                )
+            post_url = build_url(
+                environment=self._profile.environment,
+                company_id=self._profile.company_id,
+                entity_set_name="documentAttachments",
+            )
+            metadata = await transport.post(post_url, json_body=metadata_body)
+        else:
+            metadata = await self.post(
+                "documentAttachments",
+                metadata_body,
+                publisher=publisher, group=group, version=version,
+            )
+        attachment_id = metadata.get("id") or metadata.get("systemId")
+        if not attachment_id:
+            raise BCLIError(
+                f"documentAttachments POST did not return an id. Response keys: {list(metadata)}"
+            )
+        etag = metadata.get("@odata.etag", "*")
+
+        # Phase 2: PATCH binary to /attachmentContent sub-resource
+        if force_standard:
+            base_url = build_url(
+                environment=self._profile.environment,
+                company_id=self._profile.company_id,
+                entity_set_name="documentAttachments",
+                record_id=attachment_id,
+            )
+        else:
+            base_url = self._resolve_url(
+                "documentAttachments",
+                record_id=attachment_id,
+                publisher=publisher, group=group, version=version,
+            )
+        content_url = f"{base_url}/attachmentContent"
+
+        resolved_ct = content_type
+        if resolved_ct is None:
+            guessed, _ = mimetypes.guess_type(final_name)
+            resolved_ct = guessed or "application/octet-stream"
+
+        await transport.patch_binary(
+            content_url, content=raw, content_type=resolved_ct, etag=etag,
+        )
+
+        # Phase 3: read the record back so our return reflects what BC stored
+        # rather than what we uploaded. Falls back to len(raw) when BC's byteSize
+        # field reads 0 (known quirk when the custom AL page doesn't recompute
+        # byteSize after the attachmentContent modify).
+        bc_record: dict[str, Any] = {}
+        try:
+            bc_record = await transport.get(base_url)
+        except Exception:
+            # Don't fail the whole upload over a verification GET — the PATCH 204
+            # already confirms the content write succeeded.
+            pass
+
+        bc_byte_size = bc_record.get("byteSize")
+        # Prefer caller's inputs for parent_type/parent_id/file_name so the
+        # response is predictable (BC encodes parentType like
+        # "Purchase_x0020_Invoice"); fall back to BC values only when missing.
+        return {
+            "id": attachment_id,
+            "parentType": parent_type,
+            "parentId": parent_id,
+            "fileName": final_name,
+            "byteSize": bc_byte_size if bc_byte_size else len(raw),
+            "bytesUploaded": len(raw),
+            "contentUploaded": True,
+            "record": bc_record or None,
+        }
 
     async def list_companies(self) -> list[dict[str, Any]]:
         """Discover all companies in the current environment."""
