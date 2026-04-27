@@ -1,10 +1,12 @@
-"""Output formatters: table, json, csv, ndjson, raw."""
+"""Output formatters: table, markdown, json, csv, ndjson, raw."""
 
 from __future__ import annotations
 
 import csv
 import io
 import json
+import os
+import sys
 from typing import Any
 
 from rich.console import Console
@@ -12,6 +14,23 @@ from rich.table import Table
 
 console = Console()
 stderr_console = Console(stderr=True)
+
+
+def detect_default_format() -> str:
+    """Pick a sensible default format based on environment.
+
+    AI coding agents (Claude Code, etc.) and piped/redirected stdout
+    get a markdown table — readable, parseable, no ANSI escapes or
+    box-drawing characters. Interactive TTYs get the rich table.
+    """
+    if os.environ.get("BCLI_FORMAT"):
+        return os.environ["BCLI_FORMAT"]
+    # Claude Code sets CLAUDECODE=1; honor a generic agent override too.
+    if os.environ.get("CLAUDECODE") or os.environ.get("BCLI_AGENT"):
+        return "markdown"
+    if not sys.stdout.isatty():
+        return "markdown"
+    return "table"
 
 
 def format_output(records: list[dict[str, Any]], fmt: str = "table") -> None:
@@ -50,6 +69,42 @@ def _format_table(records: list[dict[str, Any]]) -> None:
         table.add_row(*row)
 
     console.print(table)
+    stderr_console.print(f"[dim]{len(records)} record(s)[/dim]")
+
+
+def _format_markdown(records: list[dict[str, Any]]) -> None:
+    """GitHub-flavored markdown table — agent-friendly default for non-TTYs."""
+    if not records:
+        return
+
+    columns = [k for k in records[0].keys() if not k.startswith("@odata")]
+
+    rows = [[_format_cell_markdown(r.get(c)) for c in columns] for r in records]
+
+    # Column widths from headers + values, capped to keep lines reasonable
+    max_width = 60
+    widths = [len(c) for c in columns]
+    for row in rows:
+        for i, cell in enumerate(row):
+            if len(cell) > widths[i]:
+                widths[i] = min(len(cell), max_width)
+
+    def _pad(cell: str, w: int) -> str:
+        if len(cell) > w:
+            return cell[: w - 1] + "…"
+        return cell + " " * (w - len(cell))
+
+    header = "| " + " | ".join(_pad(c, w) for c, w in zip(columns, widths)) + " |"
+    sep = "| " + " | ".join("-" * w for w in widths) + " |"
+    body = [
+        "| " + " | ".join(_pad(cell, w) for cell, w in zip(row, widths)) + " |"
+        for row in rows
+    ]
+
+    print(header)
+    print(sep)
+    for line in body:
+        print(line)
     stderr_console.print(f"[dim]{len(records)} record(s)[/dim]")
 
 
@@ -93,8 +148,19 @@ def _format_cell(value: Any) -> str:
     return str(value)
 
 
+def _format_cell_markdown(value: Any) -> str:
+    """Format a cell value for markdown table display.
+
+    Escapes pipes and collapses newlines so the row stays on one line.
+    """
+    cell = _format_cell(value)
+    return cell.replace("|", "\\|").replace("\n", " ").replace("\r", "")
+
+
 _FORMATTERS = {
     "table": _format_table,
+    "markdown": _format_markdown,
+    "md": _format_markdown,
     "json": _format_json,
     "csv": _format_csv,
     "ndjson": _format_ndjson,
