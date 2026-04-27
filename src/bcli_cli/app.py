@@ -8,6 +8,7 @@ import typer
 
 from bcli._version import __version__
 from bcli_cli._state import state
+from bcli_cli.output import detect_default_format
 
 app = typer.Typer(
     name="bcli",
@@ -28,7 +29,7 @@ def main(
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Connection profile name"),
     env: Optional[str] = typer.Option(None, "--env", "-e", help="Override environment name"),
     company: Optional[str] = typer.Option(None, "--company", "-c", help="Override company ID"),
-    format: str = typer.Option("table", "--format", "-f", help="Output format: table, json, csv, ndjson, raw"),
+    format: Optional[str] = typer.Option(None, "--format", "-f", help="Output format: table, markdown, json, csv, ndjson, raw (auto-detects markdown for non-TTY/AI agents)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show resolved URLs and timing"),
     debug: bool = typer.Option(False, "--debug", help="Show full HTTP request/response"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would execute"),
@@ -39,13 +40,15 @@ def main(
     state.profile_name = profile
     state.env_override = env
     state.company_override = company
-    state.format = format
+    resolved_format = format or detect_default_format()
+    state.format = resolved_format
     state.verbose = verbose
     state.debug = debug
     state.dry_run = dry_run
     # Auto-quiet for machine-readable formats (banner goes to stderr but still
-    # confuses piped output when both streams are captured together)
-    state.quiet = quiet or format in ("json", "csv", "ndjson", "raw")
+    # confuses piped output when both streams are captured together). Markdown
+    # stays loud — humans and agents both benefit from the context banner.
+    state.quiet = quiet or resolved_format in ("json", "csv", "ndjson", "raw")
 
 
 # Import and register command groups
