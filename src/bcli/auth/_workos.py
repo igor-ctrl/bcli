@@ -16,11 +16,13 @@ import json
 import logging
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from bcli.auth._browser import BrowserAuth, _open_browser
+from bcli.auth._secure_io import warn_if_insecure_perms, write_secret_file
 from bcli.auth._token_cache import TokenCache
 from bcli.config._defaults import CONFIG_DIR
 from bcli.errors import AuthError
@@ -31,6 +33,13 @@ _WORKOS_PORT = 8401  # separate from BC auth port (8400)
 _WORKOS_REDIRECT_URI = f"http://localhost:{_WORKOS_PORT}/callback"
 _AUTH_TIMEOUT = 120
 _WORKOS_IDENTITY_FILE = CONFIG_DIR / "workos_identity.json"
+
+# How long a cached WorkOS role mapping is trusted before we re-validate
+# membership. The cache stores `role → privileged BC app client_id`, so
+# stale cache means a revoked role keeps mapping to the privileged app
+# until manually cleared. One hour balances re-auth UX (browser popup
+# every hour at most) against the size of the trust window.
+_WORKOS_CACHE_TTL_SECONDS = 3600
 
 
 class WorkOSAuth:
@@ -96,14 +105,41 @@ class WorkOSAuth:
         return await self._bc_auth.get_access_token()
 
     def _resolve_bc_client_id(self) -> str:
-        """Check cached WorkOS identity for role → client_id mapping."""
+        """Check cached WorkOS identity for role → client_id mapping.
+
+        The cache is rejected if it's older than ``_WORKOS_CACHE_TTL_SECONDS``
+        so a revoked WorkOS role can't keep mapping to a privileged BC app
+        forever. On expiry we return the default client_id, which causes
+        the caller to fall through to ``_workos_login()`` and re-fetch
+        membership from WorkOS — the only authoritative source.
+        """
         identity = _load_workos_identity()
-        if identity:
-            role = identity.get("role", "")
-            bc_client_id = self._role_mapping.get(role)
-            if bc_client_id:
-                logger.debug("WorkOS cached identity: role=%s → client_id=%s", role, bc_client_id[:8])
-                return bc_client_id
+        if not identity:
+            return self._default_bc_client_id
+
+        cached_at = identity.get("cached_at")
+        if not isinstance(cached_at, (int, float)):
+            # Pre-TTL cache or corrupt timestamp → treat as expired and
+            # force a fresh membership check.
+            logger.debug("WorkOS cache lacks cached_at — re-validating.")
+            return self._default_bc_client_id
+
+        age = time.time() - float(cached_at)
+        if age > _WORKOS_CACHE_TTL_SECONDS:
+            logger.debug(
+                "WorkOS cache age %.0fs > TTL %ds — re-validating membership.",
+                age, _WORKOS_CACHE_TTL_SECONDS,
+            )
+            return self._default_bc_client_id
+
+        role = identity.get("role", "")
+        bc_client_id = self._role_mapping.get(role)
+        if bc_client_id:
+            logger.debug(
+                "WorkOS cached identity: role=%s → client_id=%s (age %.0fs)",
+                role, bc_client_id[:8], age,
+            )
+            return bc_client_id
         return self._default_bc_client_id
 
     def _workos_login(self) -> tuple[str, str | None]:
@@ -192,12 +228,15 @@ class WorkOSAuth:
 
         print(f"WorkOS: role={role_slug} → BC app {'admin' if bc_client_id != self._default_bc_client_id else 'standard'}", file=sys.stderr)
 
-        # Cache WorkOS identity
+        # Cache WorkOS identity. ``cached_at`` is a unix epoch float used by
+        # ``_resolve_bc_client_id`` to expire stale role mappings (see
+        # ``_WORKOS_CACHE_TTL_SECONDS``).
         _save_workos_identity({
             "user_id": user.id,
             "email": user.email,
             "role": role_slug,
             "bc_client_id": bc_client_id,
+            "cached_at": time.time(),
         })
 
         return bc_client_id, user.email
@@ -212,6 +251,7 @@ class WorkOSAuth:
 def _load_workos_identity() -> dict | None:
     """Load cached WorkOS identity from disk."""
     if _WORKOS_IDENTITY_FILE.is_file():
+        warn_if_insecure_perms(_WORKOS_IDENTITY_FILE)
         try:
             return json.loads(_WORKOS_IDENTITY_FILE.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
@@ -220,9 +260,17 @@ def _load_workos_identity() -> dict | None:
 
 
 def _save_workos_identity(identity: dict) -> None:
-    """Cache WorkOS identity to disk."""
-    _WORKOS_IDENTITY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _WORKOS_IDENTITY_FILE.write_text(json.dumps(identity, indent=2))
+    """Cache WorkOS identity to disk with private (0600) permissions.
+
+    The cached identity steers role → BC-app-client-id mapping (see
+    ``_resolve_bc_client_id``), so it carries the same blast radius as a
+    bearer token: another local user reading it could see who has admin
+    BC access and impersonate that role lookup.
+    """
+    write_secret_file(
+        _WORKOS_IDENTITY_FILE,
+        json.dumps(identity, indent=2),
+    )
 
 
 def _clear_workos_identity() -> None:

@@ -7,13 +7,19 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+from bcli.auth._secure_io import warn_if_insecure_perms, write_secret_file
 from bcli.config._defaults import TOKEN_CACHE_FILE
 
 logger = logging.getLogger(__name__)
 
 
 class TokenCache:
-    """Simple disk-based token cache keyed by (tenant_id, client_id)."""
+    """Simple disk-based token cache keyed by (tenant_id, client_id).
+
+    The cache holds raw bearer tokens, so the file is written with private
+    (0600) permissions and the parent directory is tightened to 0700. See
+    ``bcli.auth._secure_io`` for the atomic-write + chmod implementation.
+    """
 
     def __init__(self, cache_file: Path | None = None) -> None:
         self._file = cache_file or TOKEN_CACHE_FILE
@@ -23,6 +29,7 @@ class TokenCache:
         if self._data is not None:
             return self._data
         if self._file.is_file():
+            warn_if_insecure_perms(self._file)
             try:
                 self._data = json.loads(self._file.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
@@ -32,8 +39,10 @@ class TokenCache:
         return self._data
 
     def _save(self) -> None:
-        self._file.parent.mkdir(parents=True, exist_ok=True)
-        self._file.write_text(json.dumps(self._data or {}, indent=2))
+        write_secret_file(
+            self._file,
+            json.dumps(self._data or {}, indent=2),
+        )
 
     def _cache_key(self, tenant_id: str, client_id: str) -> str:
         return f"{tenant_id}:{client_id}"
