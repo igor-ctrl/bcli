@@ -136,6 +136,7 @@ def run_batch(
     format: str | None = typer.Option(None, "--format", "-f", help="Print each step's data (table, json, csv, ndjson)"),
     set_params: list[str] | None = typer.Option(None, "--set", help="Set parameter: key=value (repeatable)"),
     params_file: Path | None = typer.Option(None, "--params", help="YAML file with parameter values"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the read-only-profile prompt for mutating batch steps"),
 ) -> None:
     """Execute a YAML batch file (sequence of API calls).
 
@@ -193,6 +194,28 @@ def run_batch(
     if dry_run or state.dry_run:
         _print_dry_run(steps, context)
         return
+
+    # Apply the same disable_writes gate that direct post/patch/delete commands
+    # use. Without this, a profile marked read-only would still execute
+    # mutating batch steps in non-interactive automation — see vuln-0002.
+    # We inspect raw steps here (workflow `${{ }}` references are resolved
+    # later inside `_execute_batch`); any step that statically declares a
+    # mutating action triggers a single batch-level confirmation.
+    mutating_actions = {"post", "patch", "delete"}
+    mutating_steps = [
+        step for step in steps
+        if (step.get("action") or "get").lower() in mutating_actions
+    ]
+    if mutating_steps:
+        from bcli_cli._safety import confirm_write_or_exit
+
+        preview = ", ".join(
+            f"{(step.get('action') or 'get').upper()} {step.get('endpoint', '?')}"
+            for step in mutating_steps[:3]
+        )
+        if len(mutating_steps) > 3:
+            preview += f", +{len(mutating_steps) - 3} more"
+        confirm_write_or_exit("BATCH WRITE", preview, yes=yes)
 
     output_format = format
 
