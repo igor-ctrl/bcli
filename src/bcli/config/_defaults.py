@@ -25,6 +25,12 @@ CONFIG_FILE = CONFIG_DIR / "config.toml"
 # Token cache
 TOKEN_CACHE_FILE = CONFIG_DIR / "tokens.json"
 
+# Stable per-laptop installation id used as a low-cardinality dimension
+# on telemetry events. Generated once on first emission, then reused. The
+# file is plaintext; it carries no PII (it's a random UUID), so the goal
+# is durability, not secrecy. See ``bcli.telemetry.events._install_id``.
+INSTALL_ID_FILE = CONFIG_DIR / "install-id"
+
 # Custom registries directory
 REGISTRIES_DIR = CONFIG_DIR / "registries"
 
