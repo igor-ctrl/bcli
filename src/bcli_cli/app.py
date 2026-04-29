@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import atexit
 import logging
 import sys
+import time
 from typing import Optional
 
 import typer
@@ -11,6 +13,9 @@ import typer
 from bcli._version import __version__
 from bcli_cli._state import state
 from bcli_cli.output import detect_default_format
+
+_invocation_started_at: float | None = None
+_invocation_command: str = ""
 
 
 def _enable_debug_logging() -> None:
@@ -74,6 +79,71 @@ def main(
     # confuses piped output when both streams are captured together). Markdown
     # stays loud — humans and agents both benefit from the context banner.
     state.quiet = quiet or resolved_format in ("json", "csv", "ndjson", "raw")
+
+    _bootstrap_telemetry()
+
+
+def _bootstrap_telemetry() -> None:
+    """Emit `bcli.startup` and register a `bcli.command` summary on exit.
+
+    Wrapped in a try/except so a misconfigured telemetry section never
+    prevents the CLI from running. NullSink (the default) makes both
+    emit() and flush() no-ops, so the `try` body is essentially free.
+    """
+    global _invocation_started_at, _invocation_command
+    try:
+        from bcli.telemetry import events
+
+        _invocation_started_at = time.monotonic()
+        # `sys.argv[1:]` is the user-visible command (subcommand + flags).
+        # Trim flags for the per-command rollup so "get vendors --top 5"
+        # gets bucketed under "get vendors" rather than every flag combo.
+        argv = [a for a in sys.argv[1:] if not a.startswith("-")]
+        _invocation_command = " ".join(argv[:2])
+
+        sink = state.telemetry
+        if not sink.is_active:
+            return  # NullSink — skip both startup + atexit registration.
+
+        sink.emit(*events.startup(
+            profile=state.profile_name or "",
+            environment=state.env_override or "",
+            command=_invocation_command,
+        ))
+        atexit.register(_emit_command_summary)
+    except Exception:  # noqa: BLE001
+        # Telemetry must never crash the CLI.
+        logging.getLogger("bcli.telemetry").debug("telemetry bootstrap failed", exc_info=True)
+
+
+def _emit_command_summary() -> None:
+    """Atexit hook: ship a `bcli.command` event with the total duration."""
+    try:
+        from bcli.telemetry import events
+
+        if _invocation_started_at is None:
+            return
+        duration_ms = (time.monotonic() - _invocation_started_at) * 1000.0
+
+        sink = state.telemetry
+        if not sink.is_active:
+            return
+        # Determine status from sys.exc_info() — atexit runs after exception
+        # propagation, so a non-None exception means the command errored.
+        exc_type = sys.exc_info()[0]
+        status = "error" if exc_type is not None else "ok"
+
+        sink.emit(*events.command(
+            command=_invocation_command,
+            profile=state.profile_name or "",
+            environment=state.env_override or "",
+            company_alias=state.company_override or "",
+            duration_ms=duration_ms,
+            status=status,
+        ))
+        sink.flush()
+    except Exception:  # noqa: BLE001
+        logging.getLogger("bcli.telemetry").debug("telemetry summary failed", exc_info=True)
 
 
 # Import and register command groups

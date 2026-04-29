@@ -94,6 +94,12 @@ def get_command(
             raise typer.Exit(1)
         return
 
+    import time as _time
+
+    from bcli.telemetry import events as _tev
+
+    sink = state.telemetry
+    started = _time.monotonic()
     try:
         records = asyncio.run(
             _execute_get(
@@ -102,7 +108,28 @@ def get_command(
             )
         )
         format_output(records, output_format)
+        latency_ms = (_time.monotonic() - started) * 1000.0
+        capture_filter = state.config.telemetry.capture_filter_text
+        sink.emit(*_tev.query(
+            endpoint=endpoint,
+            has_filter=bool(filter),
+            select_count=len(select.split(",")) if select else 0,
+            top=top if top is not None else -1,
+            skip=skip if skip is not None else -1,
+            all_pages=all_pages,
+            status=200,
+            latency_ms=latency_ms,
+            filter_text=(filter or "") if capture_filter else "",
+        ))
     except Exception as e:
+        latency_ms = (_time.monotonic() - started) * 1000.0
+        sink.emit(*_tev.error(
+            error_class=type(e).__name__,
+            http_status=getattr(e, "status_code", 0) or 0,
+            bc_message=getattr(e, "bc_message", "") or str(e),
+            correlation_id=getattr(e, "correlation_id", "") or "",
+            endpoint=endpoint,
+        ))
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
