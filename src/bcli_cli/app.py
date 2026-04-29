@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import sys
 from typing import Optional
 
 import typer
@@ -9,6 +11,27 @@ import typer
 from bcli._version import __version__
 from bcli_cli._state import state
 from bcli_cli.output import detect_default_format
+
+
+def _enable_debug_logging() -> None:
+    """Stream the structured `bcli.*` logs to stderr at DEBUG level.
+
+    The transport already emits per-request JSON to `bcli.http`; without a
+    handler attached those records go nowhere. Wire one up so `--debug`
+    actually produces visible output.
+    """
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+    )
+    for name in ("bcli", "bcli.http", "bcli.auth", "bcli.client"):
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.DEBUG)
+        # Avoid duplicate handlers when the callback runs more than once
+        # (e.g. inside the Typer test runner across multiple invocations).
+        if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
+            logger.addHandler(handler)
+        logger.propagate = False
 
 app = typer.Typer(
     name="bcli",
@@ -45,6 +68,8 @@ def main(
     state.verbose = verbose
     state.debug = debug
     state.dry_run = dry_run
+    if debug:
+        _enable_debug_logging()
     # Auto-quiet for machine-readable formats (banner goes to stderr but still
     # confuses piped output when both streams are captured together). Markdown
     # stays loud — humans and agents both benefit from the context banner.
@@ -65,6 +90,7 @@ from bcli_cli.commands import (  # noqa: E402
     get_cmd,
     patch_cmd,
     post_cmd,
+    query_cmd,
     registry_cmd,
     test_cmd,
 )
@@ -82,6 +108,7 @@ app.command(name="get")(get_cmd.get_command)
 app.command(name="post")(post_cmd.post_command)
 app.command(name="patch")(patch_cmd.patch_command)
 app.command(name="delete")(delete_cmd.delete_command)
+app.command(name="q", help="Run a saved query (no OData required)")(query_cmd.query_command)
 app.command(name="ai-context")(context_cmd.ai_context_command)
 
 # ETL command — optional, only available when dlt is installed
