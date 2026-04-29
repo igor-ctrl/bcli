@@ -135,12 +135,26 @@ def endpoint_fields(
 
     route = ep.route_display
     print(f"Fields for '{name}' ({route}):")
+    field_names: list[str] = []
     for key, value in record.items():
         if key.startswith("@odata"):
             continue
+        field_names.append(key)
         type_name = _infer_type(value)
         sample = _format_sample(value)
         print(f"  {key:<30} {type_name:<10} {sample}")
+
+    # Persist discovered fields onto the custom registry entry so subsequent
+    # --filter validation can suggest the right field name when the user
+    # mistypes one. No-op for built-in standard endpoints.
+    if ep.is_custom and field_names:
+        from bcli.registry._importers import update_endpoint_fields
+
+        if update_endpoint_fields(state.active_profile_name, name, field_names):
+            stderr_console.print(
+                f"[dim]Saved {len(field_names)} field name(s) to the registry "
+                f"for filter-validation suggestions.[/dim]"
+            )
 
 
 async def _fetch_one_record(entity_set_name: str) -> dict | None:
