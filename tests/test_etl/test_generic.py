@@ -90,7 +90,7 @@ async def test_bcclient_get_injects_bearer():
         mock_response.content = b'{"value": []}'
         mock_response.json = lambda: {"value": []}
         with patch.object(client._http, "request", return_value=mock_response) as mock_req:
-            await client.get("http://example.test/url")
+            await client.get("https://api.businesscentral.dynamics.com/v2.0/Sandbox/api/v2.0/companies(00000000-0000-0000-0000-000000000000)/customers")
         call = mock_req.await_args
         assert call.kwargs["headers"]["Authorization"] == "Bearer tok-1"
 
@@ -104,20 +104,24 @@ async def test_bcclient_404_raises_not_found():
         mock_response.content = b""
         with patch.object(client._http, "request", return_value=mock_response):
             with pytest.raises(NotFoundError):
-                await client.get("http://example.test/url")
+                await client.get("https://api.businesscentral.dynamics.com/v2.0/Sandbox/api/v2.0/companies(00000000-0000-0000-0000-000000000000)/customers")
 
 
 @pytest.mark.asyncio
 async def test_bcclient_paginates_nextlink():
     auth = StaticTokenAuth(lambda: _async_val("tok"))
     async with BCClient(auth=auth, environment="Sandbox") as client:
+        base = (
+            "https://api.businesscentral.dynamics.com/v2.0/Sandbox/api/v2.0/"
+            "companies(00000000-0000-0000-0000-000000000000)/customers"
+        )
         page1 = _mock_ok_response({
             "value": [{"id": "1"}, {"id": "2"}],
-            "@odata.nextLink": "http://example.test/page2",
+            "@odata.nextLink": f"{base}?$skiptoken=p2",
         })
         page2 = _mock_ok_response({"value": [{"id": "3"}]})
         with patch.object(client._http, "request", side_effect=[page1, page2]):
-            results = [page async for page in client.paginate("http://example.test/page1")]
+            results = [page async for page in client.paginate(f"{base}?$skiptoken=p1")]
         assert len(results) == 2
         assert results[0] == [{"id": "1"}, {"id": "2"}]
         assert results[1] == [{"id": "3"}]
