@@ -27,7 +27,7 @@ _COMPANY_ID = "00000000-0000-0000-0000-000000000000"
 
 @pytest.mark.parametrize("url", [
     f"https://api.businesscentral.dynamics.com/v2.0/Production/api/v2.0/companies({_COMPANY_ID})/customers",
-    f"https://api.businesscentral.dynamics.com/v2.0/SBEnvFeb26/api/acme/finance/v1.5/companies({_COMPANY_ID})/vendors",
+    f"https://api.businesscentral.dynamics.com/v2.0/SandboxFeb26/api/acme/finance/v1.5/companies({_COMPANY_ID})/vendors",
     # Regional / sub-domain variants
     f"https://eu.api.businesscentral.dynamics.com/v2.0/Production/api/v2.0/companies({_COMPANY_ID})/customers",
     f"https://api.bc.dynamics.com/v2.0/Production/api/v2.0/companies({_COMPANY_ID})/customers",

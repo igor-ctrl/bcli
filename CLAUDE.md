@@ -100,7 +100,7 @@ Defense-in-depth (each layer catches a different class of mistake):
 
 ### Read-only Profiles (`disable_writes`)
 
-`BCProfile.disable_writes = true` flags a profile as read-only. The CLI write commands (`bcli post`, `patch`, `delete`, `acme attach`) detect this and run a stderr warning + interactive `yes` confirmation prompt via `bcli_cli/_safety.py:confirm_write_or_exit` before any mutating call. `--yes` / `-y` skips the prompt for scripted use; non-interactive sessions without `--yes` abort. The SDK (`AsyncBCClient`) does NOT enforce this flag — programmatic users get unfiltered access by design.
+`BCProfile.disable_writes = true` flags a profile as read-only. The CLI write commands (`bcli post`, `patch`, `delete`, `attach upload`) detect this and run a stderr warning + interactive `yes` confirmation prompt via `bcli_cli/_safety.py:confirm_write_or_exit` before any mutating call. `--yes` / `-y` skips the prompt for scripted use; non-interactive sessions without `--yes` abort. `bcli batch run` honours the same gate at batch level: any YAML containing `post`/`patch`/`delete` steps prompts (or aborts non-interactively) unless `--yes` is passed. The SDK (`AsyncBCClient`) does NOT enforce this flag — programmatic users get unfiltered access by design.
 
 ### Write Safety (SafeContext)
 

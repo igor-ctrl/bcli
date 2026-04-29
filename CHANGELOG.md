@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-04-29
+
+Security release. Closes four findings from a strix.ai run against the
+repo. No public SDK signature changes; the CLI gains one new flag
+(`bcli batch run --yes`).
+
+### Security
+
+- **vuln-0001 (HIGH, CWE-352)** — WorkOS localhost callback now binds a
+  per-login high-entropy `state` token. Before this release, any local
+  request reaching `127.0.0.1:8401/callback?code=…` during the login
+  window would be exchanged for a role-bearing WorkOS identity and
+  cached on disk. The handler now rejects callbacks whose path is not
+  `/callback` (404) or whose `state` doesn't match the per-login token
+  (400), and surfaces invalid callbacks as auth failures rather than
+  masking them as timeouts.
+- **vuln-0002 (MEDIUM, CWE-841)** — `bcli batch run` now enforces the
+  `disable_writes` profile gate that direct `post`/`patch`/`delete`
+  commands already honour. Mutating batch steps on a read-only profile
+  prompt for confirmation interactively or abort with exit 1 in
+  non-interactive sessions. New `--yes` / `-y` flag opts scripted use
+  past the prompt. Pure GET batches are unaffected, and `--dry-run`
+  still skips the gate so workflows can be previewed.
+- **vuln-0003 (MEDIUM)** — Browser auth callback listener now binds an
+  ephemeral kernel-assigned port instead of a hard-coded 8400, and
+  serves continuously until a state-bound callback arrives or the
+  timeout expires. Stray requests (e.g. `/favicon.ico`) and
+  state-mismatched callbacks no longer consume the only callback slot.
+  Microsoft Entra accepts any port for `http://localhost` redirect URIs
+  on public clients per RFC 8252, so existing app registrations
+  continue to work without changes.
+- **vuln-0004 (HIGH, CWE-841)** — `SafeContext` writes are now bound to
+  the explicit `environment` and `company_id` passed to
+  `client.safe_write(env, company)`, not the client's profile-bound
+  target. Previously the safety gate validated operator intent but the
+  underlying URL still resolved against the profile, so writes inside
+  `safe_write("Sandbox", "company-SANDBOX")` could still hit
+  `Production/company-PROD`. Closes the documentation-vs-behaviour
+  mismatch where the README/changelog claimed the gate prevented
+  wrong-environment writes.
+
+### Changed
+
+- `bcli batch run` accepts a new `--yes` / `-y` flag (see vuln-0002
+  above). Existing automation against writable profiles is unaffected;
+  CI scripts that run mutating batches against a `disable_writes`
+  profile must pass `--yes` or migrate to a writable profile.
+
 ## [0.1.1] — 2026-04-29
 
 OSS-readiness polish. No SDK behaviour changes; one CLI rename and a
@@ -14,12 +62,11 @@ README/docstring cleanup pass.
 
 ### Changed
 
-- **Renamed CLI command** `bcli acme` → `bcli attach`. The two
-  subcommands renamed alongside it: `bcli acme attach` →
-  `bcli attach upload`, and `bcli acme test-attach` →
-  `bcli attach test`. Functionality is unchanged. The old name was a
-  customer-name leftover; the workflow is generic to any Business
-  Central tenant.
+- **Renamed the document-attachment CLI command** to `bcli attach`,
+  with subcommands `bcli attach upload` and `bcli attach test`.
+  Functionality is unchanged. The previous name was a customer-name
+  leftover from internal development; the workflow is generic to any
+  Business Central tenant.
 - Genericised customer-named example values in
   `docs/authentication.md`, `examples/attach-purchase-invoice-pdf.yaml`,
   and SDK docstrings.
