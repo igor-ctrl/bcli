@@ -456,6 +456,26 @@ class AsyncBCClient:
                 version=endpoint.api_version,
             )
 
+        # Lockdown: if the profile asked us to hide the standard v2.0 catalog
+        # AND the entity isn't in the custom registry, refuse to construct a
+        # URL at all. Without this guard, `bcli get salesInvoices` on a
+        # scoped profile silently falls through to /api/v2.0/ — turning the
+        # `disable_standard_api` flag into a registry-listing toggle rather
+        # than a real client-side guard. The explicit publisher/group/version
+        # override above still works as a documented escape hatch for power
+        # users who genuinely want a custom route.
+        if endpoint is None and self._profile.disable_standard_api:
+            from bcli.errors import RegistryError
+
+            raise RegistryError(
+                f"Endpoint '{entity_set_name}' is not in this profile's "
+                f"custom registry, and 'disable_standard_api = true' blocks "
+                f"the standard v2.0 fallback. "
+                f"Run 'bcli endpoint list' to see what is available, "
+                f"'bcli registry import' to add a new one, "
+                f"or pass --publisher/--group/--version to override."
+            )
+
         # Standard v2.0 or unknown (try standard route)
         return build_url(
             environment=self._profile.environment,
