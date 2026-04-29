@@ -61,7 +61,7 @@ queries:
 |----------------|----------|----------------------------------------------------------|
 | `description`  | string   | Shown in `bcli q` listing.                               |
 | `endpoint`     | string   | Required. Entity-set name (resolved through the registry).|
-| `params`       | mapping  | Optional. Each key declares a parameter; `required: true`/`default:` are honoured. |
+| `params`       | mapping  | Optional. Each key declares a parameter; see *Param declarations* below. |
 | `filter`       | string   | OData `$filter`. Supports `${{ params.X }}` substitution. |
 | `select`       | string   | Comma-separated field list.                              |
 | `expand`       | string   | Comma-separated navigation properties.                   |
@@ -71,6 +71,64 @@ queries:
 
 Anything else in `${{ ... }}` references the same template engine `bcli batch`
 uses, so `${{ params.X }}` works identically.
+
+### Param declarations
+
+Each entry under `params:` is a small schema. The full set of keys:
+
+| Key        | Notes                                                         |
+|------------|---------------------------------------------------------------|
+| `required` | If `true`, the user must pass `key=value` on the command line. |
+| `default`  | Value used when the user doesn't pass one.                    |
+| `type`     | One of `string`, `integer`, `number`, `boolean`. Drives coercion *and* per-type validation. Defaults to "no coercion" (the value is passed through as-is). |
+| `pattern`  | Regex (full-match) for string params. Rejected values fail locally before any HTTP call. |
+| `min` / `max` | Numeric bounds for `integer` / `number` params. |
+| `enum`     | List of allowed literal values (any type).                    |
+
+Example with all the validation knobs:
+
+```yaml
+queries:
+  utilization-by-esn:
+    description: Monthly utilization records for one ESN
+    endpoint: engineUtilizations
+    params:
+      esn:
+        required: true
+        type: string
+        pattern: "^[A-Za-z0-9-]{4,16}$"   # ESNs are alphanumeric, no spaces
+      limit:
+        default: 24
+        type: integer
+        min: 1
+        max: 1000
+      airline:
+        required: false
+        type: string
+        enum: ["AIRNORTH", "QANTAS", "VIRGIN"]
+    filter: "engineSerialNumber eq '${{ params.esn }}'"
+    orderby: "asOfDate desc"
+    top: "${{ params.limit }}"
+```
+
+### Filter-context safety
+
+When a string-typed param is interpolated into the `filter:` field, `bcli`
+applies OData v4 single-quote escaping (`'` → `''`) so a value like
+`193208' or 1 eq 1--` cannot break out of the surrounding string literal.
+This escape is scoped to the filter context — `select`, `orderby`, `top`,
+`skip`, `all`, and `endpoint` keep raw values, since they don't sit inside
+OData string literals.
+
+For defense in depth, declare a `pattern:` (or use `type: integer`) on params
+that should not contain free-form text. The structural escape protects
+against the syntactic case; the type / pattern check rejects malformed input
+before it reaches the wire.
+
+> **Note on `--show` output.** A vendor name like `O'Brien` rendered with
+> `--show` will appear as `'O''Brien'` in the resolved filter — that's the
+> OData literal form, not a bug. BC parses the doubled quote back to a
+> single quote on the server side.
 
 ## Using saved queries with scoped profiles
 
