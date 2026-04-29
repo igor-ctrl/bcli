@@ -10,7 +10,9 @@ build/
 venv/
 .env
 .env.local
-*.lock
+# Note: uv.lock IS committed (used by `uv sync --locked` in CI for
+# reproducible builds). Other ad-hoc *.lock files (e.g. .dotnet) are
+# still ignored.
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
