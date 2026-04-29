@@ -39,8 +39,16 @@ def test_get_profile_default():
     assert p.environment == "Sandbox"
 
 
-def test_get_profile_not_found():
+def test_get_profile_no_profiles_configured():
     config = BCConfig()
+    with pytest.raises(ConfigError, match="bcli config init"):
+        config.get_profile("nonexistent")
+
+
+def test_get_profile_not_found():
+    config = BCConfig(
+        profiles={"prod": BCProfile(tenant_id="t1", environment="Production")}
+    )
     with pytest.raises(ConfigError, match="not found"):
         config.get_profile("nonexistent")
 
