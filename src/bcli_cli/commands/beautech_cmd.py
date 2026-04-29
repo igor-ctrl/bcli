@@ -30,6 +30,7 @@ def attach_command(
     version: Optional[str] = typer.Option(None, "--version", help="Custom API version (e.g. 'v1.5')"),
     standard: bool = typer.Option(False, "--standard", "--no-registry", help="Bypass the custom registry and force Microsoft's standard /api/v2.0/documentAttachments route. Use when a custom page isn't persisting (zero-GUID ids)."),
     format: Optional[str] = typer.Option(None, "--format", "-f", help="Output format: table, json, csv, ndjson, raw"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the read-only-profile warning prompt"),
 ) -> None:
     """Upload a file as a documentAttachment linked to an existing parent record.
 
@@ -48,6 +49,9 @@ def attach_command(
         state.quiet = True
 
     print_context_banner()
+
+    from bcli_cli._safety import confirm_write_or_exit
+    confirm_write_or_exit("UPLOAD", "documentAttachments", yes=yes)
 
     if state.dry_run:
         console.print(

@@ -25,6 +25,7 @@ def patch_command(
     publisher: Optional[str] = typer.Option(None, "--publisher"),
     group: Optional[str] = typer.Option(None, "--group"),
     version: Optional[str] = typer.Option(None, "--version"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the read-only-profile warning prompt"),
 ) -> None:
     """PATCH (update) an existing record."""
     output_format = format or state.format
@@ -32,6 +33,9 @@ def patch_command(
         state.quiet = True
 
     print_context_banner()
+
+    from bcli_cli._safety import confirm_write_or_exit
+    confirm_write_or_exit("PATCH", endpoint, yes=yes)
 
     body = _parse_data(data)
 
