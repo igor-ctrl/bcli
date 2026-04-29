@@ -415,8 +415,10 @@ class AsyncBCClient:
 
     # ─── Internal ────────────────────────────────────────────────
 
-    def _resolve_url(
+    def _resolve_url_for_target(
         self,
+        environment: str,
+        company_id: str,
         entity_set_name: str,
         *,
         record_id: str | None = None,
@@ -424,8 +426,18 @@ class AsyncBCClient:
         group: str | None = None,
         version: str | None = None,
     ) -> str:
-        """Resolve entity to full URL using registry or explicit overrides."""
-        if not self._profile.company_id:
+        """Resolve entity to a full URL bound to an explicit target.
+
+        Used by ``SafeContext`` so writes go to the environment + company the
+        caller passed to ``client.safe_write(...)``, not the client's
+        profile-bound target. See vuln-0004.
+
+        Registry lookup, custom-route binding, ``disable_standard_api``
+        lockdown, and the explicit ``publisher/group/version`` override all
+        behave exactly as in the profile-bound resolver — only the URL host
+        coordinates (env + company) come from the caller.
+        """
+        if not company_id:
             raise ConfigError(
                 "No company_id configured. Run 'bcli config init' or 'bcli company use <id>'."
             )
@@ -433,8 +445,8 @@ class AsyncBCClient:
         # Explicit override takes priority
         if publisher and group and version:
             return build_url(
-                environment=self._profile.environment,
-                company_id=self._profile.company_id,
+                environment=environment,
+                company_id=company_id,
                 entity_set_name=entity_set_name,
                 record_id=record_id,
                 publisher=publisher,
@@ -447,8 +459,8 @@ class AsyncBCClient:
 
         if endpoint and endpoint.is_custom:
             return build_url(
-                environment=self._profile.environment,
-                company_id=self._profile.company_id,
+                environment=environment,
+                company_id=company_id,
                 entity_set_name=entity_set_name,
                 record_id=record_id,
                 publisher=endpoint.api_publisher,
@@ -478,10 +490,30 @@ class AsyncBCClient:
 
         # Standard v2.0 or unknown (try standard route)
         return build_url(
-            environment=self._profile.environment,
-            company_id=self._profile.company_id,
+            environment=environment,
+            company_id=company_id,
             entity_set_name=entity_set_name,
             record_id=record_id,
+        )
+
+    def _resolve_url(
+        self,
+        entity_set_name: str,
+        *,
+        record_id: str | None = None,
+        publisher: str | None = None,
+        group: str | None = None,
+        version: str | None = None,
+    ) -> str:
+        """Resolve entity to full URL using the client's profile-bound target."""
+        return self._resolve_url_for_target(
+            self._profile.environment,
+            self._profile.company_id or "",
+            entity_set_name,
+            record_id=record_id,
+            publisher=publisher,
+            group=group,
+            version=version,
         )
 
     @property
