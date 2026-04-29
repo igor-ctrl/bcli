@@ -26,7 +26,15 @@ from bcli.errors import AuthError
 logger = logging.getLogger(__name__)
 
 _AUTH_TIMEOUT = 120  # seconds to wait for browser callback
-_DEFAULT_PORT = 8400  # fixed port — register http://localhost:8400 in Entra ID
+# Bind an ephemeral loopback port at runtime instead of a hard-coded one
+# (vuln-0003). Microsoft Entra treats ``http://localhost`` redirect URIs as
+# port-agnostic for public/native clients per RFC 8252 §7.3, so existing
+# Entra app registrations of ``http://localhost`` or ``http://localhost:8400``
+# continue to validate against ``http://localhost:<ephemeral>``. Pinning a
+# single port let any local process (or stray request to e.g. /favicon.ico)
+# either pre-bind 8400 or consume the only callback slot, denying service to
+# the legitimate login flow.
+_DEFAULT_PORT = 0  # 0 → kernel-assigned ephemeral port
 
 
 def _open_browser(url: str, *, incognito: bool = False) -> None:
@@ -127,46 +135,58 @@ class BrowserAuth:
                 self._cache_token(result)
                 return result["access_token"]
 
-        # Start browser auth flow
-        port = _DEFAULT_PORT
-        redirect_uri = f"http://localhost:{port}"
-
-        # MSAL handles PKCE automatically via initiate_auth_code_flow
-        flow_kwargs: dict[str, str] = {}
-        if self._login_hint:
-            # Pre-fill the email and skip account picker (coming from WorkOS)
-            flow_kwargs["login_hint"] = self._login_hint
-        else:
-            # Standalone browser auth — show account picker
-            flow_kwargs["prompt"] = "select_account"
-
-        flow = app.initiate_auth_code_flow(
-            scopes=[BC_SCOPE],
-            redirect_uri=redirect_uri,
-            **flow_kwargs,
-        )
-
-        if "auth_uri" not in flow:
-            raise AuthError(
-                f"Failed to initiate browser auth: {flow.get('error_description', 'Unknown error')}",
-                status_code=401,
-            )
-
-        # Start localhost server to catch the callback
+        # Start localhost server on an ephemeral port BEFORE generating the
+        # auth URL — we need the actual bound port to embed in the
+        # ``redirect_uri`` so the browser callback lands on this listener.
+        # See vuln-0003: a hard-coded port can be pre-bound by another
+        # process, denying service to the login flow.
         auth_response: dict[str, Any] = {}
         server_error: list[str] = []
+        valid_callback = threading.Event()
+        # ``flow_state`` is captured by the handler to validate ``state``
+        # before signalling completion; we initialise the variable now and
+        # set it after MSAL produces the flow dict.
+        flow_state_holder: dict[str, str] = {}
 
         class CallbackHandler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
                 parsed = urlparse(self.path)
-                params = parse_qs(parsed.query)
-                # Flatten single-value params
-                auth_response.update({k: v[0] if len(v) == 1 else v for k, v in params.items()})
+                # Only the root path is the OAuth redirect target. Anything
+                # else (e.g. a stray /favicon.ico from the browser, a probe
+                # from another local process) gets a 404 without consuming
+                # the callback slot — vuln-0003 rejected this case by
+                # silently shutting down on the first request.
+                if parsed.path not in ("/", ""):
+                    self.send_response(404)
+                    self.end_headers()
+                    return
 
+                params = parse_qs(parsed.query)
+                state_param = params.get("state", [""])[0]
+                expected_state = flow_state_holder.get("state", "")
+
+                # Reject callbacks whose state doesn't match the per-flow
+                # token. MSAL would also reject these at the exchange step,
+                # but rejecting here keeps the listener live so the
+                # legitimate callback can still be processed.
+                if not expected_state or state_param != expected_state:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "text/html")
+                    self.end_headers()
+                    self.wfile.write(
+                        b"<html><body><h2>Unexpected callback</h2>"
+                        b"<p>You can close this tab.</p></body></html>"
+                    )
+                    return
+
+                # Valid (or at least state-bound) callback — flatten params,
+                # send the success page, and signal the main thread.
+                auth_response.update(
+                    {k: v[0] if len(v) == 1 else v for k, v in params.items()}
+                )
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html")
                 self.end_headers()
-
                 if "error" in params:
                     error_msg = params.get("error_description", params.get("error", ["Unknown"]))[0]
                     server_error.append(error_msg)
@@ -179,12 +199,53 @@ class BrowserAuth:
                         b"<html><body><h2>Authenticated successfully</h2>"
                         b"<p>You can close this tab and return to the terminal.</p></body></html>"
                     )
+                valid_callback.set()
 
             def log_message(self, format: str, *args: object) -> None:
                 pass  # Suppress HTTP server logs
 
-        server = HTTPServer(("127.0.0.1", port), CallbackHandler)
-        server.timeout = _AUTH_TIMEOUT
+        try:
+            server = HTTPServer(("127.0.0.1", _DEFAULT_PORT), CallbackHandler)
+        except OSError as exc:
+            raise AuthError(
+                f"Failed to bind localhost callback server: {exc}. "
+                "Try 'bcli auth login --method device' as a fallback.",
+                status_code=401,
+            ) from exc
+
+        # Bound port is whatever the kernel handed us when port=0.
+        actual_port = server.server_address[1]
+        redirect_uri = f"http://localhost:{actual_port}"
+
+        # MSAL handles PKCE automatically via initiate_auth_code_flow
+        flow_kwargs: dict[str, str] = {}
+        if self._login_hint:
+            # Pre-fill the email and skip account picker (coming from WorkOS)
+            flow_kwargs["login_hint"] = self._login_hint
+        else:
+            # Standalone browser auth — show account picker
+            flow_kwargs["prompt"] = "select_account"
+
+        try:
+            flow = app.initiate_auth_code_flow(
+                scopes=[BC_SCOPE],
+                redirect_uri=redirect_uri,
+                **flow_kwargs,
+            )
+        except Exception:
+            server.server_close()
+            raise
+
+        if "auth_uri" not in flow:
+            server.server_close()
+            raise AuthError(
+                f"Failed to initiate browser auth: {flow.get('error_description', 'Unknown error')}",
+                status_code=401,
+            )
+
+        # Hand the per-flow state to the callback handler. MSAL embeds this
+        # value in the auth_uri it returns.
+        flow_state_holder["state"] = flow.get("state", "")
 
         # Open browser
         auth_url = flow["auth_uri"]
@@ -193,11 +254,20 @@ class BrowserAuth:
         print(f"If the browser doesn't open, visit:\n  {auth_url}\n", file=sys.stderr)
         _open_browser(auth_url, incognito=self._incognito)
 
-        # Wait for single callback request
-        server_thread = threading.Thread(target=server.handle_request, daemon=True)
+        # Serve continuously until either a valid callback fires the event
+        # or the deadline elapses. ``handle_request`` once-and-done was the
+        # vuln-0003 root cause: any stray request consumed the slot, even
+        # if it wasn't the OAuth callback.
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
-        server_thread.join(timeout=_AUTH_TIMEOUT)
-        server.server_close()
+        try:
+            valid_callback.wait(timeout=_AUTH_TIMEOUT)
+        finally:
+            server.shutdown()
+            server.server_close()
+            # serve_forever returns once shutdown completes; give the thread
+            # a brief join so it tears down cleanly.
+            server_thread.join(timeout=2)
 
         if not auth_response:
             raise AuthError(
