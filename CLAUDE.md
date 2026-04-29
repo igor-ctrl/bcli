@@ -115,6 +115,19 @@ Every HTTP request logs structured JSON to the `bcli.http` logger: method, url, 
 
 The `--debug` flag (in `src/bcli_cli/app.py`) attaches a stderr handler to the `bcli`, `bcli.http`, `bcli.auth`, and `bcli.client` loggers at DEBUG level — required to see those records, since the loggers have no default handler. Self-rescue path for users when something looks off.
 
+### Telemetry (pluggable backends)
+
+`src/bcli/telemetry/` ships an opt-in usage-telemetry sink. Five event types — `bcli.startup`, `bcli.command`, `bcli.query`, `bcli.auth`, `bcli.error` — are emitted from the obvious code paths (app.py atexit, get_cmd, query_cmd, auth_cmd). Privacy defaults are conservative: tokens/secrets are regex-redacted in `bcli.error.bc_message`, filter text and signed-in UPN are dropped unless `capture_filter_text`/`capture_user_upn` flip them on.
+
+Backends are pluggable via `[telemetry] backend`:
+
+- `"null"` (default) — `NullSink`, zero overhead.
+- `"console"` — `ConsoleSink`, JSON to stderr (dev/debug aid).
+- `"azure_monitor"` — `AzureMonitorSink`, Azure App Insights via the optional `[telemetry]` extra (`azure-monitor-opentelemetry`).
+- `"my_pkg.module:MySink"` — any importable class implementing the `TelemetrySink` Protocol (must expose `is_active`, `emit`, `flush`, and a `from_config` classmethod). Useful for AWS CloudWatch, Datadog, Honeycomb, an internal HTTP webhook, etc.
+
+`get_sink(config)` (`src/bcli/telemetry/_factory.py`) does the dispatch and falls back to `NullSink` on any load/import/from_config failure with a one-shot warning — telemetry never crashes the CLI.
+
 ## Key Paths
 
 | Path | Purpose |
