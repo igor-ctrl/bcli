@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
 import sys
 import threading
 import time
@@ -154,10 +155,21 @@ class WorkOSAuth:
 
         client = WorkOS(api_key=self._workos_api_key, client_id=self._workos_client_id)
 
+        # High-entropy, per-login state token. The localhost callback handler
+        # below refuses any callback whose `state` query parameter doesn't
+        # match. Without this binding, any unsolicited GET to
+        # http://127.0.0.1:8401/callback?code=... during the login window
+        # (e.g. from another local process or a malicious page reachable to
+        # the loopback interface) would be treated as a legitimate WorkOS
+        # response and its authorization code would be exchanged for a
+        # role-bearing identity. See vuln-0001.
+        expected_state = secrets.token_urlsafe(32)
+
         # Generate auth URL
         auth_url = client.user_management.get_authorization_url(
             redirect_uri=_WORKOS_REDIRECT_URI,
             provider="authkit",
+            state=expected_state,
         )
 
         # Start localhost server for callback
@@ -168,6 +180,24 @@ class WorkOSAuth:
             def do_GET(self) -> None:
                 parsed = urlparse(self.path)
                 params = parse_qs(parsed.query)
+
+                if parsed.path != "/callback":
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+
+                callback_state = params.get("state", [""])[0]
+                if not secrets.compare_digest(callback_state, expected_state):
+                    server_error.append("Invalid WorkOS callback state.")
+                    self.send_response(400)
+                    self.send_header("Content-Type", "text/html")
+                    self.end_headers()
+                    self.wfile.write(
+                        b"<html><body><h2>Authentication failed</h2>"
+                        b"<p>You can close this tab.</p></body></html>"
+                    )
+                    return
+
                 auth_response.update({k: v[0] if len(v) == 1 else v for k, v in params.items()})
 
                 has_error = "error" in params
@@ -196,10 +226,14 @@ class WorkOSAuth:
         server_thread.join(timeout=_AUTH_TIMEOUT)
         server.server_close()
 
-        if not auth_response:
-            raise AuthError("WorkOS authentication timed out.", status_code=401)
+        # `server_error` first: a callback that arrived but failed validation
+        # (state mismatch, WorkOS-reported error) should surface as an explicit
+        # auth failure rather than getting masked by the "no callback at all"
+        # timeout message.
         if server_error:
             raise AuthError(f"WorkOS authentication failed: {server_error[0]}", status_code=401)
+        if not auth_response:
+            raise AuthError("WorkOS authentication timed out.", status_code=401)
 
         code = auth_response.get("code")
         if not code:
