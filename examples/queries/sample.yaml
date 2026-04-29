@@ -32,15 +32,22 @@ queries:
     # NB: the value of ${{ params.cutoff }} must be set on the command line, e.g.
     #     bcli q recent-items cutoff=2026-04-01T00:00:00Z
 
-  # Outstanding sales invoices for a single customer.
+  # Outstanding sales invoices for a single customer. Demonstrates the
+  # validation knobs you can add per param — type / pattern / min / max /
+  # enum are all enforced locally before the HTTP call.
   open-invoices-by-customer:
     description: Open sales invoices for a given customer
     endpoint: customerSalesInvoices
     params:
       customer-id:
         required: true
+        type: string
+        pattern: "^C[0-9]{5}$"   # rejects free-form text like "' or 1 eq 1--"
       limit:
         default: 50
+        type: integer
+        min: 1
+        max: 1000
     filter: "customerNumber eq '${{ params.customer-id }}' and status eq 'Open'"
     orderby: "dueDate asc"
     top: "${{ params.limit }}"
