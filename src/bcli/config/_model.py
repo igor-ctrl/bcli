@@ -147,8 +147,14 @@ class BCConfig(BaseModel):
         if profile_name not in self.profiles:
             from bcli.errors import ConfigError
 
-            available = ", ".join(self.profiles.keys()) or "(none)"
+            if not self.profiles:
+                raise ConfigError(
+                    "No profiles configured. Run 'bcli config init' to create your first profile."
+                )
+            available = ", ".join(self.profiles.keys())
             raise ConfigError(
-                f"Profile '{profile_name}' not found. Available: {available}"
+                f"Profile '{profile_name}' not found. Available: {available}. "
+                f"Run 'bcli config init --profile {profile_name}' to create it,"
+                f" or 'bcli config use <name>' to switch."
             )
         return self.profiles[profile_name]

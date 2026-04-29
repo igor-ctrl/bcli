@@ -1,0 +1,46 @@
+# Sample saved-query file for `bcli q`.
+#
+# Copy this to ~/.config/bcli/queries/<profile>.yaml and adjust the entity
+# names and field references to match the endpoints your profile knows about.
+# Run `bcli endpoint list` to see what's available, and
+# `bcli endpoint fields <entity>` to discover field names.
+
+queries:
+
+  # Look up a customer by display name.
+  customer-by-name:
+    description: Find a customer by display name (case-sensitive on BC's side)
+    endpoint: customers
+    params:
+      name:
+        required: true
+    filter: "displayName eq '${{ params.name }}'"
+    select: "number,displayName,email,phoneNumber,blocked"
+    top: 25
+
+  # Recently-modified items, useful as a "what changed today" view.
+  recent-items:
+    description: Items modified in the last N days
+    endpoint: items
+    params:
+      days:
+        default: 7
+    # OData duration math; tweak the field name if your tenant uses a custom one.
+    filter: "lastModifiedDateTime gt ${{ params.cutoff }}"
+    orderby: "lastModifiedDateTime desc"
+    top: 50
+    # NB: the value of ${{ params.cutoff }} must be set on the command line, e.g.
+    #     bcli q recent-items cutoff=2026-04-01T00:00:00Z
+
+  # Outstanding sales invoices for a single customer.
+  open-invoices-by-customer:
+    description: Open sales invoices for a given customer
+    endpoint: customerSalesInvoices
+    params:
+      customer-id:
+        required: true
+      limit:
+        default: 50
+    filter: "customerNumber eq '${{ params.customer-id }}' and status eq 'Open'"
+    orderby: "dueDate asc"
+    top: "${{ params.limit }}"
