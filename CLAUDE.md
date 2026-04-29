@@ -35,9 +35,10 @@ Two packages in `src/`: **bcli** (SDK library) and **bcli_cli** (Typer CLI). The
 bcli_cli (Typer CLI) → bcli (Python SDK) → Business Central APIs
                           ├── auth/       MSAL OAuth2 (client creds + device code)
                           ├── client/     httpx async transport, retry, rate limiting
-                          ├── odata/      fluent query builder, pagination
+                          ├── odata/      fluent query builder, pagination, filter validation
                           ├── config/     TOML profiles, layered merge
-                          └── registry/   endpoint metadata → automatic route resolution
+                          ├── registry/   endpoint metadata → automatic route resolution
+                          └── workflow/   ${{ params.X }} resolver (shared by batch + saved queries)
 ```
 
 ### Three-Tier Endpoint Resolution
@@ -49,6 +50,8 @@ When `bcli get <entity>` runs, the registry resolves the API route:
 3. **Error with suggestions** — fuzzy search proposes similar endpoint names
 
 Custom endpoints are imported via `bcli registry import --from-postman <file.json>` (parses Postman v2.1 URL paths to extract publisher/group/version) or `--from-json` or `--from-metadata`.
+
+A profile with `disable_standard_api = true` strips tier 2 from the registry **and** refuses URL fallback to `/api/v2.0/` when tier 1 misses (`AsyncBCClient._resolve_url`). The `--publisher/--group/--version` override remains the documented escape hatch for power users.
 
 ### Async-First with Sync Wrapper
 
@@ -75,6 +78,26 @@ Two construction modes for `AsyncBCClient`:
 
 Secret resolution order: direct parameter → OS keychain → env var (`BCLI_SECRET`). Secrets are never stored in config. Token cache lives at `~/.config/bcli/tokens.json` with 5-minute expiry buffer. `DeviceCodeAuth` uses MSAL public client for interactive browser auth.
 
+### Sandboxed Domain Profiles
+
+Profiles can run in a sandboxed mode for non-developer domain teams (Engine Technical, Operations, Finance). Set `disable_standard_api = true` and optionally `allowed_categories = [...]` on the profile; the user only sees the endpoints an admin pre-imported. The `bcli config init --scoped --import <file>` wizard bakes this in one shot, defaulting to `device_code` auth so there's no client secret to ship.
+
+Defense-in-depth (each layer catches a different class of mistake):
+
+1. **Curated registry** (`~/.config/bcli/registries/<profile>.json`) — only the endpoints an admin imported are listed. `bcli endpoint list` shows nothing else.
+2. **`disable_standard_api = true`** — `_resolve_url` raises `RegistryError` client-side when the entity isn't in the custom registry; no silent `/api/v2.0/` fallback. Tested at `tests/test_client/test_resolve_url.py`.
+3. **BC permission set** — server-side filtering on the user's BC account (e.g. `Vendor.Name 2 = 'Technical'`). The actual security boundary; the bcli flags are UX guardrails on top.
+
+### Saved Queries
+
+`~/.config/bcli/queries/<profile>.yaml` defines named queries with `${{ params.X }}` substitution, run via `bcli q <name> key=value …`. Hides OData syntax for the daily questions a domain user asks. Reuses the workflow resolver at `src/bcli/workflow/_resolver.py` (the same engine `bcli batch` uses). Schema and starter examples live in `docs/saved-queries.md` and `examples/queries/sample.yaml`.
+
+### Filter Validation
+
+`bcli get … --filter "<expr>"` runs a pre-flight check (`src/bcli/odata/_filter_fields.py`). When the entity has known `field_names` (populated by `$metadata` import or by `bcli endpoint fields`), unrecognised tokens trigger a `Did you mean: …?` suggestion before any HTTP call. No-op for entities without a captured field list, so standard endpoints still fall through to BC's own 400.
+
+`EndpointMetadata.field_names` is the storage. `bcli endpoint fields <entity>` calls a sample record, lists fields, and persists the discovered field names back to the custom registry via `update_endpoint_fields()` in `src/bcli/registry/_importers.py` — so the validator gets smarter the more an entity is touched.
+
 ### Write Safety (SafeContext)
 
 `SafeContext` (`src/bcli/client/_safety.py`) gates write operations:
@@ -90,6 +113,8 @@ SDK core deps (httpx, msal, pydantic, tomlkit) in base install. CLI deps (typer,
 
 Every HTTP request logs structured JSON to the `bcli.http` logger: method, url, status, retry_count, latency_ms, correlation_id. Transport accepts `log_context` dict for endpoint_tier/environment metadata.
 
+The `--debug` flag (in `src/bcli_cli/app.py`) attaches a stderr handler to the `bcli`, `bcli.http`, `bcli.auth`, and `bcli.client` loggers at DEBUG level — required to see those records, since the loggers have no default handler. Self-rescue path for users when something looks off.
+
 ## Key Paths
 
 | Path | Purpose |
@@ -103,9 +128,13 @@ Every HTTP request logs structured JSON to the `bcli.http` logger: method, url, 
 | `src/bcli/registry/_schema.py` | EndpointMetadata with domain tag (standard/finance/technical) |
 | `src/bcli/registry/standard_v2.json` | Built-in standard v2.0 entity definitions |
 | `src/bcli/odata/_query.py` | Fluent query builder (filter/select/expand/orderby/top/skip) |
+| `src/bcli/odata/_filter_fields.py` | Pre-flight `--filter` validator: extracts field tokens, suggests close matches |
+| `src/bcli/workflow/_resolver.py` | `${{ params.X }}` / `${{ steps.X.field }}` resolver shared by `bcli batch` and `bcli q` |
 | `src/bcli/config/_loader.py` | Config loading with `_deep_merge()`, tomlkit serialization |
-| `src/bcli_cli/app.py` | Typer root — registers all command groups, global options callback |
+| `src/bcli_cli/app.py` | Typer root — registers all command groups, global options callback, `--debug` logging wiring |
 | `src/bcli_cli/_state.py` | CLIState singleton — lazy config/registry, per-command overrides |
+| `src/bcli_cli/commands/query_cmd.py` | `bcli q` saved-query runtime — loads YAML, expands params, dispatches GET |
+| `src/bcli_cli/commands/config_cmd.py` | `bcli config init` wizard — supports `--scoped --import` for domain teams |
 
 ## CLI Command Name
 
