@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any, AsyncIterator
+from urllib.parse import urlparse
 
 import httpx
 
@@ -21,6 +22,36 @@ _STANDARD_API_PATH = "api/v2.0"
 _MAX_RETRIES = 3
 _INITIAL_BACKOFF = 1.0
 _RETRY_STATUSES = (429, 503, 504)
+
+# Allowed host suffixes for absolute URLs that get a BC bearer token attached.
+# Mirrors ``bcli._url._ALLOWED_HOST_SUFFIXES`` — kept inline because this
+# module is part of the dlt-friendly "generic" layer that must avoid
+# reaching into ``bcli.*`` outside of ``bcli.etl.*``. If a malicious BC
+# response ever returns an off-origin ``@odata.nextLink``, the paginator
+# below would otherwise leak the bearer token to that host.
+_ALLOWED_HOST_SUFFIXES: tuple[str, ...] = (
+    "businesscentral.dynamics.com",
+    "bc.dynamics.com",
+)
+
+
+def _assert_bc_origin(url: str) -> None:
+    """Raise ``ValueError`` if ``url`` isn't relative or a BC host."""
+    parsed = urlparse(url)
+    if not parsed.scheme:
+        return  # relative URL, joined to base by httpx
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Refusing non-HTTP(S) URL with auth: {url!r}")
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise ValueError(f"Refusing URL with no host: {url!r}")
+    for suffix in _ALLOWED_HOST_SUFFIXES:
+        if host == suffix or host.endswith("." + suffix):
+            return
+    raise ValueError(
+        f"Refusing to attach BC credentials to off-origin URL: {url!r}. "
+        f"Allowed host suffixes: {list(_ALLOWED_HOST_SUFFIXES)}."
+    )
 
 
 def build_entity_url(
@@ -91,6 +122,11 @@ class BCClient:
         params: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         assert self._http is not None, "BCClient must be used as a context manager"
+
+        # Validate origin before attaching the bearer token. The paginator
+        # below feeds @odata.nextLink straight back through this method, so
+        # a malicious BC response cannot use that path to redirect auth.
+        _assert_bc_origin(url)
 
         backoff = _INITIAL_BACKOFF
         for attempt in range(_MAX_RETRIES + 1):

@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from bcli._url import assert_bc_origin
 from bcli.auth._base import AuthProvider
 from bcli.errors import (
     AuthError,
@@ -241,7 +242,14 @@ class BCTransport:
         return await self._request("GET", url, params=params)
 
     async def get_absolute(self, url: str) -> dict[str, Any]:
-        """GET with an absolute URL (e.g., nextLink)."""
+        """GET with an absolute URL (e.g., nextLink).
+
+        Validates the URL host before attaching auth, so a malicious
+        ``@odata.nextLink`` returned by a compromised custom-API endpoint
+        cannot redirect the bearer token to an attacker-controlled host.
+        See :func:`bcli._url.assert_bc_origin`.
+        """
+        assert_bc_origin(url)
         return await self._request("GET", url)
 
     async def post(self, url: str, *, json_body: dict[str, Any]) -> dict[str, Any]:
