@@ -5,13 +5,13 @@ name: "Create Draft Purchase Invoice"
 # PATCH to /attachmentContent) which bcli's batch runner doesn't express in
 # YAML. For the attachment, run this CLI command AFTER this batch completes:
 #
-#     bcli acme attach ./invoice.pdf \
+#     bcli attach upload ./invoice.pdf \
 #         --parent-id <invoice-systemId-from-this-batch> \
 #         --parent-type "Purchase Invoice"
 #
 # Or run the full end-to-end flow in a single command:
 #
-#     bcli acme test-attach ./invoice.pdf --vendor-id <vendor-systemId>
+#     bcli attach test ./invoice.pdf --vendor-id <vendor-systemId>
 #
 # Permission prerequisite:
 #   Service user needs RIMD on BOTH:

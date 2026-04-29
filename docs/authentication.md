@@ -138,16 +138,16 @@ The WorkOS identity is cached at `~/.config/bcli/workos_identity.json` until it 
 ### Setup
 
 ```toml
-[profiles.acme]
+[profiles.example]
 tenant_id = "c6aabf12-..."
 environment = "Production"
 auth_method = "workos"
 
-[profiles.acme.workos]
+[profiles.example.workos]
 api_key_env = "WORKOS_API_KEY"
 client_id = "client_01ABC..."
 
-[profiles.acme.workos.groups]
+[profiles.example.workos.groups]
 "finance-read"  = "48074c7f-..."   # BC app registration for read-only finance role
 "finance-write" = "9a12d8e3-..."   # BC app registration for write finance role
 "ops-full"      = "bf441e7a-..."
@@ -162,10 +162,10 @@ pip install "bc-cli[cli]"
 ### Usage
 
 ```bash
-bcli -p acme auth login --method workos
+bcli -p example auth login --method workos
 
 # Switch to a different user without touching OS browser sessions:
-bcli -p acme auth login --method workos --incognito
+bcli -p example auth login --method workos --incognito
 ```
 
 ## Auth Commands
