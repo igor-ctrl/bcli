@@ -135,19 +135,30 @@ class WorkOSConfig(BaseModel):
 
 
 class TelemetryConfig(BaseModel):
-    """Optional usage-telemetry sink for bcli (Azure Application Insights).
+    """Optional usage-telemetry sink for bcli — plug-and-play backend.
 
-    When ``enabled`` is True and ``connection_string`` is set, bcli emits
-    structured events for command runs, queries, auth, and errors. All
-    events flow through :mod:`bcli.telemetry`, which redacts secrets and
-    omits filter strings + user identity unless explicitly opted in.
+    Built-in backends:
+      * ``"null"``           — drop everything (default; effectively disabled)
+      * ``"console"``        — pretty-print events to stderr (handy for dev)
+      * ``"azure_monitor"``  — Azure Application Insights via
+                               ``azure-monitor-opentelemetry`` (extra: ``[telemetry]``)
+
+    Custom backends:
+      * ``"my_pkg.module:MySink"`` — any importable class implementing the
+        :class:`bcli.telemetry.TelemetrySink` protocol. Useful for AWS
+        CloudWatch, Datadog, Honeycomb, or an internal HTTP webhook.
+
+    The class must expose a ``from_config(cls, config: TelemetryConfig)``
+    classmethod that builds an instance.
 
     Privacy defaults are conservative: nothing leaves the laptop unless
-    ``enabled = true`` *and* ``connection_string`` resolves. Even then,
-    full filter text and signed-in UPN are dropped by default.
+    ``enabled = true`` *and* the resolved backend is non-null. Even then,
+    full filter text and signed-in UPN are dropped unless explicitly
+    opted in.
     """
 
     enabled: bool = False
+    backend: str = "null"
     connection_string: str = ""
     capture_filter_text: bool = False
     capture_user_upn: bool = False
@@ -157,8 +168,8 @@ class TelemetryConfig(BaseModel):
 
     @property
     def is_active(self) -> bool:
-        """True only when both opt-in flag and a connection string are set."""
-        return self.enabled and bool(self.connection_string.strip())
+        """True iff opted-in and a non-null backend is selected."""
+        return self.enabled and self.backend.strip().lower() not in ("", "null")
 
 
 class BCConfig(BaseModel):
