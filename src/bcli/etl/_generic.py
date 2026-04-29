@@ -18,7 +18,7 @@ try:
     import dlt
 except ImportError as e:
     raise ImportError(
-        "dlt is required for ETL features. Install: pip install 'bcli[etl]'"
+        "dlt is required for ETL features. Install: pip install 'bc-cli[etl]'"
     ) from e
 
 

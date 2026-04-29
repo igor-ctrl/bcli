@@ -88,7 +88,7 @@ def sync(
         import dlt
     except ImportError:
         console.print("[red]dlt is required for ETL features.[/red]")
-        console.print("[dim]Install it: pip install 'bcli[etl]'[/dim]")
+        console.print("[dim]Install it: pip install 'bc-cli[etl]'[/dim]")
         raise typer.Exit(1)
 
     print_context_banner()

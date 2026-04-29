@@ -8,12 +8,16 @@
 
 ## Install
 
+The PyPI distribution name is **`bc-cli`** (not `bcli` — that name is squatted
+by an unrelated 2018 EC2-cluster package). Once installed, the CLI binary is
+still `bcli`.
+
 ```bash
 # Recommended
-uv tool install bcli
+uv tool install bc-cli
 
 # Or via pip
-pip install bcli
+pip install bc-cli
 ```
 
 Verify the installation:

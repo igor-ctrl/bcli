@@ -39,10 +39,10 @@ async with AsyncBCClient(profile="production") as client:
 ## CLI Quick Start
 
 ```bash
-# Install
-pip install bcli
+# Install (PyPI distribution name is "bc-cli"; the binary is "bcli")
+pip install bc-cli
 # or
-uv tool install bcli
+uv tool install bc-cli
 
 # Configure (interactive — discovers companies automatically)
 bcli config init
@@ -120,21 +120,28 @@ bcli --profile prod etl sync --destination filesystem --full-refresh
 
 Requires Python 3.11+.
 
+> **Heads-up on the package name.** The PyPI name is **`bc-cli`**, not
+> `bcli`. An unrelated 2018-era package squats on the `bcli` name (an "EC2
+> Cluster Creator" with no relation to this project) — `pip install bcli`
+> will install that, not this. Always `pip install bc-cli`. Once installed,
+> the import name (`import bcli`) and the CLI binary (`bcli`) work as
+> documented.
+
 ```bash
 # SDK only (for libraries, MCP servers, Airflow DAGs)
-pip install bcli
+pip install bc-cli
 
 # SDK + CLI
-pip install "bcli[cli]"
+pip install "bc-cli[cli]"
 
 # SDK + ETL (dlt source for backup pipelines)
-pip install "bcli[etl]"
+pip install "bc-cli[etl]"
 
 # Everything
-pip install "bcli[cli,etl]"
+pip install "bc-cli[cli,etl]"
 
 # Via uv (recommended)
-uv tool install bcli
+uv tool install bc-cli
 
 # From source
 git clone https://github.com/igor-ctrl/bcli.git

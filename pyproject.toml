@@ -3,7 +3,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "bcli"
+# Distribution name on PyPI. Note: an unrelated 2018-vintage package named
+# `bcli` ("EC2 Cluster Creator") squats on that name on PyPI, so we publish
+# under `bc-cli` instead. The Python import name (`import bcli`) and the
+# installed CLI binary (`bcli`) are unaffected — only `pip install` /
+# `uv tool install` use this name.
+name = "bc-cli"
 version = "0.1.0"
 description = "Python SDK and CLI for Microsoft Dynamics 365 Business Central APIs"
 readme = "README.md"
@@ -55,12 +60,12 @@ telemetry = [
     "azure-monitor-opentelemetry>=1.6",
 ]
 polaris = [
-    "bcli[etl]",
+    "bc-cli[etl]",
     "pyarrow>=16.0",
     "pyiceberg[s3fs]>=0.7",
 ]
 dev = [
-    "bcli[cli]",
+    "bc-cli[cli]",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-httpx>=0.30",
