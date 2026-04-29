@@ -227,12 +227,29 @@ async def import_from_metadata(
         response.raise_for_status()
         xml_text = response.text
 
+    return _parse_metadata_xml(xml_text, publisher=publisher, group=group, version=version)
+
+
+def _parse_metadata_xml(
+    xml_text: str,
+    *,
+    publisher: str,
+    group: str,
+    version: str,
+) -> list[EndpointMetadata]:
+    """Extract EntitySets and their Property names from EDMX XML.
+
+    Pulled out as a pure function so unit tests can hit it without spinning
+    up an HTTP transport.
+    """
     # Parse EntitySet elements from the EDMX XML
     endpoints: list[EndpointMetadata] = []
     # Pattern: <EntitySet Name="entitySetName" EntityType="...entityName"/>
     entity_set_pattern = re.compile(
         r'<EntitySet\s+Name="([^"]+)"\s+EntityType="[^"]*\.(\w+)"',
     )
+
+    fields_by_type = _parse_entity_type_properties(xml_text)
 
     for match in entity_set_pattern.finditer(xml_text):
         entity_set_name = match.group(1)
@@ -251,9 +268,60 @@ async def import_from_metadata(
             category=group,
             supports=["GET"],  # Conservative default — metadata doesn't always tell us
             key_field="systemId",
+            field_names=fields_by_type.get(entity_type, []),
         ))
 
     return sorted(endpoints, key=lambda e: e.entity_set_name)
+
+
+def _parse_entity_type_properties(xml_text: str) -> dict[str, list[str]]:
+    """Map EntityType name → declared Property names from EDMX XML.
+
+    Looks for blocks like:
+        <EntityType Name="customer">
+          <Property Name="number" .../>
+          <Property Name="displayName" .../>
+        </EntityType>
+    Returns {entity_type_name: [field, ...]}.
+    """
+    result: dict[str, list[str]] = {}
+    block_pattern = re.compile(
+        r'<EntityType\s+Name="([^"]+)"[^>]*>(.*?)</EntityType>',
+        re.DOTALL,
+    )
+    prop_pattern = re.compile(r'<Property\s+Name="([^"]+)"')
+    for block in block_pattern.finditer(xml_text):
+        entity_type = block.group(1)
+        body = block.group(2)
+        result[entity_type] = [m.group(1) for m in prop_pattern.finditer(body)]
+    return result
+
+
+def update_endpoint_fields(
+    profile_name: str,
+    entity_set_name: str,
+    field_names: list[str],
+) -> bool:
+    """Persist a learned field list onto an existing custom-registry entry.
+
+    Used after `bcli endpoint fields` (or any sample-fetch path) discovers
+    actual field names from a live record. Returns True if the registry was
+    updated, False if the endpoint isn't in the custom registry.
+    """
+    registry_file = REGISTRIES_DIR / f"{profile_name}.json"
+    if not registry_file.is_file():
+        return False
+    raw = json.loads(registry_file.read_text(encoding="utf-8"))
+    target = entity_set_name.lower()
+    updated = False
+    for entry in raw.get("endpoints", []):
+        if entry.get("entity_set_name", "").lower() == target:
+            entry["field_names"] = sorted(set(field_names))
+            updated = True
+            break
+    if updated:
+        registry_file.write_text(json.dumps(raw, indent=2))
+    return updated
 
 
 def _singularize(name: str) -> str:

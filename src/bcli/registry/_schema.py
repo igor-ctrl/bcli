@@ -28,6 +28,12 @@ class EndpointMetadata(BaseModel):
     page_number: str = ""
     editable: bool = False
 
+    # Known field names on this entity. Populated from $metadata XML imports
+    # (highest fidelity), or learned at query time from a sample record.
+    # Used by the field-level fuzzy filter validator. Empty list = unknown
+    # (validator skips, falls back to BC's own error).
+    field_names: list[str] = Field(default_factory=list)
+
     @property
     def is_custom(self) -> bool:
         """True if this is a custom API (not standard v2.0)."""
