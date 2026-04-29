@@ -60,17 +60,69 @@ def _apply_env_overrides(data: dict) -> dict:
     return result
 
 
+def _sanitise_project_config(data: dict, source: Path) -> dict:
+    """Strip sections from project ``.bcli.toml`` that could load arbitrary code.
+
+    The CLI auto-discovers ``.bcli.toml`` by walking up from the working
+    directory, so a malicious repo can drop one in. The telemetry layer
+    accepts a ``backend = "module:Class"`` string and resolves it via
+    ``import_module`` (`src/bcli/telemetry/_factory.py`), which means a
+    project-level override could execute arbitrary Python on `bcli`
+    invocation. Block that surface entirely: project config may turn
+    telemetry **off** (``[telemetry] enabled = false``) but cannot point at
+    a custom backend or change the connection string. Anything that
+    actually loads code stays in global config (``~/.config/bcli/config.toml``).
+    """
+    telemetry = data.get("telemetry")
+    if not isinstance(telemetry, dict):
+        return data
+
+    safe_keys = {"enabled"}
+    rejected = sorted(k for k in telemetry.keys() if k not in safe_keys)
+    if not rejected and "enabled" not in telemetry:
+        # Nothing to strip and nothing useful left — drop the whole section.
+        result = dict(data)
+        result.pop("telemetry", None)
+        return result
+
+    if rejected:
+        # Drop the unsafe keys and warn — never silently accept them.
+        import warnings
+        warnings.warn(
+            f"Ignoring [telemetry] keys {rejected} from project config "
+            f"{source}: only 'enabled' is honoured at the project layer "
+            f"(custom backends and connection strings must live in the "
+            f"global config to prevent arbitrary code execution from a "
+            f"checked-out repo).",
+            stacklevel=3,
+        )
+
+    cleaned_telemetry = {k: telemetry[k] for k in telemetry if k in safe_keys}
+    result = dict(data)
+    if cleaned_telemetry:
+        result["telemetry"] = cleaned_telemetry
+    else:
+        result.pop("telemetry", None)
+    return result
+
+
 def load_config() -> BCConfig:
     """Load configuration with layered merge.
 
     Resolution order:
     1. Global config (~/.config/bcli/config.toml)
-    2. Project config (.bcli.toml in CWD or parent)
+    2. Project config (.bcli.toml in CWD or parent) — sanitised first to
+       prevent a checked-out malicious repo from injecting a custom
+       telemetry backend (which would execute arbitrary Python on import).
     3. Environment variables (BCLI_*)
     """
     global_data = _load_toml(CONFIG_FILE)
     project_config = _find_project_config()
-    project_data = _load_toml(project_config) if project_config else {}
+    project_data = (
+        _sanitise_project_config(_load_toml(project_config), project_config)
+        if project_config
+        else {}
+    )
 
     merged = _deep_merge(global_data, project_data)
     merged = _apply_env_overrides(merged)
