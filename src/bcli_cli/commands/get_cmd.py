@@ -47,6 +47,9 @@ def get_command(
 
     print_context_banner()
 
+    if filter:
+        _check_filter_fields(endpoint, filter)
+
     query = Query()
     if filter:
         query.filter(filter)
@@ -171,6 +174,26 @@ async def _execute_get_all_companies(
             console.print(f"[dim]  → {len(records)} record(s) from {display}[/dim]")
 
     return all_records
+
+
+def _check_filter_fields(endpoint: str, filter_expr: str) -> None:
+    """Pre-flight check: warn if --filter references fields the entity doesn't have.
+
+    No-op for built-in standard endpoints (their field lists aren't catalogued)
+    or for custom endpoints whose registry entry hasn't learned its fields yet
+    — in those cases BC's own 400 is still the source of truth.
+    """
+    from bcli.odata._filter_fields import validate_filter_fields
+
+    meta = state.registry.get(endpoint)
+    if not meta or not meta.field_names:
+        return
+    result = validate_filter_fields(filter_expr, meta.field_names)
+    if result is None:
+        return
+    msg, _ = result
+    console.print(f"[red]Error:[/red] {msg}")
+    raise typer.Exit(1)
 
 
 async def _execute_get(
