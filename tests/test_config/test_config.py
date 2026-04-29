@@ -264,3 +264,66 @@ def test_resolve_company_not_found():
     p = _profile_with_companies()
     with pytest.raises(ConfigError, match="not found"):
         p.resolve_company("Nope")
+
+
+# ── Project-config telemetry sanitisation (RCE prevention) ────────────────
+
+
+class TestProjectConfigSanitisation:
+    """A repo-local .bcli.toml must not be able to load arbitrary code."""
+
+    def _stage_global(self, tmp_path, monkeypatch, body: str = ""):
+        config_file = tmp_path / "config.toml"
+        config_file.write_text(body)
+        monkeypatch.setattr("bcli.config._loader.CONFIG_FILE", config_file)
+        monkeypatch.delenv("BCLI_PROFILE", raising=False)
+        monkeypatch.delenv("BCLI_FORMAT", raising=False)
+        monkeypatch.delenv("BCLI_TIMEOUT", raising=False)
+
+    def _stage_project(self, tmp_path, monkeypatch, body: str):
+        project_file = tmp_path / ".bcli.toml"
+        project_file.write_text(body)
+        monkeypatch.setattr(
+            "bcli.config._loader._find_project_config", lambda: project_file
+        )
+        return project_file
+
+    def test_project_backend_override_is_rejected(self, tmp_path, monkeypatch):
+        """A project .bcli.toml cannot point telemetry at a custom backend."""
+        self._stage_global(tmp_path, monkeypatch,
+            '[telemetry]\nbackend = "null"\n')
+        self._stage_project(tmp_path, monkeypatch,
+            '[telemetry]\nbackend = "evil_pkg.module:Sink"\n')
+        with pytest.warns(UserWarning, match="custom backends"):
+            config = load_config()
+        # Global config wins because the project override was stripped.
+        assert config.telemetry.backend == "null"
+
+    def test_project_connection_string_is_rejected(self, tmp_path, monkeypatch):
+        """Project config also cannot inject a connection string."""
+        self._stage_global(tmp_path, monkeypatch, "")
+        self._stage_project(tmp_path, monkeypatch,
+            '[telemetry]\nconnection_string = "InstrumentationKey=11111111-1111-1111-1111-111111111111"\n')
+        with pytest.warns(UserWarning):
+            config = load_config()
+        assert config.telemetry.connection_string == ""
+
+    def test_project_can_disable_telemetry(self, tmp_path, monkeypatch):
+        """The one project knob we honour: turning telemetry off."""
+        self._stage_global(tmp_path, monkeypatch,
+            '[telemetry]\nenabled = true\nbackend = "null"\n')
+        self._stage_project(tmp_path, monkeypatch,
+            '[telemetry]\nenabled = false\n')
+        config = load_config()
+        assert config.telemetry.enabled is False
+        # Global backend stays as-is (still null in this case).
+        assert config.telemetry.backend == "null"
+
+    def test_project_with_no_telemetry_section_is_unchanged(self, tmp_path, monkeypatch):
+        """Sanity: a normal project config with no [telemetry] is untouched."""
+        self._stage_global(tmp_path, monkeypatch,
+            '[defaults]\nprofile = "default"\n')
+        self._stage_project(tmp_path, monkeypatch,
+            '[defaults]\nprofile = "myproj"\n')
+        config = load_config()
+        assert config.defaults.profile == "myproj"
