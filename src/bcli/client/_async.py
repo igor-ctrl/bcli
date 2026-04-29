@@ -254,9 +254,9 @@ class AsyncBCClient:
 
         Routing:
         - Default: registry resolution — custom entries for ``documentAttachments``
-          take priority over built-ins. A Acme tenant that publishes
-          ``documentAttachments`` on ``acme/finance/v1.5`` will automatically
-          route there.
+          take priority over built-ins. A tenant that publishes
+          ``documentAttachments`` on, say, ``mycompany/finance/v1.5`` will
+          automatically route there.
         - ``publisher`` + ``group`` + ``version``: force a specific custom route.
         - ``force_standard=True``: bypass the registry entirely and POST/PATCH
           against Microsoft's standard v2.0 ``/api/v2.0/documentAttachments``.
