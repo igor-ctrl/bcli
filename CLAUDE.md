@@ -98,6 +98,10 @@ Defense-in-depth (each layer catches a different class of mistake):
 
 `EndpointMetadata.field_names` is the storage. `bcli endpoint fields <entity>` calls a sample record, lists fields, and persists the discovered field names back to the custom registry via `update_endpoint_fields()` in `src/bcli/registry/_importers.py` — so the validator gets smarter the more an entity is touched.
 
+### Read-only Profiles (`disable_writes`)
+
+`BCProfile.disable_writes = true` flags a profile as read-only. The CLI write commands (`bcli post`, `patch`, `delete`, `acme attach`) detect this and run a stderr warning + interactive `yes` confirmation prompt via `bcli_cli/_safety.py:confirm_write_or_exit` before any mutating call. `--yes` / `-y` skips the prompt for scripted use; non-interactive sessions without `--yes` abort. The SDK (`AsyncBCClient`) does NOT enforce this flag — programmatic users get unfiltered access by design.
+
 ### Write Safety (SafeContext)
 
 `SafeContext` (`src/bcli/client/_safety.py`) gates write operations:

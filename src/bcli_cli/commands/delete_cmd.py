@@ -22,12 +22,16 @@ def delete_command(
     publisher: Optional[str] = typer.Option(None, "--publisher"),
     group: Optional[str] = typer.Option(None, "--group"),
     version: Optional[str] = typer.Option(None, "--version"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the read-only-profile warning prompt"),
 ) -> None:
     """DELETE a record."""
     if format and format in ("json", "csv", "ndjson", "raw"):
         state.quiet = True
 
     print_context_banner()
+
+    from bcli_cli._safety import confirm_write_or_exit
+    confirm_write_or_exit("DELETE", endpoint, yes=yes)
 
     if state.dry_run:
         console.print(f"[yellow]--dry-run: would DELETE {endpoint}({record_id})[/yellow]")

@@ -40,6 +40,13 @@ class BCProfile(BaseModel):
     allowed_categories: list[str] = Field(default_factory=list)
     allowed_endpoints: list[str] = Field(default_factory=list)
 
+    # Write safety. When True, AsyncBCClient.post / patch / delete raise
+    # SafetyError client-side regardless of what the user types. Useful
+    # for read-only profiles (e.g. domain teams who consume but never
+    # mutate). The actual security boundary remains the BC permission
+    # set; this is a UX guardrail to prevent accidents.
+    disable_writes: bool = False
+
     model_config = {"extra": "allow"}
 
     def resolve_company(self, alias_or_id: str | None = None) -> tuple[str, str | None]:
