@@ -166,7 +166,7 @@ class TestUploadAttachment:
         post_body = json.loads(httpx_mock.get_requests()[0].content)
         assert post_body["fileName"] == "renamed.pdf"
 
-    async def test_acme_v15_override_routes_all_phases(self, client, pdf_file, httpx_mock):
+    async def test_custom_v15_override_routes_all_phases(self, client, pdf_file, httpx_mock):
         """Explicit publisher/group/version override must apply to POST, PATCH, and verify GET."""
         _add_two_phase_responses(httpx_mock)
 
@@ -182,7 +182,7 @@ class TestUploadAttachment:
         requests = httpx_mock.get_requests()
         for req in requests:
             assert "/api/acme/finance/v1.5/" in str(req.url), (
-                f"Expected Acme v1.5 route on all phases, got: {req.url}"
+                f"Expected custom v1.5 route on all phases, got: {req.url}"
             )
         # Phase ordering sanity
         assert requests[0].method == "POST"
