@@ -23,24 +23,24 @@ def test_load_saved_queries_missing_file(tmp_path):
 
 
 def test_load_saved_queries_parses_valid_file(tmp_path):
-    f = tmp_path / "engine-tech.yaml"
+    f = tmp_path / "team.yaml"
     f.write_text(textwrap.dedent("""\
     queries:
-      utilization-by-esn:
-        description: Utilization records for an engine
-        endpoint: engineUtilizations
+      customer-by-name:
+        description: Look up a customer by display name
+        endpoint: customers
         params:
-          esn:
+          name:
             required: true
-        filter: "engineSerialNumber eq '${{ params.esn }}'"
-        orderby: asOfDate desc
-        top: 24
+        filter: "displayName eq '${{ params.name }}'"
+        orderby: displayName asc
+        top: 25
     """))
     queries = _load_saved_queries(f)
-    assert "utilization-by-esn" in queries
-    spec = queries["utilization-by-esn"]
-    assert spec["endpoint"] == "engineUtilizations"
-    assert spec["top"] == 24
+    assert "customer-by-name" in queries
+    spec = queries["customer-by-name"]
+    assert spec["endpoint"] == "customers"
+    assert spec["top"] == 25
 
 
 def test_load_saved_queries_rejects_non_mapping(tmp_path, monkeypatch):
