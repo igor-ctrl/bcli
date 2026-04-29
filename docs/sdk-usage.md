@@ -4,8 +4,10 @@ The `bcli` Python SDK can be used directly in your code — MCP servers, Airflow
 
 ## Install
 
+The PyPI distribution name is `bc-cli`; the import name stays `bcli`.
+
 ```bash
-pip install bcli
+pip install bc-cli
 ```
 
 ## Sync Client

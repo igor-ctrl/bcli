@@ -7,7 +7,7 @@ the Polaris-managed Iceberg table. The files are registered in-place via
 
 This module is optional. It requires the ``pyiceberg`` extra::
 
-    pip install 'bcli[polaris]'
+    pip install 'bc-cli[polaris]'
 
 The module lives in the ETL layer but imports bcli-agnostic libraries only.
 """
@@ -59,7 +59,7 @@ def register_load_with_polaris(
     except ImportError as e:
         raise ImportError(
             "pyiceberg is required for Polaris integration. "
-            "Install: pip install 'bcli[polaris]'"
+            "Install: pip install 'bc-cli[polaris]'"
         ) from e
 
     catalog = load_catalog(

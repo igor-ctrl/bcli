@@ -111,7 +111,9 @@ Defense-in-depth (each layer catches a different class of mistake):
 
 ### Dependency Split
 
-SDK core deps (httpx, msal, pydantic, tomlkit) in base install. CLI deps (typer, rich, pyyaml, keyring) in `[cli]` extra. `pip install bcli` gets SDK only; `pip install "bcli[cli]"` adds CLI.
+SDK core deps (httpx, msal, pydantic, tomlkit) in base install. CLI deps (typer, rich, pyyaml, keyring) in `[cli]` extra. `pip install bc-cli` gets SDK only; `pip install "bc-cli[cli]"` adds CLI.
+
+PyPI distribution name is `bc-cli` (the `bcli` name on PyPI is squatted by an unrelated 2018 EC2-cluster package). Python import name (`import bcli`) and CLI binary (`bcli`) are unaffected — the rename only touches `pip install` / `uv tool install` lines and `pyproject.toml`'s `name`.
 
 ### Structured Logging
 
