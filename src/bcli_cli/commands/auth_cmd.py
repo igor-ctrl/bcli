@@ -82,11 +82,30 @@ def login(
             client_secret_env=profile.client_secret_env,
         )
 
+    from bcli.telemetry import events as _tev
+
+    sink = state.telemetry
+    capture_upn = state.config.telemetry.capture_user_upn
     try:
         token = asyncio.run(auth.get_access_token())
         console.print(f"[green]✓[/green] Authenticated successfully ({auth_method})")
         console.print(f"[dim]Token cached (length: {len(token)} chars)[/dim]")
+        upn = ""
+        if capture_upn:
+            # Decode the JWT 'upn' claim if present. Best-effort — never fatal.
+            try:
+                import base64 as _b64
+                import json as _json
+
+                body = token.split(".")[1]
+                body += "=" * (-len(body) % 4)
+                claims = _json.loads(_b64.urlsafe_b64decode(body))
+                upn = claims.get("upn") or claims.get("preferred_username") or ""
+            except Exception:  # noqa: BLE001
+                upn = ""
+        sink.emit(*_tev.auth(method=auth_method, status="ok", user_upn=upn))
     except Exception as e:
+        sink.emit(*_tev.auth(method=auth_method, status="error"))
         console.print(f"[red]✗ Authentication failed:[/red] {e}")
         raise typer.Exit(1)
 

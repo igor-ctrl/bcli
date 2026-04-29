@@ -108,10 +108,36 @@ def query_command(
         console.print("[yellow]--dry-run: would execute, skipping.[/yellow]")
         return
 
+    import time as _time
+
+    from bcli.telemetry import events as _tev
+
+    sink = state.telemetry
+    started = _time.monotonic()
     try:
         records = asyncio.run(_run_saved_query(endpoint, resolved))
         format_output(records, output_format)
+        latency_ms = (_time.monotonic() - started) * 1000.0
+        capture_filter = state.config.telemetry.capture_filter_text
+        sink.emit(*_tev.query(
+            endpoint=endpoint,
+            has_filter=bool(resolved.get("filter")),
+            top=int(resolved.get("top", -1)) if resolved.get("top") not in (None, "") else -1,
+            skip=int(resolved.get("skip", -1)) if resolved.get("skip") not in (None, "") else -1,
+            all_pages=bool(resolved.get("all")),
+            status=200,
+            latency_ms=latency_ms,
+            filter_text=str(resolved.get("filter") or "") if capture_filter else "",
+        ))
     except Exception as e:
+        latency_ms = (_time.monotonic() - started) * 1000.0
+        sink.emit(*_tev.error(
+            error_class=type(e).__name__,
+            http_status=getattr(e, "status_code", 0) or 0,
+            bc_message=getattr(e, "bc_message", "") or str(e),
+            correlation_id=getattr(e, "correlation_id", "") or "",
+            endpoint=endpoint,
+        ))
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from e
 

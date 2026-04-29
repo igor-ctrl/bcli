@@ -51,6 +51,9 @@ cli = [
 etl = [
     "dlt[parquet,filesystem,s3]>=1.0",
 ]
+telemetry = [
+    "azure-monitor-opentelemetry>=1.6",
+]
 polaris = [
     "bcli[etl]",
     "pyarrow>=16.0",
