@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-04-29
+
+OSS-readiness polish. No SDK behaviour changes; one CLI rename and a
+README/docstring cleanup pass.
+
 ### Changed
 
 - **Renamed CLI command** `bcli acme` → `bcli attach`. The two
@@ -114,5 +119,6 @@ moved to `bcli` (April 2026), then to the PyPI distribution name
 `bc-cli` (April 2026, after discovering the `bcli` PyPI name was
 squatted by an unrelated 2018 package).
 
-[Unreleased]: https://github.com/igor-ctrl/bcli/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/igor-ctrl/bcli/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/igor-ctrl/bcli/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/igor-ctrl/bcli/releases/tag/v0.1.0
