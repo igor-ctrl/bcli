@@ -80,13 +80,13 @@ Secret resolution order: direct parameter → OS keychain → env var (`BCLI_SEC
 
 ### Sandboxed Domain Profiles
 
-Profiles can run in a sandboxed mode for non-developer domain teams (Engine Technical, Operations, Finance). Set `disable_standard_api = true` and optionally `allowed_categories = [...]` on the profile; the user only sees the endpoints an admin pre-imported. The `bcli config init --scoped --import <file>` wizard bakes this in one shot, defaulting to `device_code` auth so there's no client secret to ship.
+Profiles can run in a sandboxed mode for non-developer domain teams (operations, warehouse, sales, etc.). Set `disable_standard_api = true` and optionally `allowed_categories = [...]` on the profile; the user only sees the endpoints an admin pre-imported. The `bcli config init --scoped --import <file>` wizard bakes this in one shot, defaulting to `device_code` auth so there's no client secret to ship.
 
 Defense-in-depth (each layer catches a different class of mistake):
 
 1. **Curated registry** (`~/.config/bcli/registries/<profile>.json`) — only the endpoints an admin imported are listed. `bcli endpoint list` shows nothing else.
 2. **`disable_standard_api = true`** — `_resolve_url` raises `RegistryError` client-side when the entity isn't in the custom registry; no silent `/api/v2.0/` fallback. Tested at `tests/test_client/test_resolve_url.py`.
-3. **BC permission set** — server-side filtering on the user's BC account (e.g. `Vendor.Name 2 = 'Technical'`). The actual security boundary; the bcli flags are UX guardrails on top.
+3. **BC permission set** — server-side filtering on the user's BC account (e.g. row-level security on Vendor by region/department/cost-center). The actual security boundary; the bcli flags are UX guardrails on top.
 
 ### Saved Queries
 
