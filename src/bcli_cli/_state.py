@@ -29,6 +29,7 @@ class CLIState:
     # Resolved lazily
     _config: BCConfig | None = field(default=None, repr=False)
     _registry: EndpointRegistry | None = field(default=None, repr=False)
+    _telemetry: object | None = field(default=None, repr=False)  # NullSink | TelemetrySink
 
     @property
     def config(self) -> BCConfig:
@@ -74,6 +75,15 @@ class CLIState:
     @property
     def active_profile_name(self) -> str:
         return self.profile_name or self.config.defaults.profile
+
+    @property
+    def telemetry(self):
+        """Lazily-built telemetry sink. NullSink when telemetry is disabled."""
+        if self._telemetry is None:
+            from bcli.telemetry import get_sink
+
+            self._telemetry = get_sink(self.config.telemetry)
+        return self._telemetry
 
     def make_async_client(self, **kwargs) -> AsyncBCClient:
         """Build an AsyncBCClient with per-command --env/--company overrides applied.

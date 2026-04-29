@@ -134,12 +134,40 @@ class WorkOSConfig(BaseModel):
     model_config = {"extra": "allow"}
 
 
+class TelemetryConfig(BaseModel):
+    """Optional usage-telemetry sink for bcli (Azure Application Insights).
+
+    When ``enabled`` is True and ``connection_string`` is set, bcli emits
+    structured events for command runs, queries, auth, and errors. All
+    events flow through :mod:`bcli.telemetry`, which redacts secrets and
+    omits filter strings + user identity unless explicitly opted in.
+
+    Privacy defaults are conservative: nothing leaves the laptop unless
+    ``enabled = true`` *and* ``connection_string`` resolves. Even then,
+    full filter text and signed-in UPN are dropped by default.
+    """
+
+    enabled: bool = False
+    connection_string: str = ""
+    capture_filter_text: bool = False
+    capture_user_upn: bool = False
+    sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+
+    model_config = {"extra": "allow"}
+
+    @property
+    def is_active(self) -> bool:
+        """True only when both opt-in flag and a connection string are set."""
+        return self.enabled and bool(self.connection_string.strip())
+
+
 class BCConfig(BaseModel):
     """Top-level configuration."""
 
     defaults: BCDefaults = Field(default_factory=BCDefaults)
     profiles: dict[str, BCProfile] = Field(default_factory=dict)
     workos: WorkOSConfig = Field(default_factory=WorkOSConfig)
+    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
 
     def get_profile(self, name: str | None = None) -> BCProfile:
         """Get a profile by name, falling back to the default."""
