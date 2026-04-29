@@ -1,4 +1,4 @@
-"""CLI-side write-safety prompt for ``bcli post / patch / delete / acme attach``.
+"""CLI-side write-safety prompt for ``bcli post / patch / delete / attach upload``.
 
 When the active profile sets ``disable_writes = true``, the CLI prints a
 prominent warning and asks the user to confirm interactively before any

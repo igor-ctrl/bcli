@@ -1,10 +1,16 @@
 # bcli
 
+[![PyPI](https://img.shields.io/pypi/v/bc-cli.svg)](https://pypi.org/project/bc-cli/)
 [![Tests](https://github.com/igor-ctrl/bcli/actions/workflows/tests.yml/badge.svg)](https://github.com/igor-ctrl/bcli/actions/workflows/tests.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 
 A Python SDK and CLI for Microsoft Dynamics 365 Business Central APIs, with a built-in [dlt](https://dlthub.com) source for ETL backup pipelines.
+
+> **Status: Alpha (0.1.x).** Public surface may change before 1.0. Track
+> [CHANGELOG.md](CHANGELOG.md) for breaking changes. Independent project
+> by [@igor-ctrl](https://github.com/igor-ctrl) — not affiliated with
+> Microsoft.
 
 ## SDK Quick Start
 
@@ -167,4 +173,5 @@ pip install -e ".[dev,etl]"
 
 ## License
 
-MIT
+Licensed under the [Apache License, Version 2.0](LICENSE). See the
+[NOTICE](NOTICE) file for attribution requirements.

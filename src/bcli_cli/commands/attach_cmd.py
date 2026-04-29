@@ -1,4 +1,20 @@
-"""bcli acme — Acme-scoped workflows (two-phase /attachments upload)."""
+"""bcli attach — two-phase ``documentAttachments`` upload for BC.
+
+Implements Microsoft's ``documentAttachments`` upload pattern in the
+shape that lands bytes in table 1173 (the one the Business Central UI
+reads from). Two subcommands:
+
+* ``bcli attach upload`` — attach a file to an existing parent record
+  (purchase invoice, sales invoice, etc.).
+* ``bcli attach test`` — end-to-end smoke test that creates a draft
+  purchase invoice and attaches a file to it. Useful when you're
+  validating both the parent endpoint and the attach flow in one go.
+
+Routing follows the registry: a custom-registered ``documentAttachments``
+entry takes priority over Microsoft's standard ``/api/v2.0/`` route. Use
+``--standard`` to force the standard route when a custom page isn't
+persisting (zero-GUID ids etc.).
+"""
 
 from __future__ import annotations
 
@@ -15,17 +31,17 @@ from bcli_cli.output import format_output, print_context_banner
 
 console = Console(stderr=True)
 
-app = typer.Typer(no_args_is_help=True, help="Acme-scoped workflows")
+app = typer.Typer(no_args_is_help=True, help="Document-attachment workflows (two-phase /attachments upload)")
 
 
-@app.command("attach")
-def attach_command(
+@app.command("upload")
+def upload_command(
     file_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Path to the file to attach (PDF, etc.)"),
     parent_id: str = typer.Option(..., "--parent-id", help="Parent record systemId (e.g. purchase invoice id)"),
     parent_type: str = typer.Option("Purchase Invoice", "--parent-type", help="BC parent entity type"),
     file_name: Optional[str] = typer.Option(None, "--file-name", help="Override the attachment filename (defaults to the source filename)"),
     content_type: Optional[str] = typer.Option(None, "--content-type", help="Override Content-Type for the binary PATCH (defaults to mime-guess or application/octet-stream)"),
-    publisher: Optional[str] = typer.Option(None, "--publisher", help="Custom API publisher (e.g. 'acme')"),
+    publisher: Optional[str] = typer.Option(None, "--publisher", help="Custom API publisher (e.g. 'mycompany')"),
     group: Optional[str] = typer.Option(None, "--group", help="Custom API group (e.g. 'finance')"),
     version: Optional[str] = typer.Option(None, "--version", help="Custom API version (e.g. 'v1.5')"),
     standard: bool = typer.Option(False, "--standard", "--no-registry", help="Bypass the custom registry and force Microsoft's standard /api/v2.0/documentAttachments route. Use when a custom page isn't persisting (zero-GUID ids)."),
@@ -80,8 +96,8 @@ def attach_command(
         raise typer.Exit(1)
 
 
-@app.command("test-attach")
-def test_attach_command(
+@app.command("test")
+def test_command(
     file_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, help="Path to the PDF to attach"),
     vendor_id: str = typer.Option(..., "--vendor-id", help="Vendor systemId for the new draft purchase invoice"),
     invoice_date: Optional[str] = typer.Option(None, "--invoice-date", help="Invoice date (YYYY-MM-DD); defaults to today"),
