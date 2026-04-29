@@ -1,0 +1,90 @@
+name: Publish to PyPI
+
+# Triggered by pushing a version tag (e.g. `v0.2.0`).
+# Uses PyPI Trusted Publisher OIDC — no API token stored in GitHub.
+# The PyPI side must be configured to trust this exact workflow:
+#
+#   PyPI project → Manage → Publishing
+#   Owner:    igor-ctrl
+#   Repo:     bcli
+#   Workflow: publish.yml          (filename only, no path)
+#   Env:      pypi                 (matches `environment:` below)
+#
+# When PyPI sees a workflow run with matching owner/repo/workflow/env,
+# it accepts the OIDC token as proof of identity and lets the upload
+# through. No PyPI API token ever lives in GitHub Secrets.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Default to read-only; the publish job opts into id-token: write
+# (the only thing OIDC actually needs).
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build wheel + sdist
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+
+      - name: Sanity-check that the tag matches pyproject.toml's version
+        # `git tag v0.2.0` while pyproject.toml still says 0.1.0 produces
+        # a wheel filename that doesn't match the tag — confusing for any
+        # downstream that pins by tag. Fail loud at build time.
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          file_version="$(grep -E '^version' pyproject.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          if [[ "$tag_version" != "$file_version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME implies version $tag_version, but pyproject.toml has $file_version"
+            exit 1
+          fi
+          echo "Tag and pyproject.toml agree: $tag_version"
+
+      - name: Build
+        run: uv build
+
+      - name: Upload built artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  publish:
+    name: Publish to PyPI (Trusted Publisher)
+    needs: build
+    runs-on: ubuntu-latest
+    # Using a deployment environment lets you require manual approval before
+    # the publish runs — useful for "did the build look right?" pause. Match
+    # this name on the PyPI Trusted Publisher form.
+    environment:
+      name: pypi
+      url: https://pypi.org/project/bc-cli/
+    permissions:
+      # `id-token: write` is what enables OIDC. Without it the PyPI
+      # Trusted Publisher exchange fails with "no OIDC token available".
+      id-token: write
+      contents: read
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        # No `password:` / `with: token: ...` — Trusted Publisher does
+        # the OIDC exchange automatically when the project is configured
+        # on PyPI's side. If publishing breaks with "Invalid token", the
+        # PyPI Trusted Publisher config doesn't match this workflow.
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1.14.0
