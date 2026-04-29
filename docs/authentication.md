@@ -156,7 +156,7 @@ client_id = "client_01ABC..."
 Install the `cli` extra (WorkOS SDK is included):
 
 ```bash
-pip install "bcli[cli]"
+pip install "bc-cli[cli]"
 ```
 
 ### Usage

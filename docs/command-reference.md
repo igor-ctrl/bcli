@@ -360,9 +360,9 @@ Emits a compact reference covering command syntax, OData filter quirks, output f
 
 ---
 
-## etl (optional — requires `bcli[etl]`)
+## etl (optional — requires `bc-cli[etl]`)
 
-Extract Business Central data via `dlt` pipelines. Available only when the `etl` extra is installed (`pip install 'bcli[etl]'`).
+Extract Business Central data via `dlt` pipelines. Available only when the `etl` extra is installed (`pip install 'bc-cli[etl]'`).
 
 ### etl entities
 
