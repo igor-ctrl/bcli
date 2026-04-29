@@ -113,17 +113,27 @@ class SafeContext:
         group: str | None = None,
         version: str | None = None,
     ) -> dict[str, Any]:
-        """POST (create) with safety checks."""
+        """POST (create) with safety checks.
+
+        Bound to the SafeContext's explicit environment + company_id, not the
+        client's profile-bound target — see vuln-0004.
+        """
         rule = self._get_rule(domain)
         if not rule.allow_write:
             raise SafetyError(
                 f"Writes are not allowed for domain '{domain}'."
             )
         safe_body = self._apply_draft_if_needed(body, domain)
-        return await self._client.post(
-            entity_set_name, safe_body,
-            publisher=publisher, group=group, version=version,
+        transport = self._client._ensure_transport()
+        url = self._client._resolve_url_for_target(
+            self._environment,
+            self._company_id,
+            entity_set_name,
+            publisher=publisher,
+            group=group,
+            version=version,
         )
+        return await transport.post(url, json_body=safe_body)
 
     async def patch(
         self,
@@ -137,16 +147,27 @@ class SafeContext:
         group: str | None = None,
         version: str | None = None,
     ) -> dict[str, Any]:
-        """PATCH (update) with safety checks."""
+        """PATCH (update) with safety checks.
+
+        Bound to the SafeContext's explicit environment + company_id, not the
+        client's profile-bound target — see vuln-0004.
+        """
         rule = self._get_rule(domain)
         if not rule.allow_write:
             raise SafetyError(
                 f"Writes are not allowed for domain '{domain}'."
             )
-        return await self._client.patch(
-            entity_set_name, record_id, body,
-            etag=etag, publisher=publisher, group=group, version=version,
+        transport = self._client._ensure_transport()
+        url = self._client._resolve_url_for_target(
+            self._environment,
+            self._company_id,
+            entity_set_name,
+            record_id=record_id,
+            publisher=publisher,
+            group=group,
+            version=version,
         )
+        return await transport.patch(url, json_body=body, etag=etag)
 
     async def delete(
         self,
@@ -159,16 +180,27 @@ class SafeContext:
         group: str | None = None,
         version: str | None = None,
     ) -> dict[str, Any]:
-        """DELETE with safety checks."""
+        """DELETE with safety checks.
+
+        Bound to the SafeContext's explicit environment + company_id, not the
+        client's profile-bound target — see vuln-0004.
+        """
         rule = self._get_rule(domain)
         if not rule.allow_write:
             raise SafetyError(
                 f"Writes are not allowed for domain '{domain}'."
             )
-        return await self._client.delete(
-            entity_set_name, record_id,
-            etag=etag, publisher=publisher, group=group, version=version,
+        transport = self._client._ensure_transport()
+        url = self._client._resolve_url_for_target(
+            self._environment,
+            self._company_id,
+            entity_set_name,
+            record_id=record_id,
+            publisher=publisher,
+            group=group,
+            version=version,
         )
+        return await transport.delete(url, etag=etag)
 
     @property
     def environment(self) -> str:
