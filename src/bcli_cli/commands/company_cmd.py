@@ -12,45 +12,72 @@ from rich.table import Table
 from bcli.config import save_config
 from bcli.config._model import CompanyAlias
 from bcli_cli._state import state
-from bcli_cli.output import print_context_banner
+from bcli_cli.output import format_output, print_context_banner
 
 app = typer.Typer(no_args_is_help=True)
 console = Console()
 
 
 @app.command("list")
-def list_companies() -> None:
-    """List all companies in the current environment."""
+def list_companies(
+    format: Optional[str] = typer.Option(
+        None, "--format", "-f",
+        help="Output format: table (default), json, markdown, csv, ndjson",
+    ),
+) -> None:
+    """List all companies in the current environment.
+
+    JSON shape: ``[{"id": str, "name": str, "alias": str | null, "is_default": bool}]``.
+    Stable contract — consumed by the bcli-mcp server's ``list_companies`` tool.
+    """
+    output_format = format or state.format
+    if output_format in ("json", "csv", "ndjson", "markdown", "md"):
+        state.quiet = True
+
     print_context_banner()
 
     try:
         companies = asyncio.run(_fetch_companies())
         profile = state.profile
+        alias_map = {c.id: alias for alias, c in profile.companies.items()}
 
+        # Structured rows used by every format. Keep field names stable —
+        # bcli-mcp's list_companies tool consumes this contract.
+        rows = [
+            {
+                "id": company.get("id", ""),
+                "name": company.get("name", ""),
+                "alias": alias_map.get(company.get("id", ""), "") or None,
+                "is_default": (
+                    bool(profile.company_id)
+                    and company.get("id", "") == profile.company_id
+                ),
+            }
+            for company in companies
+        ]
+
+        if output_format and output_format != "table":
+            format_output(rows, output_format)
+            return
+
+        # Default Rich-table presentation
         table = Table(show_header=True, header_style="bold")
         table.add_column("#", style="dim")
         table.add_column("Alias", style="cyan")
         table.add_column("Company Name")
         table.add_column("Company ID")
 
-        # Build reverse lookup: company_id → alias
-        alias_map = {c.id: alias for alias, c in profile.companies.items()}
-
-        for i, company in enumerate(companies, 1):
-            name = company.get("name", "")
-            cid = company.get("id", "")
-            alias = alias_map.get(cid, "")
-
-            # Highlight the current default company
-            if profile.company_id and cid == profile.company_id:
+        for i, row in enumerate(rows, 1):
+            name = row["name"]
+            alias = row["alias"] or ""
+            if row["is_default"]:
                 name = f"[bold green]{name} ◄[/bold green]"
                 if not alias:
                     alias = "[dim]default[/dim]"
-
-            table.add_row(str(i), alias, name, cid)
+            table.add_row(str(i), alias, name, row["id"])
 
         console.print(table)
-        console.print(f"[dim]{len(companies)} company(ies)[/dim]")
+        console.print(f"[dim]{len(rows)} company(ies)[/dim]")
 
         if not profile.companies:
             console.print(
