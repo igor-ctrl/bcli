@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`bcli-mcp` preview server** — an MCP (Model Context Protocol) server
+  that lets Claude Desktop and other MCP clients drive bcli. Four
+  read-only tools: `query`, `list_endpoints`, `describe_endpoint`,
+  `list_companies`. Subprocess-only architecture inherits profile, auth,
+  retry, telemetry, and `disable_writes` from the CLI. Install with
+  `pip install "bc-cli[mcp]"`. See `docs/mcp-server.md`.
+
+### Changed
+
+- `bcli company list` accepts `--format` (`json`, `markdown`, `csv`,
+  `ndjson`, `table`). Stable JSON shape:
+  `[{"id", "name", "alias", "is_default"}]`.
+- `bcli endpoint list` and `bcli endpoint info` accept `--format json`.
+  Stable JSON shapes documented inline in each command's help text.
+
 ## [0.1.2] — 2026-04-29
 
 Security release. Closes four findings from a strix.ai run against the

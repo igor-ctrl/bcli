@@ -29,7 +29,7 @@ uv run bcli --help
 
 ## Architecture
 
-Two packages in `src/`: **bcli** (SDK library) and **bcli_cli** (Typer CLI). The CLI imports the SDK; the SDK has no dependency on the CLI.
+Three packages in `src/`: **bcli** (SDK library), **bcli_cli** (Typer CLI), and **bcli_mcp** (MCP server, optional `[mcp]` extra). The CLI imports the SDK. `bcli_mcp` subprocesses `bcli` (the CLI) — no Python imports from `bcli_mcp` into `bcli` or `bcli_cli`. See `docs/mcp-server.md`.
 
 ```
 bcli_cli (Typer CLI) → bcli (Python SDK) → Business Central APIs
