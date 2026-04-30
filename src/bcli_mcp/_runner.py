@@ -97,3 +97,52 @@ def run_bcli_json(
         raise _ToolError(
             f"bcli {' '.join(args)} produced non-JSON output: {exc}"
         ) from exc
+
+
+def run_bcli_side_effect(
+    *args: str,
+    profile: str | None = None,
+    timeout: float = 120.0,
+) -> None:
+    """Run ``bcli <args>`` for its side effect; ignore stdout content.
+
+    Some bcli subcommands (e.g. ``endpoint fields``) emit human-readable
+    text on stdout but persist their useful work to the local registry as
+    a side effect. We don't want that text — we want the cache write.
+
+    Raises ``ToolError`` on non-zero exit (with Rich markup stripped) or
+    timeout. Otherwise silent on success.
+    """
+    argv = ["bcli"]
+    if profile:
+        argv.extend(["--profile", profile])
+    argv.extend(args)
+
+    env = os.environ.copy()
+    if profile:
+        env["BCLI_PROFILE"] = profile
+
+    try:
+        proc = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise _ToolError(
+            "bcli executable not found on PATH. Install with "
+            "'pip install bc-cli[cli]' or 'uv tool install bc-cli'."
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise _ToolError(
+            f"bcli {' '.join(args)} timed out after {timeout}s"
+        ) from exc
+
+    if proc.returncode != 0:
+        message = _strip_rich(proc.stderr or proc.stdout or "(no output)")
+        raise _ToolError(
+            f"bcli {' '.join(args)} exited {proc.returncode}: {message}"
+        )

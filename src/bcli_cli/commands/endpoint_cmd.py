@@ -138,6 +138,11 @@ def endpoint_info(
         payload = _endpoint_to_dict(ep)
         payload["entity_name"] = ep.entity_name
         payload["fields"] = [{"name": f, "type": ""} for f in ep.field_names]
+        # Hint for downstream consumers (esp. bcli-mcp) so they can tell the
+        # difference between "no fields exist" and "fields not yet cached".
+        # Empty fields with fields_discovered=False means: run
+        # `bcli endpoint fields <name>` to populate, or probe via a query.
+        payload["fields_discovered"] = bool(ep.field_names)
         payload["source_table"] = ep.source_table
         payload["page_number"] = ep.page_number
         print(_json.dumps(payload, indent=2, default=str))
