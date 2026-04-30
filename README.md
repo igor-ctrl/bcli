@@ -168,6 +168,7 @@ pip install -e ".[dev,etl]"
 | [Multi-Company](docs/multi-company.md) | Company aliases, cross-entity queries |
 | [Batch Operations](docs/batch-operations.md) | YAML batch files |
 | [SDK Usage](docs/sdk-usage.md) | Python SDK for developers and MCP servers |
+| [MCP Server](docs/mcp-server.md) | Drive bcli from Claude Desktop via the `bcli-mcp` server (preview) |
 | [Command Reference](docs/command-reference.md) | Complete CLI command reference |
 | [Contributing](docs/contributing.md) | Development setup, architecture, testing |
 
