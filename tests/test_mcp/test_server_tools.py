@@ -133,6 +133,55 @@ class TestDescribeEndpointTool:
         assert run.call_args.args == ("endpoint", "info", "customers")
         assert result == {"name": "customers"}
 
+    @pytest.mark.asyncio
+    async def test_discover_fields_default_false_skips_side_effect(self):
+        with patch("bcli_mcp._server.run_bcli_json", return_value={}) as info, \
+             patch("bcli_mcp._server.run_bcli_side_effect") as side:
+            await _server.describe_endpoint(name="customers")
+        side.assert_not_called()
+        info.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_discover_fields_true_runs_fields_then_info(self):
+        with patch("bcli_mcp._server.run_bcli_json", return_value={}) as info, \
+             patch("bcli_mcp._server.run_bcli_side_effect") as side:
+            await _server.describe_endpoint(name="customers", discover_fields=True)
+        side.assert_called_once_with(
+            "endpoint", "fields", "customers", profile=None,
+        )
+        info.assert_called_once_with(
+            "endpoint", "info", "customers", profile=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_discover_fields_swallows_side_effect_failure(self):
+        """If discovery fails (entity needs filter, no records, etc.) we
+        still return the info payload — fields_discovered will be False
+        and the agent can fall back to a probe query."""
+        from mcp.server.fastmcp.exceptions import ToolError
+
+        with patch(
+            "bcli_mcp._server.run_bcli_json",
+            return_value={"name": "customerSales", "fields_discovered": False},
+        ) as info, patch(
+            "bcli_mcp._server.run_bcli_side_effect",
+            side_effect=ToolError("BC returned 400"),
+        ):
+            result = await _server.describe_endpoint(
+                name="customerSales", discover_fields=True,
+            )
+        assert result == {"name": "customerSales", "fields_discovered": False}
+        info.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_discover_fields_passes_profile_through(self):
+        with patch("bcli_mcp._server.run_bcli_json", return_value={}), \
+             patch("bcli_mcp._server.run_bcli_side_effect") as side:
+            await _server.describe_endpoint(
+                name="customers", discover_fields=True, profile="sandbox",
+            )
+        assert side.call_args.kwargs["profile"] == "sandbox"
+
 
 # ── list_companies ────────────────────────────────────────────────────────
 

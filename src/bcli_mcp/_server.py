@@ -20,7 +20,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from bcli_mcp._runner import run_bcli_json
+from bcli_mcp._runner import run_bcli_json, run_bcli_side_effect
 
 mcp = FastMCP("bcli")
 
@@ -115,14 +115,38 @@ async def list_endpoints(
 @mcp.tool()
 async def describe_endpoint(
     name: str,
+    discover_fields: bool = False,
     profile: str | None = None,
 ) -> dict[str, Any]:
     """Show fields, key, supported operations, and route for one entity.
 
-    ``fields`` is populated only after ``bcli endpoint fields <name>`` has
-    been run for the entity (it costs one BC API call). Empty list = not
-    yet discovered.
+    The response includes ``fields_discovered: bool``. When false, ``fields``
+    is empty *because the local registry hasn't probed BC for this entity
+    yet*, not because the entity has no fields. Two ways to recover:
+
+    * Pass ``discover_fields=True`` (this tool runs ``bcli endpoint fields
+      <name>`` first — costs one BC API call, populates the cache for every
+      future call).
+    * Or call ``query(entity=name, top=1)`` and read the keys off the first
+      record. Cheaper if you only need the schema for one analysis.
+
+    Note: some BC pages are "query objects" (read-only summary views) which
+    don't support server-side ``$orderby`` or ``$filter``. If a ``query()``
+    call against this entity 400s on those, fall back to client-side sort
+    over a bounded ``top`` window — see docs/mcp-server.md.
     """
+    if discover_fields:
+        # ``bcli endpoint fields`` fetches one record from BC and persists
+        # the field names into the local registry. The text output is
+        # discarded — we only care about the cache write. If discovery
+        # fails (e.g. entity needs a filter, no records returned), the
+        # subsequent ``endpoint info`` call returns ``fields_discovered:
+        # false`` and the agent can fall back to a probe query.
+        try:
+            run_bcli_side_effect("endpoint", "fields", name, profile=profile)
+        except Exception:
+            pass
+
     return run_bcli_json("endpoint", "info", name, profile=profile)
 
 
