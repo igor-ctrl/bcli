@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from bcli_mcp._runner import _strip_rich, run_bcli_json
+from bcli_mcp._runner import _strip_rich, run_bcli_json, run_bcli_side_effect
 from mcp.server.fastmcp.exceptions import ToolError
 
 
@@ -138,3 +138,46 @@ class TestRunnerErrors:
         with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(["bcli"], 1)):
             with pytest.raises(ToolError, match=r"timed out"):
                 run_bcli_json("get", "customers", timeout=1)
+
+
+# ── run_bcli_side_effect ─────────────────────────────────────────────────
+
+
+class TestSideEffectRunner:
+    def test_does_not_append_format_json(self):
+        """Side-effect commands have non-JSON human stdout — adding
+        --format json to commands like ``endpoint fields`` would either
+        be a no-op or change behaviour. Make sure we DON'T append it."""
+        with patch("subprocess.run") as run:
+            run.return_value = _mock_completed(0, stdout="Fields for…")
+            run_bcli_side_effect("endpoint", "fields", "customers")
+        argv = run.call_args.args[0]
+        assert "--format" not in argv
+
+    def test_returns_none_on_success(self):
+        with patch("subprocess.run") as run:
+            run.return_value = _mock_completed(0, stdout="any text")
+            assert run_bcli_side_effect("endpoint", "fields", "customers") is None
+
+    def test_ignores_stdout_content(self):
+        """Non-JSON, garbage, empty — all fine as long as exit is 0."""
+        with patch("subprocess.run") as run:
+            run.return_value = _mock_completed(0, stdout="<html>")
+            run_bcli_side_effect("endpoint", "fields", "customers")  # no raise
+
+    def test_non_zero_exit_raises_toolerror(self):
+        with patch("subprocess.run") as run:
+            run.return_value = _mock_completed(
+                1, stdout="", stderr="[red]Endpoint not found[/red]",
+            )
+            with pytest.raises(ToolError, match=r"Endpoint not found"):
+                run_bcli_side_effect("endpoint", "fields", "nope")
+
+    def test_profile_passes_through(self):
+        with patch("subprocess.run") as run:
+            run.return_value = _mock_completed(0, stdout="")
+            run_bcli_side_effect("endpoint", "fields", "customers", profile="prod")
+        argv = run.call_args.args[0]
+        env = run.call_args.kwargs["env"]
+        assert "--profile" in argv and argv[argv.index("--profile") + 1] == "prod"
+        assert env["BCLI_PROFILE"] == "prod"

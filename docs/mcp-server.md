@@ -95,6 +95,53 @@ sources are then exactly:
 Per-tool calls do not honour a per-request `cwd` argument. The server runs
 with a single fixed working directory for its lifetime.
 
+## BC query objects vs entity pages — what to expect from `query()`
+
+Not every endpoint in BC's OData surface is a fully-featured entity. Some
+are "query objects" — read-only summary pages exposed via OData (e.g.
+`customerSales`, `vendorPurchases`). They behave like entities for `GET`
+but Microsoft's runtime drops `$orderby` and `$filter` support on most of
+them. A `query()` call against one of these with `orderby=` or `filter=`
+will 400 from BC.
+
+How to recognise one: there's no flag in the registry today (it'd require
+a hint per endpoint), so the practical signal is the 400 itself. The
+recovery pattern that works:
+
+1. `query(entity="customerSales", top=1000)` — pull a bounded page.
+2. Sort the result client-side in your reasoning step.
+3. Take the top N.
+
+This is what an agent will figure out on its own when the orderby
+attempt 400s. It also means **`top` must be large enough to contain the
+true top-N** — if there are 5000 customers and you sort the first 1000,
+you may miss the actual top customer. For BC tenants with very large
+summary pages, fall back to `bcli get …` via Bash with `--all` (which
+follows pagination).
+
+Entity pages (most of `bcli endpoint list`) support full OData. Use
+`describe_endpoint(name)` to see whether `fields_discovered` is `true`
+and what `fields` look like; the registry doesn't currently track which
+endpoints are query objects vs entities, so you'll learn this empirically.
+
+## Discovering field names — `discover_fields`
+
+`describe_endpoint(name)` returns `fields: []` and `fields_discovered:
+false` if the local registry hasn't probed BC for that entity yet. Two
+ways to recover, in order of cost:
+
+1. Cheapest: call `query(entity=name, top=1)` once and read the keys off
+   the returned record. No registry mutation, zero cache pollution.
+2. One-time: pass `discover_fields=true` to `describe_endpoint`. The
+   tool runs `bcli endpoint fields <name>` first, which fetches one
+   record, persists the field names to the local registry, and then
+   returns the populated metadata. Every subsequent call (any user, any
+   session) gets `fields_discovered: true` for free.
+
+Pick (1) for one-shot analysis. Pick (2) when the entity is one you'll
+revisit a lot — the registry-cached field list also feeds bcli's
+filter-validation suggestions in the CLI.
+
 ## Token economy — when the MCP wins, when it loses
 
 Pairing an MCP server with a CLI tool is empirically token-favorable for
