@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json as _json
 from typing import Optional
 
 import typer
@@ -10,10 +11,26 @@ from rich.console import Console
 from rich.table import Table
 
 from bcli_cli._state import state
+from bcli_cli.output import format_output
 
 app = typer.Typer(no_args_is_help=True)
 console = Console()
 stderr_console = Console(stderr=True)
+
+
+def _endpoint_to_dict(ep) -> dict:
+    """Stable JSON shape for an endpoint — consumed by bcli-mcp."""
+    return {
+        "name": ep.entity_set_name,
+        "category": ep.category,
+        "custom": ep.is_custom,
+        "supported_ops": list(ep.supports),
+        "key_field": ep.key_field,
+        "publisher": ep.api_publisher,
+        "group": ep.api_group,
+        "version": ep.api_version,
+        "description": ep.description or "",
+    }
 
 
 @app.command("list")
@@ -21,13 +38,29 @@ def list_endpoints(
     custom: bool = typer.Option(False, "--custom", help="Show only custom (imported) endpoints"),
     standard: bool = typer.Option(False, "--standard", help="Show only standard v2.0 endpoints"),
     category: Optional[str] = typer.Option(None, "--category", help="Filter by category"),
+    format: Optional[str] = typer.Option(
+        None, "--format", "-f",
+        help="Output format: table (default), json, markdown, csv, ndjson",
+    ),
 ) -> None:
-    """List all known endpoints (standard + custom)."""
+    """List all known endpoints (standard + custom).
+
+    JSON shape: ``[{"name": str, "category": str, "custom": bool,
+    "supported_ops": [str], "key_field": str, "publisher": str|null,
+    "group": str|null, "version": str|null, "description": str}]``.
+    """
     registry = state.registry
     endpoints = registry.list_all(custom_only=custom, standard_only=standard)
 
     if category:
         endpoints = [e for e in endpoints if e.category.lower() == category.lower()]
+
+    output_format = format or state.format
+
+    if output_format and output_format != "table":
+        rows = [_endpoint_to_dict(ep) for ep in endpoints]
+        format_output(rows, output_format)
+        return
 
     table = Table(show_header=True, header_style="bold")
     table.add_column("Entity", style="cyan")
@@ -78,15 +111,37 @@ def search_endpoints(
 @app.command("info")
 def endpoint_info(
     name: str = typer.Argument(help="Entity set name"),
+    format: Optional[str] = typer.Option(
+        None, "--format", "-f",
+        help="Output format: text (default) or json",
+    ),
 ) -> None:
-    """Show detailed metadata for an endpoint."""
+    """Show detailed metadata for an endpoint.
+
+    JSON shape extends ``endpoint list`` with ``entity_name``, ``fields``
+    (from prior ``bcli endpoint fields`` runs), ``source_table``, and
+    ``page_number``.
+    """
     ep = state.registry.get(name)
     if not ep:
-        console.print(f"[red]Endpoint '{name}' not found.[/red]")
+        stderr_console.print(f"[red]Endpoint '{name}' not found.[/red]")
         suggestions = state.registry.search(name)[:3]
         if suggestions:
-            console.print(f"[dim]Did you mean: {', '.join(s.entity_set_name for s in suggestions)}?[/dim]")
+            stderr_console.print(
+                f"[dim]Did you mean: {', '.join(s.entity_set_name for s in suggestions)}?[/dim]"
+            )
         raise typer.Exit(1)
+
+    output_format = format or state.format
+
+    if output_format == "json":
+        payload = _endpoint_to_dict(ep)
+        payload["entity_name"] = ep.entity_name
+        payload["fields"] = [{"name": f, "type": ""} for f in ep.field_names]
+        payload["source_table"] = ep.source_table
+        payload["page_number"] = ep.page_number
+        print(_json.dumps(payload, indent=2, default=str))
+        return
 
     console.print(f"[bold]{ep.entity_set_name}[/bold]")
     console.print(f"  Entity name:  {ep.entity_name}")
@@ -101,6 +156,8 @@ def endpoint_info(
         console.print(f"  Source table: {ep.source_table}")
     if ep.page_number:
         console.print(f"  Page number:  {ep.page_number}")
+    if ep.field_names:
+        console.print(f"  Fields:       {', '.join(ep.field_names)}")
 
 
 @app.command("fields")
