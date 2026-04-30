@@ -44,6 +44,7 @@ Documentation = "https://github.com/igor-ctrl/bcli/tree/main/docs"
 
 [project.scripts]
 bcli = "bcli_cli.app:app"
+bcli-mcp = "bcli_mcp:main"
 
 [project.optional-dependencies]
 cli = [
@@ -59,6 +60,12 @@ etl = [
 telemetry = [
     "azure-monitor-opentelemetry>=1.6",
 ]
+mcp = [
+    # The MCP server subprocesses bcli, which means it needs the CLI
+    # extras (typer, rich, pyyaml, keyring, workos) on PATH at runtime.
+    "bc-cli[cli]",
+    "mcp>=1.0",
+]
 polaris = [
     "bc-cli[etl]",
     "pyarrow>=16.0",
@@ -66,6 +73,7 @@ polaris = [
 ]
 dev = [
     "bc-cli[cli]",
+    "bc-cli[mcp]",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-httpx>=0.30",
@@ -73,7 +81,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/bcli", "src/bcli_cli"]
+packages = ["src/bcli", "src/bcli_cli", "src/bcli_mcp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
