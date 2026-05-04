@@ -12,6 +12,18 @@ from typing import Any
 from rich.console import Console
 from rich.table import Table
 
+# Belt-and-suspenders: if we *do* end up rendering rich's box-drawing chars
+# on Windows, make sure they go out as UTF-8 bytes rather than the legacy
+# CP1252-coded mojibake (`�`). Python ≥ 3.7 supports reconfigure(); bcli
+# requires 3.10. No-op on POSIX.
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        # Detached or already-wrapped streams — leave them alone.
+        pass
+
 console = Console()
 stderr_console = Console(stderr=True)
 
@@ -22,6 +34,12 @@ def detect_default_format() -> str:
     AI coding agents (Claude Code, etc.) and piped/redirected stdout
     get a markdown table — readable, parseable, no ANSI escapes or
     box-drawing characters. Interactive TTYs get the rich table.
+
+    On Windows, classic PowerShell pretends to be a TTY even when its
+    stdout is being captured by a parent process (e.g. an AI agent's
+    Bash tool), and renders rich's UTF-8 box-drawing as `�` mojibake on
+    the default codepage. So we treat anything-but-Windows-Terminal as
+    non-table by default. Set ``BCLI_FORMAT=table`` to force it.
     """
     if os.environ.get("BCLI_FORMAT"):
         return os.environ["BCLI_FORMAT"]
@@ -29,6 +47,10 @@ def detect_default_format() -> str:
     if os.environ.get("CLAUDECODE") or os.environ.get("BCLI_AGENT"):
         return "markdown"
     if not sys.stdout.isatty():
+        return "markdown"
+    if sys.platform == "win32" and not os.environ.get("WT_SESSION"):
+        # Legacy console host (conhost.exe) — table rendering is unreliable.
+        # Windows Terminal sets WT_SESSION; keep tables there.
         return "markdown"
     return "table"
 
@@ -57,8 +79,17 @@ def _format_table(records: list[dict[str, Any]]) -> None:
     display_cols = columns[:max_cols]
 
     table = Table(show_header=True, header_style="bold", show_lines=False)
-    for col in display_cols:
-        table.add_column(col, overflow="ellipsis", max_width=40)
+    # The first column is usually the identifier the caller actually needs
+    # to read in full (`entity_set_name`, `no`, `systemId`, etc.). Letting
+    # rich clip that to 40 chars + ellipsis turns useful output into
+    # garbage on narrow terminals — the case that prompted this carve-out.
+    # Subsequent columns stay capped so wide values don't push everything
+    # off-screen.
+    for i, col in enumerate(display_cols):
+        if i == 0:
+            table.add_column(col, no_wrap=True)
+        else:
+            table.add_column(col, overflow="ellipsis", max_width=40)
     if truncated:
         table.add_column("...", style="dim")
 
