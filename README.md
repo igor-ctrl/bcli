@@ -170,6 +170,7 @@ pip install -e ".[dev,etl]"
 | [SDK Usage](docs/sdk-usage.md) | Python SDK for developers and MCP servers |
 | [MCP Server](docs/mcp-server.md) | Drive bcli from Claude Desktop via the `bcli-mcp` server (preview) |
 | [Command Reference](docs/command-reference.md) | Complete CLI command reference |
+| [For AI Agents](AGENTS.md) | Quick discovery recipes for Claude Code, Cursor, etc. driving bcli on a user's behalf |
 | [Contributing](docs/contributing.md) | Development setup, architecture, testing |
 
 ## License
