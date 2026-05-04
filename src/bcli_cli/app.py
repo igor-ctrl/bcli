@@ -40,7 +40,16 @@ def _enable_debug_logging() -> None:
 
 app = typer.Typer(
     name="bcli",
-    help="CLI for Microsoft Dynamics 365 Business Central APIs",
+    help=(
+        "CLI for Microsoft Dynamics 365 Business Central APIs.\n\n"
+        "[bold]Discovery (handy for AI agents driving bcli):[/bold]\n"
+        "  bcli endpoint search <pattern>   fuzzy-find an endpoint\n"
+        "  bcli endpoint info <name> -f json   structured metadata\n"
+        "  bcli endpoint fields <name>      discover real field names "
+        "(don't guess)\n"
+        "  --profile <name> alone is enough — environment, company, and\n"
+        "  client_id resolve from the profile. Pass -e only to [italic]override[/italic]."
+    ),
     no_args_is_help=True,
     rich_markup_mode="rich",
 )

@@ -479,12 +479,23 @@ class AsyncBCClient:
         if endpoint is None and self._profile.disable_standard_api:
             from bcli.errors import RegistryError
 
+            # Best-effort fuzzy suggestion. Cheap (in-memory registry scan)
+            # and saves AI agents a `bcli endpoint list` round trip when
+            # they're one typo away (e.g. preservationStatus →
+            # preservationStatuses).
+            suggestions = self._registry.search(entity_set_name)[:3]
+            did_you_mean = ""
+            if suggestions:
+                names = ", ".join(s.entity_set_name for s in suggestions)
+                did_you_mean = f" Did you mean: {names}?"
+
             raise RegistryError(
                 f"Endpoint '{entity_set_name}' is not in this profile's "
                 f"custom registry, and 'disable_standard_api = true' blocks "
-                f"the standard v2.0 fallback. "
-                f"Run 'bcli endpoint list' to see what is available, "
-                f"'bcli registry import' to add a new one, "
+                f"the standard v2.0 fallback.{did_you_mean} "
+                f"Try 'bcli endpoint search <pattern>' to find similar names, "
+                f"'bcli endpoint list -f json' for the full machine-readable "
+                f"list, 'bcli registry import' to add a new one, "
                 f"or pass --publisher/--group/--version to override."
             )
 
