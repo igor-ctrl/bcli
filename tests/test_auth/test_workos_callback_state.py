@@ -154,7 +154,12 @@ def test_authorization_url_includes_state(fake_workos, isolated_identity_cache):
             f"?code=ok&state={state}",
             timeout=2,
         )
-    except urllib.error.URLError:
+    except (urllib.error.URLError, ConnectionError):
+        # urllib.error.URLError covers DNS / connection-refused; ConnectionError
+        # (incl. ConnectionResetError) leaks through unwrapped on Python 3.12+
+        # when the server thread closes the socket while we're still reading
+        # the response. Either is fine for these drain calls — the test's real
+        # assertions live elsewhere; this just lets the daemon thread exit.
         pass
     thread.join(timeout=5)
 
@@ -219,7 +224,12 @@ def test_callback_with_wrong_path_is_404(fake_workos, isolated_identity_cache):
         urllib.request.urlopen(bad_url, timeout=2)
     except urllib.error.HTTPError as http_err:
         assert http_err.code == 404
-    except urllib.error.URLError:
+    except (urllib.error.URLError, ConnectionError):
+        # urllib.error.URLError covers DNS / connection-refused; ConnectionError
+        # (incl. ConnectionResetError) leaks through unwrapped on Python 3.12+
+        # when the server thread closes the socket while we're still reading
+        # the response. Either is fine for these drain calls — the test's real
+        # assertions live elsewhere; this just lets the daemon thread exit.
         pass
 
     # The 404 path must not consume the listener — the legitimate callback
@@ -230,7 +240,12 @@ def test_callback_with_wrong_path_is_404(fake_workos, isolated_identity_cache):
     )
     try:
         urllib.request.urlopen(good_url, timeout=2)
-    except urllib.error.URLError:
+    except (urllib.error.URLError, ConnectionError):
+        # urllib.error.URLError covers DNS / connection-refused; ConnectionError
+        # (incl. ConnectionResetError) leaks through unwrapped on Python 3.12+
+        # when the server thread closes the socket while we're still reading
+        # the response. Either is fine for these drain calls — the test's real
+        # assertions live elsewhere; this just lets the daemon thread exit.
         pass
 
     thread.join(timeout=5)
@@ -252,7 +267,12 @@ def test_matching_state_is_accepted(fake_workos, isolated_identity_cache):
     )
     try:
         urllib.request.urlopen(url, timeout=2)
-    except urllib.error.URLError:
+    except (urllib.error.URLError, ConnectionError):
+        # urllib.error.URLError covers DNS / connection-refused; ConnectionError
+        # (incl. ConnectionResetError) leaks through unwrapped on Python 3.12+
+        # when the server thread closes the socket while we're still reading
+        # the response. Either is fine for these drain calls — the test's real
+        # assertions live elsewhere; this just lets the daemon thread exit.
         pass
 
     thread.join(timeout=5)
