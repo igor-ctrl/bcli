@@ -40,7 +40,7 @@ steps:
       documentType: "Invoice"
       documentNo: "${{ steps.create_header.no }}"
       type: "G_x002F_L_x0020_Account"
-      no: "6260-000000-000"
+      "no": "6260-000000-000"
       description: "${{ params.inspection_desc }}"
       quantity: 1
       directUnitCost: ${{ params.inspection_cost }}
@@ -53,7 +53,7 @@ steps:
       documentType: "Invoice"
       documentNo: "${{ steps.create_header.no }}"
       type: "G_x002F_L_x0020_Account"
-      no: "6260-000000-000"
+      "no": "6260-000000-000"
       description: "Travel and per diem"
       quantity: 1
       directUnitCost: ${{ params.travel_cost }}
