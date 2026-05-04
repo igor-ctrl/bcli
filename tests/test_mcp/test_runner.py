@@ -8,7 +8,6 @@ process is spawned.
 
 from __future__ import annotations
 
-import json
 import subprocess
 from unittest.mock import patch
 
