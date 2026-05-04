@@ -1,5 +1,6 @@
 """Workflow engine — step chaining and runtime parameters for batch files."""
 
+from bcli.workflow._loader import load_workflow_yaml
 from bcli.workflow._models import (
     ParamDef,
     StepDef,
@@ -15,5 +16,6 @@ __all__ = [
     "StepResult",
     "WorkflowContext",
     "WorkflowDef",
+    "load_workflow_yaml",
     "resolve_references",
 ]
