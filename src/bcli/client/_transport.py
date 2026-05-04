@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -43,6 +44,45 @@ _RETRYABLE = {429, 503, 504}
 DEFAULT_TIMEOUT = 60
 DEFAULT_MAX_RETRIES = 3
 INITIAL_BACKOFF = 1.0  # seconds
+
+# BC's "property not found" message. We extract the offending field and the
+# entity set from the URL so the hint can name the exact `bcli endpoint
+# fields <name>` command to run. This pattern is BC-stable: same wording
+# across v2.0 standard and custom v1.x APIs.
+_PROPERTY_NOT_FOUND_RE = re.compile(
+    r"Could not find a property named '([^']+)' on type 'Microsoft\.NAV\.\w+'",
+)
+_ENTITY_FROM_URL_RE = re.compile(r"/companies\([^)]+\)/([A-Za-z0-9_]+)")
+
+
+def _hint_for_bc_error(status: int, bc_message: str | None, url: str) -> str | None:
+    """Compute a one-line follow-up command hint for known BC error patterns.
+
+    Returns ``None`` when the error doesn't match a known pattern; the caller
+    should leave the message unchanged in that case. The goal is to teach an
+    AI agent (or human) the *next bcli command* to run at the moment of
+    failure, not to explain the error itself.
+    """
+    if not bc_message:
+        return None
+
+    if status == 400:
+        m = _PROPERTY_NOT_FOUND_RE.search(bc_message)
+        if m:
+            entity_match = _ENTITY_FROM_URL_RE.search(url)
+            if entity_match:
+                entity = entity_match.group(1)
+                return (
+                    f"Run 'bcli endpoint fields {entity}' to discover the actual "
+                    f"field names on this endpoint. Don't guess them — BC custom "
+                    f"APIs don't always follow obvious naming."
+                )
+            return (
+                "Run 'bcli endpoint fields <endpoint>' to discover the actual "
+                "field names on this endpoint."
+            )
+
+    return None
 
 
 class BCTransport:
@@ -176,10 +216,12 @@ class BCTransport:
                 if status == 429:
                     kwargs["retry_after"] = _get_retry_after(response)
 
-                raise error_cls(
-                    f"HTTP {status} {response.reason_phrase}: {method} {url}",
-                    **kwargs,
-                )
+                message = f"HTTP {status} {response.reason_phrase}: {method} {url}"
+                hint = _hint_for_bc_error(status, bc_message, url)
+                if hint:
+                    message = f"{message}\n  Hint: {hint}"
+
+                raise error_cls(message, **kwargs)
 
             except (
                 httpx.ConnectError,

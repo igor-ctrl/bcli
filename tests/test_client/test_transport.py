@@ -12,6 +12,7 @@ import pytest
 from bcli.client._transport import (
     BCTransport,
     _get_retry_after,
+    _hint_for_bc_error,
     _parse_bc_error,
 )
 from bcli.errors import (
@@ -263,3 +264,65 @@ class TestStructuredLogging:
         record = json.loads(caplog.records[0].message)
         assert record["endpoint_tier"] == "standard"
         assert record["environment"] == "Sandbox"
+
+
+class TestBCErrorHints:
+    """Hints appended to error messages so AI agents (and humans) learn the
+    next bcli command to run at the moment of failure."""
+
+    def test_property_not_found_emits_endpoint_fields_hint(self):
+        url = (
+            "https://api.businesscentral.dynamics.com/v2.0/Production/api/"
+            "beautech/technical/v1.5/companies(abc123)/preservationStatuses"
+        )
+        bc_message = (
+            "Could not find a property named 'postingDate' on type "
+            "'Microsoft.NAV.preservationStatus'."
+        )
+        hint = _hint_for_bc_error(400, bc_message, url)
+        assert hint is not None
+        assert "bcli endpoint fields preservationStatuses" in hint
+
+    def test_property_not_found_with_unparseable_url_falls_back(self):
+        bc_message = (
+            "Could not find a property named 'foo' on type 'Microsoft.NAV.bar'."
+        )
+        hint = _hint_for_bc_error(400, bc_message, "https://example.invalid/foo")
+        assert hint is not None
+        assert "bcli endpoint fields <endpoint>" in hint
+
+    def test_unknown_400_message_returns_no_hint(self):
+        # Don't fabricate hints for errors we don't recognise.
+        assert _hint_for_bc_error(400, "Some other 400 reason", "https://x/") is None
+
+    def test_non_400_status_returns_no_hint(self):
+        # Forbidden, server errors, etc. don't get auto-hints (yet).
+        assert _hint_for_bc_error(403, "Forbidden", "https://x/") is None
+
+    def test_empty_bc_message_returns_no_hint(self):
+        assert _hint_for_bc_error(400, None, "https://x/") is None
+        assert _hint_for_bc_error(400, "", "https://x/") is None
+
+    async def test_400_with_property_not_found_includes_hint_in_raised_error(
+        self, httpx_mock,
+    ):
+        httpx_mock.add_response(
+            status_code=400,
+            json={
+                "error": {
+                    "message": (
+                        "Could not find a property named 'postingDate' on type "
+                        "'Microsoft.NAV.preservationStatus'."
+                    )
+                }
+            },
+        )
+        transport = BCTransport(FakeAuth(), timeout=5, max_retries=0)
+
+        with pytest.raises(ValidationError) as exc:
+            await transport.get(
+                "https://api.businesscentral.dynamics.com/v2.0/Production/api/"
+                "beautech/technical/v1.5/companies(abc)/preservationStatuses"
+            )
+
+        assert "bcli endpoint fields preservationStatuses" in str(exc.value)
