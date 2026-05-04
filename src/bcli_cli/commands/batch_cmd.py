@@ -156,13 +156,20 @@ def run_batch(
         raise typer.Exit(1)
 
     try:
-        import yaml
+        import yaml  # noqa: F401  (still used by helpers; load_workflow_yaml wraps the workflow body)
     except ImportError:
         console.print("[red]PyYAML is required for batch mode.[/red]")
         console.print("[dim]Install it: pip install pyyaml[/dim]")
         raise typer.Exit(1)
 
-    raw = yaml.safe_load(file.read_text(encoding="utf-8"))
+    from bcli.errors import WorkflowError
+    from bcli.workflow import load_workflow_yaml
+
+    try:
+        raw = load_workflow_yaml(file)
+    except WorkflowError as e:
+        console.print(f"[red]Invalid workflow YAML:[/red] {e}")
+        raise typer.Exit(1)
     batch_name = raw.get("name", file.stem)
     steps = raw.get("steps", [])
 
