@@ -302,7 +302,7 @@ wheels = [
 
 [[package]]
 name = "bc-cli"
-version = "0.1.2"
+version = "0.1.4"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
