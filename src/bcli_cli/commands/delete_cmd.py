@@ -19,9 +19,9 @@ def delete_command(
     record_id: str = typer.Argument(help="Record ID to delete"),
     etag: str = typer.Option("*", "--etag", help="ETag for optimistic concurrency"),
     format: Optional[str] = typer.Option(None, "--format", "-f", help="Output format (unused, for flag consistency)"),
-    publisher: Optional[str] = typer.Option(None, "--publisher"),
-    group: Optional[str] = typer.Option(None, "--group"),
-    version: Optional[str] = typer.Option(None, "--version"),
+    publisher: Optional[str] = typer.Option(None, "--publisher", hidden=True),
+    group: Optional[str] = typer.Option(None, "--group", hidden=True),
+    version: Optional[str] = typer.Option(None, "--version", hidden=True),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip the read-only-profile warning prompt"),
 ) -> None:
     """DELETE a record."""

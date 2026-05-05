@@ -29,6 +29,47 @@ Use `-e` / `--env` only when the user explicitly asks you to hit a
 Same for `--company` / `-c`: only pass it when switching off the
 profile's default company.
 
+The endpoint **registry** does the same job for the API route. When you
+write `bcli get fixedAssets`, the registry already knows the
+publisher / group / version for `fixedAssets` and builds the URL for
+you. You do **not** need `--publisher … --group … --version …` — those
+are escape hatches for the rare case where an admin hasn't imported the
+endpoint yet, and they're hidden from `--help` for that reason. If
+`bcli get <name>` errors with `RegistryError`, the fix is to import the
+endpoint into the registry, not to pass override flags.
+
+---
+
+## Don't write this — minimal command, please
+
+The single biggest tell that an agent is over-pattern-matching:
+redundant flags that the profile + registry already supply.
+
+```bash
+# ❌ Don't write this:
+bcli -c LLC get fixedAssets --publisher beautech --group finance --version v1.5 --all -f json
+
+# ✅ Write this:
+bcli -c LLC get fixedAssets
+```
+
+Why each flag was wrong:
+
+- `--publisher beautech --group finance --version v1.5` — the
+  registry resolves these automatically. Only pass them if the
+  endpoint isn't in the registry (and even then, prefer importing it).
+- `--all` — pulls **every** page. Most asks need `--top 5` or no
+  pagination flag at all. Use `--all` only when the user explicitly
+  asks for a full export.
+- `-f json` — bcli already auto-detects agents (`CLAUDECODE=1`,
+  `BCLI_AGENT=1`, or non-TTY stdout) and emits markdown. Pass `-f
+  json` only when you actually need to feed the result into `jq` or
+  another tool call.
+
+Rule of thumb: **start with the shortest command that names the
+action** (`bcli get fixedAssets`), then add flags one at a time only
+when the user's question demands them.
+
 ---
 
 ## Endpoint discovery — don't guess names
