@@ -73,7 +73,7 @@ def run_bcli_json(
     except FileNotFoundError as exc:
         raise _ToolError(
             "bcli executable not found on PATH. Install with "
-            "'pip install bc-cli[cli]' or 'uv tool install bc-cli'."
+            "'pip install bc-cli' or 'uv tool install bc-cli'."
         ) from exc
     except subprocess.TimeoutExpired as exc:
         raise _ToolError(
@@ -134,7 +134,7 @@ def run_bcli_side_effect(
     except FileNotFoundError as exc:
         raise _ToolError(
             "bcli executable not found on PATH. Install with "
-            "'pip install bc-cli[cli]' or 'uv tool install bc-cli'."
+            "'pip install bc-cli' or 'uv tool install bc-cli'."
         ) from exc
     except subprocess.TimeoutExpired as exc:
         raise _ToolError(

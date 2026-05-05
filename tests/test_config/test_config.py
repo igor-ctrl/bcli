@@ -157,6 +157,26 @@ def test_load_config_global_file(monkeypatch, tmp_path):
     assert p.tenant_id == "t1"
 
 
+def test_load_config_ignores_stale_workos_section(monkeypatch, tmp_path):
+    """Old configs may still contain [workos]; loading should not fail."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        '[defaults]\nprofile = "test"\n\n'
+        '[workos]\napi_key = "old"\nclient_id = "old-client"\n\n'
+        '[profiles.test]\ntenant_id = "t1"\nenvironment = "Sandbox"\n'
+        'auth_method = "browser"\nclient_id = "client-id"\n'
+    )
+    monkeypatch.setattr("bcli.config._loader.CONFIG_FILE", config_file)
+    monkeypatch.setattr("bcli.config._loader._find_project_config", lambda: None)
+    monkeypatch.delenv("BCLI_PROFILE", raising=False)
+    monkeypatch.delenv("BCLI_FORMAT", raising=False)
+    monkeypatch.delenv("BCLI_TIMEOUT", raising=False)
+
+    config = load_config()
+
+    assert config.get_profile("test").auth_method == "browser"
+
+
 # ── save_config round-trip ────────────────────────────────────────────────
 
 def test_save_config_round_trip(monkeypatch, tmp_path):
