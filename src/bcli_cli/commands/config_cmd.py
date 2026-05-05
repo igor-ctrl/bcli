@@ -30,9 +30,21 @@ def init(
         None, "--profile", "-p",
         help="Profile name (skips the interactive prompt)",
     ),
+    auth: Optional[str] = typer.Option(
+        None, "--auth",
+        help="Auth method: browser, client-credentials, or device-code. Defaults to browser.",
+    ),
+    automation: bool = typer.Option(
+        False, "--automation",
+        help="Use client credentials for CI, servers, and background jobs.",
+    ),
+    headless: bool = typer.Option(
+        False, "--headless",
+        help="Use device-code auth for SSH/headless hosts without localhost browser callbacks.",
+    ),
     scoped: bool = typer.Option(
         False, "--scoped",
-        help="Sandboxed-domain mode for non-developer users: device-code "
+        help="Sandboxed-domain mode for non-developer users: delegated "
              "auth (no client secret) and only the endpoints you --import "
              "are visible. The standard v2.0 catalog is hidden.",
     ),
@@ -52,15 +64,22 @@ def init(
 
     \b
     Examples:
-      bcli config init                                       # standard wizard
+      bcli config init                                       # browser auth wizard
+      bcli config init --automation                          # client credentials
+      bcli config init --headless                            # device code
       bcli config init --profile myteam --scoped --import endpoints.json
       bcli config init --profile myteam --scoped \\
           --category warehouse --import warehouse.postman_collection.json
     """
     console.print("[bold]bcli config init[/bold]\n")
+    auth_method = _resolve_init_auth_method(
+        auth=auth,
+        automation=automation,
+        headless=headless,
+    )
     if scoped:
         bullets = [
-            "device-code auth (corporate login, no client secret)",
+            f"{_auth_label(auth_method)} auth (corporate login, no client secret)",
             "standard v2.0 catalog hidden — only imported endpoints are visible",
         ]
         if category:
@@ -77,10 +96,10 @@ def init(
 
     # Secret handling — only relevant for client_credentials auth.
     secret_env = None
-    if scoped:
+    if auth_method != "client_credentials":
         console.print(
-            "[dim]Skipping client secret — device-code auth uses your "
-            "corporate login.[/dim]"
+            f"[dim]Skipping client secret — {_auth_label(auth_method)} auth "
+            "uses delegated user login.[/dim]"
         )
     elif ClientCredentialsAuth.has_keyring():
         use_keychain = Confirm.ask("Store client secret in OS keychain? (recommended)", default=True)
@@ -103,18 +122,21 @@ def init(
     profile_obj = BCProfile(
         tenant_id=tenant_id,
         environment=environment,
-        auth_method="device_code" if scoped else "client_credentials",
+        auth_method=auth_method,
         client_id=client_id,
         client_secret_env=secret_env,
         disable_standard_api=scoped,
         allowed_categories=list(category) if category else [],
     )
 
-    # Try to authenticate and discover companies. In scoped mode the user has
-    # to complete a browser device flow first, so we ask before launching it.
-    skip_discovery = scoped and not Confirm.ask(
-        "Authenticate now via device code to auto-discover companies?",
-        default=True,
+    # Try to authenticate and discover companies. Delegated auth opens a browser
+    # or prints a device code, so ask before launching it.
+    skip_discovery = (
+        auth_method in ("browser", "device_code")
+        and not Confirm.ask(
+            f"Authenticate now via {_auth_label(auth_method)} to auto-discover companies?",
+            default=True,
+        )
     )
     if not skip_discovery:
         console.print("\n[dim]Authenticating...[/dim]")
@@ -125,7 +147,7 @@ def init(
                     client_id=client_id,
                     environment=environment,
                     secret_env=secret_env,
-                    use_device_code=scoped,
+                    auth_method=auth_method,
                 )
             )
 
@@ -166,7 +188,7 @@ def init(
             console.print("[dim]Saving config anyway — you can test the connection later.[/dim]")
     else:
         console.print(
-            "[dim]Skipped. Run 'bcli auth login --profile " + profile_name +
+            "[dim]Skipped. Run 'bcli --profile " + profile_name + " auth login"
             "' then 'bcli company list' to set the default company.[/dim]"
         )
 
@@ -196,8 +218,8 @@ def init(
 
     console.print("\n[dim]Next:[/dim]")
     if scoped:
-        console.print(f"[dim]  bcli auth login --profile {profile_name}[/dim]")
-        console.print(f"[dim]  bcli endpoint list --profile {profile_name}[/dim]")
+        console.print(f"[dim]  bcli --profile {profile_name} auth login[/dim]")
+        console.print(f"[dim]  bcli --profile {profile_name} endpoint list[/dim]")
     else:
         console.print("[dim]  bcli get customers --top 5[/dim]")
 
@@ -208,10 +230,14 @@ async def _discover_via_auth(
     client_id: str,
     environment: str,
     secret_env: str | None,
-    use_device_code: bool,
+    auth_method: str,
 ) -> list[dict]:
-    """Authenticate (device code or client creds) and list companies."""
-    if use_device_code:
+    """Authenticate with the selected method and list companies."""
+    if auth_method == "browser":
+        from bcli.auth._browser import BrowserAuth
+
+        auth = BrowserAuth(tenant_id=tenant_id, client_id=client_id)
+    elif auth_method == "device_code":
         from bcli.auth._device_code import DeviceCodeAuth
 
         auth = DeviceCodeAuth(tenant_id=tenant_id, client_id=client_id)
@@ -226,6 +252,58 @@ async def _discover_via_auth(
         return await _discover_companies(transport, environment)
     finally:
         await transport.close()
+
+
+def _resolve_init_auth_method(
+    *,
+    auth: str | None,
+    automation: bool,
+    headless: bool,
+) -> str:
+    """Resolve config-init auth flags to one canonical profile value."""
+    if automation and headless:
+        console.print("[red]--automation and --headless are mutually exclusive.[/red]")
+        raise typer.Exit(1)
+
+    requested = auth
+    if requested is None:
+        if automation:
+            requested = "client-credentials"
+        elif headless:
+            requested = "device-code"
+        else:
+            requested = "browser"
+
+    method = requested.strip().lower().replace("-", "_")
+    aliases = {
+        "browser": "browser",
+        "device": "device_code",
+        "device_code": "device_code",
+        "client_credentials": "client_credentials",
+    }
+    if method not in aliases:
+        console.print(
+            f"[red]Unsupported auth method '{requested}'.[/red] "
+            "Use browser, client-credentials, or device-code."
+        )
+        raise typer.Exit(1)
+
+    resolved = aliases[method]
+    if automation and resolved != "client_credentials":
+        console.print("[red]--automation requires --auth client-credentials.[/red]")
+        raise typer.Exit(1)
+    if headless and resolved != "device_code":
+        console.print("[red]--headless requires --auth device-code.[/red]")
+        raise typer.Exit(1)
+    return resolved
+
+
+def _auth_label(method: str) -> str:
+    return {
+        "browser": "browser",
+        "device_code": "device-code",
+        "client_credentials": "client-credentials",
+    }.get(method, method)
 
 
 def _import_endpoints_for_profile(profile_name: str, import_file: Path) -> None:

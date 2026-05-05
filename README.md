@@ -5,7 +5,9 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 
-A Python SDK and CLI for Microsoft Dynamics 365 Business Central APIs, with a built-in [dlt](https://dlthub.com) source for ETL backup pipelines.
+A Python SDK and CLI for Microsoft Dynamics 365 Business Central APIs, with
+agent-friendly endpoint discovery, browser auth, custom API registries, and a
+built-in [dlt](https://dlthub.com) source for ETL backup pipelines.
 
 > **Status: Alpha (0.1.x).** Public surface may change before 1.0. Track
 > [CHANGELOG.md](CHANGELOG.md) for breaking changes. Independent project
@@ -50,7 +52,7 @@ pip install bc-cli
 # or
 uv tool install bc-cli
 
-# Configure (interactive — discovers companies automatically)
+# Configure with browser auth (no client secret)
 bcli config init
 
 # Query standard APIs immediately
@@ -73,7 +75,7 @@ bcli get myCustomEntities --top 5
 - **Multi-company** — Assign aliases to companies and query across all entities
 - **OData query builder** — `--filter`, `--select`, `--expand`, `--orderby`, `--top`, `--skip` on every query
 - **Multiple output formats** — table, JSON, CSV, NDJSON for pipeline use
-- **Secure auth** — OS keychain integration (macOS Keychain, Windows Credential Manager), token caching, client credentials + device code flows
+- **Secure auth** — Browser PKCE by default, OS keychain support for automation secrets, token caching, client credentials + device code fallback
 - **Write safety** — SafeContext gate prevents wrong-environment writes, enforces draft status on financial documents
 - **Programmatic auth** — Pass credentials directly for MCP servers, Airflow DAGs, and containers (no config files required)
 - **Batch operations** — Execute sequences of API calls from YAML files
@@ -134,17 +136,14 @@ Requires Python 3.11+.
 > documented.
 
 ```bash
-# SDK only (for libraries, MCP servers, Airflow DAGs)
+# CLI + SDK
 pip install bc-cli
-
-# SDK + CLI
-pip install "bc-cli[cli]"
 
 # SDK + ETL (dlt source for backup pipelines)
 pip install "bc-cli[etl]"
 
 # Everything
-pip install "bc-cli[cli,etl]"
+pip install "bc-cli[etl,mcp,telemetry]"
 
 # Via uv (recommended)
 uv tool install bc-cli
@@ -160,8 +159,9 @@ pip install -e ".[dev,etl]"
 | Guide | Description |
 |-------|-------------|
 | [Getting Started](docs/getting-started.md) | First-time setup, authentication, your first query |
+| [Business Central Admin Setup](docs/business-central-admin-setup.md) | Entra app registration and BC permissions from scratch |
 | [Configuration](docs/configuration.md) | Profiles, environments, config file format |
-| [Authentication](docs/authentication.md) | Client credentials, device code, OS keychain |
+| [Authentication](docs/authentication.md) | Browser auth, client credentials, device code fallback |
 | [Querying Data](docs/querying.md) | GET, OData filters, pagination, output formats |
 | [Write Operations](docs/write-operations.md) | POST, PATCH, DELETE |
 | [Custom APIs](docs/custom-apis.md) | Importing from Postman, JSON, or $metadata |
