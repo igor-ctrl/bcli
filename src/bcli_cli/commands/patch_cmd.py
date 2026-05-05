@@ -22,9 +22,9 @@ def patch_command(
     data: str = typer.Option(..., "--data", "-d", help="JSON data or @filename"),
     etag: str = typer.Option("*", "--etag", help="ETag for optimistic concurrency"),
     format: Optional[str] = typer.Option(None, "--format", "-f", help="Output format: table, json, csv, ndjson, raw"),
-    publisher: Optional[str] = typer.Option(None, "--publisher"),
-    group: Optional[str] = typer.Option(None, "--group"),
-    version: Optional[str] = typer.Option(None, "--version"),
+    publisher: Optional[str] = typer.Option(None, "--publisher", hidden=True),
+    group: Optional[str] = typer.Option(None, "--group", hidden=True),
+    version: Optional[str] = typer.Option(None, "--version", hidden=True),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip the read-only-profile warning prompt"),
 ) -> None:
     """PATCH (update) an existing record."""
