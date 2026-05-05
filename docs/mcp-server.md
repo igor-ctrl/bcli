@@ -19,8 +19,8 @@ pip install "bc-cli[mcp]"
 uv tool install "bc-cli[mcp]"
 ```
 
-The `mcp` extra brings in the `cli` extras (typer/rich/pyyaml/keyring/workos)
-plus the `mcp` package itself, since the server subprocesses bcli.
+The `mcp` extra brings in the MCP package itself. The CLI runtime ships with
+the base `bc-cli` install because the server subprocesses `bcli`.
 
 After install, the `bcli-mcp` console script is on PATH:
 

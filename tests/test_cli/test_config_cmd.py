@@ -7,6 +7,7 @@ import subprocess
 import pytest
 from typer.testing import CliRunner
 
+from bcli.config import load_config
 from bcli_cli._state import state
 from bcli_cli.app import app
 
@@ -120,3 +121,74 @@ def test_config_edit_reports_missing_editor(tmp_config, monkeypatch):
     result = runner.invoke(app, ["config", "edit"])
     assert result.exit_code == 1
     assert "not found" in result.stdout
+
+
+def test_config_init_defaults_to_browser_auth(tmp_config):
+    result = runner.invoke(
+        app,
+        ["config", "init", "--profile", "local"],
+        input="tenant-id\nSandbox\nclient-id\nn\n",
+    )
+
+    assert result.exit_code == 0, result.stdout
+    config = load_config()
+    profile = config.get_profile("local")
+    assert profile.auth_method == "browser"
+    assert profile.client_secret_env is None
+    assert "Skipping client secret" in result.stdout
+
+
+def test_config_init_automation_uses_client_credentials(tmp_config, monkeypatch):
+    captured: dict = {}
+
+    async def fake_discover(**kwargs):
+        captured.update(kwargs)
+        return [{"name": "CRONUS USA, Inc.", "id": "company-id"}]
+
+    monkeypatch.setattr(
+        "bcli_cli.commands.config_cmd.ClientCredentialsAuth.has_keyring",
+        lambda: False,
+    )
+    monkeypatch.setattr("bcli_cli.commands.config_cmd._discover_via_auth", fake_discover)
+
+    result = runner.invoke(
+        app,
+        ["config", "init", "--profile", "automation", "--automation"],
+        input="tenant-id\nProduction\nclient-id\nBCLI_SECRET\n",
+    )
+
+    assert result.exit_code == 0, result.stdout
+    config = load_config()
+    profile = config.get_profile("automation")
+    assert profile.auth_method == "client_credentials"
+    assert profile.client_secret_env == "BCLI_SECRET"
+    assert profile.company_id == "company-id"
+    assert captured["auth_method"] == "client_credentials"
+
+
+def test_config_init_headless_uses_device_code(tmp_config):
+    result = runner.invoke(
+        app,
+        ["config", "init", "--profile", "ssh", "--headless"],
+        input="tenant-id\nSandbox\nclient-id\nn\n",
+    )
+
+    assert result.exit_code == 0, result.stdout
+    config = load_config()
+    profile = config.get_profile("ssh")
+    assert profile.auth_method == "device_code"
+    assert profile.client_secret_env is None
+
+
+def test_auth_login_rejects_workos(tmp_config):
+    tmp_config.write_text(
+        '[defaults]\nprofile = "test"\n\n'
+        '[profiles.test]\ntenant_id = "t1"\nenvironment = "Sandbox"\n'
+        'client_id = "client-id"\nauth_method = "browser"\n'
+    )
+    state._config = None
+
+    result = runner.invoke(app, ["auth", "login", "--method", "workos"])
+
+    assert result.exit_code == 1
+    assert "Unsupported auth method 'workos'" in result.stdout

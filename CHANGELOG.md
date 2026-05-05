@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] — 2026-05-05
+
 ### Added
 
+- **Business Central admin setup guide** — new
+  `docs/business-central-admin-setup.md` walks a zero-knowledge user
+  through Entra app registration, localhost redirect setup, delegated BC
+  permissions, admin consent, BC user permission sets, first `bcli
+  config init`, and verification.
 - **`bcli-mcp` preview server** — an MCP (Model Context Protocol) server
   that lets Claude Desktop and other MCP clients drive bcli. Four
   read-only tools: `query`, `list_endpoints`, `describe_endpoint`,
@@ -18,11 +25,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `bcli config init` now defaults to browser PKCE auth for local humans
+  and agents. New `--automation` and `--headless` shortcuts create
+  client-credentials and device-code profiles respectively.
+- CLI runtime dependencies now ship with the base `bc-cli` install, so
+  `pip install bc-cli` and `uv tool install bc-cli` provide a working
+  `bcli` command without requiring an extra.
 - `bcli company list` accepts `--format` (`json`, `markdown`, `csv`,
   `ndjson`, `table`). Stable JSON shape:
   `[{"id", "name", "alias", "is_default"}]`.
 - `bcli endpoint list` and `bcli endpoint info` accept `--format json`.
   Stable JSON shapes documented inline in each command's help text.
+
+### Removed
+
+- Removed WorkOS AuthKit support. Browser PKCE is now the delegated auth
+  path, Business Central remains the permission boundary, and
+  client-credentials profiles cover automation.
 
 ## [0.1.2] — 2026-04-29
 

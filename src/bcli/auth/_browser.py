@@ -220,7 +220,7 @@ class BrowserAuth:
         # MSAL handles PKCE automatically via initiate_auth_code_flow
         flow_kwargs: dict[str, str] = {}
         if self._login_hint:
-            # Pre-fill the email and skip account picker (coming from WorkOS)
+            # Pre-fill the email and skip the account picker when callers know it.
             flow_kwargs["login_hint"] = self._login_hint
         else:
             # Standalone browser auth — show account picker

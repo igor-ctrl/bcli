@@ -20,7 +20,7 @@ console = Console()
 def login(
     method: str | None = typer.Option(
         None, "--method", "-m",
-        help="Auth method: workos, browser, device, client_credentials (default: profile's auth_method)",
+        help="Auth method: browser, device, client_credentials (default: profile's auth_method)",
     ),
     incognito: bool = typer.Option(
         False, "--incognito", "-i",
@@ -32,32 +32,14 @@ def login(
     \b
     Examples:
       bcli auth login                         # uses profile's auth_method
-      bcli auth login --method workos         # WorkOS SSO → role-based BC access
-      bcli auth login --method workos -i      # incognito — log in as a different user
       bcli auth login --method browser        # browser OAuth (user's BC permissions)
       bcli auth login --method device         # device code flow
       bcli auth login --method client_credentials  # service-to-service
     """
     profile = state.profile
-    auth_method = method or profile.auth_method
+    auth_method = _normalise_auth_method(method or profile.auth_method)
 
-    if auth_method == "workos":
-        console.print(f"[dim]WorkOS auth for tenant {profile.tenant_id}...[/dim]")
-        from bcli.auth._workos import WorkOSAuth
-
-        workos_cfg = state.config.workos
-        if not workos_cfg.api_key:
-            console.print("[red]WorkOS requires [workos] section in config.toml with api_key and client_id.[/red]")
-            raise typer.Exit(1)
-        auth = WorkOSAuth(
-            tenant_id=profile.tenant_id,
-            workos_api_key=workos_cfg.api_key,
-            workos_client_id=workos_cfg.client_id,
-            role_mapping=workos_cfg.get_role_mapping(),
-            default_bc_client_id=profile.client_id or "",
-            incognito=incognito,
-        )
-    elif auth_method == "browser":
+    if auth_method == "browser":
         console.print(f"[dim]Browser auth for tenant {profile.tenant_id}...[/dim]")
         from bcli.auth._browser import BrowserAuth
 
@@ -66,7 +48,7 @@ def login(
             client_id=profile.client_id or "",
             incognito=incognito,
         )
-    elif auth_method in ("device", "device_code"):
+    elif auth_method == "device_code":
         console.print(f"[dim]Device code auth for tenant {profile.tenant_id}...[/dim]")
         from bcli.auth._device_code import DeviceCodeAuth
 
@@ -108,6 +90,24 @@ def login(
         sink.emit(*_tev.auth(method=auth_method, status="error"))
         console.print(f"[red]✗ Authentication failed:[/red] {e}")
         raise typer.Exit(1)
+
+
+def _normalise_auth_method(raw: str) -> str:
+    """Return the canonical auth method or exit with a user-facing error."""
+    method = raw.strip().lower().replace("-", "_")
+    aliases = {
+        "device": "device_code",
+        "device_code": "device_code",
+        "browser": "browser",
+        "client_credentials": "client_credentials",
+    }
+    if method in aliases:
+        return aliases[method]
+    console.print(
+        f"[red]Unsupported auth method '{raw}'.[/red] "
+        "Use browser, device_code, or client_credentials."
+    )
+    raise typer.Exit(1)
 
 
 @app.command()
