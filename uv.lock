@@ -302,45 +302,33 @@ wheels = [
 
 [[package]]
 name = "bc-cli"
-version = "0.1.4"
+version = "0.1.5"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
+    { name = "keyring" },
     { name = "msal" },
     { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "rich" },
     { name = "tomlkit" },
+    { name = "typer" },
 ]
 
 [package.optional-dependencies]
-cli = [
-    { name = "keyring" },
-    { name = "pyyaml" },
-    { name = "rich" },
-    { name = "typer" },
-    { name = "workos" },
-]
 dev = [
-    { name = "keyring" },
+    { name = "dlt", extra = ["filesystem", "parquet", "s3"] },
     { name = "mcp" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-httpx" },
-    { name = "pyyaml" },
-    { name = "rich" },
     { name = "ruff" },
-    { name = "typer" },
-    { name = "workos" },
 ]
 etl = [
     { name = "dlt", extra = ["filesystem", "parquet", "s3"] },
 ]
 mcp = [
-    { name = "keyring" },
     { name = "mcp" },
-    { name = "pyyaml" },
-    { name = "rich" },
-    { name = "typer" },
-    { name = "workos" },
 ]
 polaris = [
     { name = "dlt", extra = ["filesystem", "parquet", "s3"] },
@@ -354,13 +342,12 @@ telemetry = [
 [package.metadata]
 requires-dist = [
     { name = "azure-monitor-opentelemetry", marker = "extra == 'telemetry'", specifier = ">=1.6" },
-    { name = "bc-cli", extras = ["cli"], marker = "extra == 'dev'" },
-    { name = "bc-cli", extras = ["cli"], marker = "extra == 'mcp'" },
+    { name = "bc-cli", extras = ["etl"], marker = "extra == 'dev'" },
     { name = "bc-cli", extras = ["etl"], marker = "extra == 'polaris'" },
     { name = "bc-cli", extras = ["mcp"], marker = "extra == 'dev'" },
     { name = "dlt", extras = ["parquet", "filesystem", "s3"], marker = "extra == 'etl'", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "keyring", marker = "extra == 'cli'", specifier = ">=25.0" },
+    { name = "keyring", specifier = ">=25.0" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0" },
     { name = "msal", specifier = ">=1.28" },
     { name = "pyarrow", marker = "extra == 'polaris'", specifier = ">=16.0" },
@@ -369,12 +356,11 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "pytest-httpx", marker = "extra == 'dev'", specifier = ">=0.30" },
-    { name = "pyyaml", marker = "extra == 'cli'", specifier = ">=6.0" },
-    { name = "rich", marker = "extra == 'cli'", specifier = ">=13.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rich", specifier = ">=13.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
     { name = "tomlkit", specifier = ">=0.13" },
-    { name = "typer", marker = "extra == 'cli'", specifier = ">=0.12" },
-    { name = "workos", marker = "extra == 'cli'", specifier = ">=5.0" },
+    { name = "typer", specifier = ">=0.12" },
 ]
 provides-extras = ["cli", "etl", "telemetry", "mcp", "polaris", "dev"]
 
@@ -2878,21 +2864,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f9/9c/46d69220d468c82ca2044284c5a8089705c5eb66be416abcbba156365a14/win_precise_time-1.4.2-cp311-cp311-win_amd64.whl", hash = "sha256:0897bb055f19f3b4336e2ba6bee0115ac20fd7ec615a6d736632e2df77f8851a", size = 14912, upload-time = "2023-10-08T17:08:07.896Z" },
     { url = "https://files.pythonhosted.org/packages/2e/96/55a14b5c0e90439951f4a72672223bba81a5f882033c5850f8a6c7f4308b/win_precise_time-1.4.2-cp312-cp312-win32.whl", hash = "sha256:0210dcea88a520c91de1708ae4c881e3c0ddc956daa08b9eabf2b7c35f3109f5", size = 14694, upload-time = "2023-10-08T17:08:09.275Z" },
     { url = "https://files.pythonhosted.org/packages/17/19/7ea9a22a69fc23d5ca02e8edf65e4a335a210497794af1af0ef8fda91fa0/win_precise_time-1.4.2-cp312-cp312-win_amd64.whl", hash = "sha256:85670f77cc8accd8f1e6d05073999f77561c23012a9ee988cbd44bb7ce655062", size = 14913, upload-time = "2023-10-08T17:08:10.677Z" },
-]
-
-[[package]]
-name = "workos"
-version = "5.46.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "pyjwt" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/13/c7/8eb6f513a39a24544f28d0fd764db1c4a54b897885b9f0aede0b4a28d436/workos-5.46.0.tar.gz", hash = "sha256:db6ce0fa6924bfd7a790c2bdae97cf7be8a970eaaef04156ae554157d24376f2", size = 65693, upload-time = "2026-03-16T20:49:13.215Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/8f/43b2345c7d0283660db4c205e93134c4a57406ee896782e7384431906493/workos-5.46.0-py3-none-any.whl", hash = "sha256:b83704d4d6fcafa57439e232f62944b619aabc1c632b0ced9f71501298be0c78", size = 121032, upload-time = "2026-03-16T20:49:11.905Z" },
 ]
 
 [[package]]

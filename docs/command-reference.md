@@ -26,11 +26,22 @@ bcli [global-options] <command> [command-options]
 
 ### config init
 
-Interactive setup wizard. Discovers companies automatically.
+Interactive setup wizard. Defaults to browser auth and discovers companies
+automatically.
 
 ```bash
 bcli config init
+bcli config init --automation
+bcli config init --headless
 ```
+
+| Option | Description |
+|--------|-------------|
+| `--auth <method>` | `browser`, `client-credentials`, or `device-code` |
+| `--automation` | Shortcut for client credentials |
+| `--headless` | Shortcut for device code |
+| `--scoped` | Hide standard APIs; only imported endpoints are visible |
+| `--import <file>` | Import custom endpoints after profile creation |
 
 ### config show
 
@@ -77,14 +88,12 @@ bcli auth login [--method <method>] [--incognito]
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--method <method>` | `-m` | `workos`, `browser`, `device`, or `client_credentials` (default: profile's `auth_method`) |
+| `--method <method>` | `-m` | `browser`, `device`, or `client_credentials` (default: profile's `auth_method`) |
 | `--incognito` | `-i` | Open the browser in incognito/private mode — useful for logging in as a different user |
 
 Examples:
 ```bash
 bcli auth login                              # uses profile's auth_method
-bcli auth login --method workos              # WorkOS SSO → role-based BC access
-bcli auth login --method workos -i           # incognito — log in as a different user
 bcli auth login --method browser             # browser OAuth (user's BC permissions, PKCE)
 bcli auth login --method device              # device code flow
 bcli auth login --method client_credentials  # service-to-service

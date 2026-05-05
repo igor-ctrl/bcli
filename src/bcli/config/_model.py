@@ -116,31 +116,6 @@ class BCDefaults(BaseModel):
     model_config = {"extra": "allow"}
 
 
-class WorkOSRoleMapping(BaseModel):
-    """Maps a WorkOS role slug to a BC Entra app client_id."""
-
-    roles: list[str]
-    bc_client_id: str
-
-
-class WorkOSConfig(BaseModel):
-    """WorkOS AuthKit configuration for role-based BC access."""
-
-    api_key: str = ""
-    client_id: str = ""
-    groups: dict[str, WorkOSRoleMapping] = Field(default_factory=dict)
-
-    def get_role_mapping(self) -> dict[str, str]:
-        """Build a flat {role_slug: bc_client_id} mapping."""
-        mapping: dict[str, str] = {}
-        for group in self.groups.values():
-            for role in group.roles:
-                mapping[role] = group.bc_client_id
-        return mapping
-
-    model_config = {"extra": "allow"}
-
-
 class TelemetryConfig(BaseModel):
     """Optional usage-telemetry sink for bcli — plug-and-play backend.
 
@@ -184,8 +159,9 @@ class BCConfig(BaseModel):
 
     defaults: BCDefaults = Field(default_factory=BCDefaults)
     profiles: dict[str, BCProfile] = Field(default_factory=dict)
-    workos: WorkOSConfig = Field(default_factory=WorkOSConfig)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
+
+    model_config = {"extra": "allow"}
 
     def get_profile(self, name: str | None = None) -> BCProfile:
         """Get a profile by name, falling back to the default."""

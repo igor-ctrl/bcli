@@ -16,45 +16,50 @@ tenant_id = "c6aabf12-1e7a-410a-bd33-c09d6cb294d7"
 environment = "Production"
 company_id = "f99bd320-b400-4189-b3c1-c62c05d4e7a5"
 company_name = "CRONUS USA, Inc."
-auth_method = "client_credentials"
+auth_method = "browser"
 client_id = "48074c7f-5706-40d8-aa7d-7be7b33e2df7"
-client_secret_env = "BCLI_SECRET"
 
-[profiles.sandbox]
+[profiles.automation]
 tenant_id = "c6aabf12-1e7a-410a-bd33-c09d6cb294d7"
-environment = "Sandbox"
-company_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+environment = "Production"
+company_id = "f99bd320-b400-4189-b3c1-c62c05d4e7a5"
 auth_method = "client_credentials"
-client_id = "48074c7f-5706-40d8-aa7d-7be7b33e2df7"
-client_secret_env = "BCLI_SANDBOX_SECRET"
+client_id = "9a12d8e3-1111-2222-3333-7be7b33e2df7"
+client_secret_env = "BCLI_SECRET"
 ```
 
 ## Profiles
 
-Profiles let you manage multiple BC connections — different tenants, environments, or app registrations.
+Profiles let you manage multiple BC connections: different tenants,
+environments, companies, or auth modes.
 
-### Create a Profile
+### Create A Profile
 
 ```bash
-# Interactive
+# Local human/agent use: browser auth
 bcli config init
-# Type a new profile name when prompted
 
-# Manual
+# Automation/CI/server use: client credentials
+bcli config init --automation
+
+# SSH/headless fallback: device code
+bcli config init --headless
+```
+
+Manual setup also works:
+
+```bash
 bcli config set profiles.sandbox.tenant_id "your-tenant-id"
 bcli config set profiles.sandbox.environment "Sandbox"
+bcli config set profiles.sandbox.auth_method "browser"
 bcli config set profiles.sandbox.client_id "your-client-id"
-bcli config set profiles.sandbox.client_secret_env "BCLI_SANDBOX_SECRET"
 ```
 
 ### Switch Profiles
 
 ```bash
-# Set the default profile
 bcli config use production
 bcli config use sandbox
-
-# Use a profile for a single command
 bcli -p sandbox get customers --top 5
 ```
 
@@ -64,26 +69,38 @@ bcli -p sandbox get customers --top 5
 bcli config show
 ```
 
+## Scoped Profiles
+
+Scoped profiles are useful for domain teams. They hide the standard v2.0
+catalog and show only imported custom endpoints.
+
+```bash
+bcli config init --profile ops --scoped --import warehouse.postman_collection.json
+```
+
+Scoped profiles still use browser auth by default. Use `--headless` only when a
+localhost browser callback is not possible.
+
 ## Config Resolution Order
 
-bcli merges configuration from multiple sources. Later sources override earlier ones:
+bcli merges configuration from multiple sources. Later sources override earlier
+ones:
 
-1. **Global config** — `~/.config/bcli/config.toml`
-2. **Project config** — `.bcli.toml` in the current directory or any parent (useful for per-project defaults)
-3. **Environment variables** — `BCLI_PROFILE`, `BCLI_FORMAT`, `BCLI_TIMEOUT`
-4. **CLI flags** — `--profile`, `--env`, `--company`, `--format`
+1. Global config: `~/.config/bcli/config.toml`
+2. Project config: `.bcli.toml` in the current directory or a parent
+3. Environment variables: `BCLI_PROFILE`, `BCLI_FORMAT`, `BCLI_TIMEOUT`
+4. CLI flags: `--profile`, `--env`, `--company`, `--format`
 
 ## Project-Level Config
 
-Create a `.bcli.toml` in your project directory to override defaults for that project:
+Create a `.bcli.toml` in your project directory to override defaults for that
+project:
 
 ```toml
 [defaults]
 profile = "sandbox"
 format = "json"
 ```
-
-Anyone working in that directory will automatically use those settings.
 
 ## Environment Variables
 
@@ -97,7 +114,8 @@ Anyone working in that directory will automatically use those settings.
 
 ## Custom API Defaults
 
-If you frequently query custom APIs without importing a registry, you can set defaults:
+If you frequently query custom APIs without importing a registry, you can set
+route defaults:
 
 ```toml
 [profiles.production]
@@ -106,7 +124,8 @@ api_group = "integration"
 api_version = "v1.0"
 ```
 
-These are used when an endpoint isn't found in any registry and no `--publisher/--group/--version` flags are provided.
+Imported endpoint registries are preferred; route defaults are only an escape
+hatch for ad-hoc access.
 
 ## File Locations
 
@@ -115,4 +134,5 @@ These are used when an endpoint isn't found in any registry and no `--publisher/
 | `~/.config/bcli/config.toml` | Main configuration |
 | `~/.config/bcli/tokens.json` | Cached auth tokens |
 | `~/.config/bcli/registries/*.json` | Imported custom API registries |
+| `~/.config/bcli/queries/*.yaml` | Saved queries |
 | `.bcli.toml` | Project-level config override |

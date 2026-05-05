@@ -1,8 +1,8 @@
 """Helpers for writing auth-sensitive files with private (0600) permissions.
 
-Token caches, WorkOS identity caches, and anything else that contains a
-bearer credential go through these helpers so the on-disk artefact isn't
-left readable by other local users on shared / permissive-umask systems.
+Token caches and anything else that contains a bearer credential go through
+these helpers so the on-disk artefact isn't left readable by other local
+users on shared / permissive-umask systems.
 
 Behaviour:
 

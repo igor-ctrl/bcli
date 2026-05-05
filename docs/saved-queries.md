@@ -150,9 +150,9 @@ bcli config init --profile ops --scoped \
 # 2. Admin authors ~/.config/bcli/queries/ops.yaml with 5–10 daily questions
 
 # 3. End user runs queries without touching OData
-bcli auth login --profile ops              # one-time browser sign-in
-bcli q --profile ops                       # see what's available
-bcli q --profile ops items-low-stock min=10
+bcli --profile ops auth login              # one-time browser sign-in
+bcli --profile ops q                       # see what's available
+bcli --profile ops q items-low-stock min=10
 ```
 
 ## Useful flags
