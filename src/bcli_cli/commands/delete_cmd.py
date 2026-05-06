@@ -25,8 +25,10 @@ def delete_command(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip the read-only-profile warning prompt"),
 ) -> None:
     """DELETE a record."""
-    if format and format in ("json", "csv", "ndjson", "raw"):
-        state.quiet = True
+    if format:
+        state.format = format  # propagate subcommand -f to dry-run + audit
+        if format in ("json", "csv", "ndjson", "raw"):
+            state.quiet = True
 
     print_context_banner()
 
@@ -54,9 +56,18 @@ def delete_command(
 
 async def _audited_delete(endpoint, record_id, **kwargs):
     from bcli_cli._audit_wrap import audited_write
+    from bcli_cli._url_resolve import try_resolve_url
+    resolved_url = try_resolve_url(
+        endpoint,
+        record_id=record_id,
+        publisher=kwargs.get("publisher"),
+        group=kwargs.get("group"),
+        version=kwargs.get("version"),
+    )
     return await audited_write(
         _execute_delete(endpoint, record_id, **kwargs),
         method="DELETE", endpoint=endpoint, record_id=record_id,
+        resolved_url=resolved_url,
     )
 
 

@@ -28,6 +28,7 @@ import typer
 from rich.console import Console
 
 from bcli_cli._state import state
+from bcli_cli._url_resolve import try_resolve_url
 
 _console = Console(stderr=True)
 
@@ -44,18 +45,25 @@ def render_dry_run(
     publisher: str | None = None,
     group: str | None = None,
     version: str | None = None,
+    force_standard: bool = False,
     extra: dict[str, Any] | None = None,
 ) -> None:
-    """Print a structured dry-run preview and ``typer.Exit(0)``."""
+    """Print a structured dry-run preview and ``typer.Exit(0)``.
+
+    ``force_standard=True`` mirrors ``attach upload --standard``: the
+    resolved URL skips the custom registry and points at the standard
+    ``/api/v2.0/`` route, matching what the actual write would hit.
+    """
     profile = state.profile
     profile_name = state.active_profile_name
 
-    resolved_url = _try_resolve_url(
+    resolved_url = try_resolve_url(
         endpoint,
         record_id=record_id,
         publisher=publisher,
         group=group,
         version=version,
+        force_standard=force_standard,
     )
 
     payload: dict[str, Any] = {
@@ -93,30 +101,6 @@ def render_dry_run(
     )
 
     raise typer.Exit()
-
-
-def _try_resolve_url(
-    endpoint: str,
-    *,
-    record_id: str | None,
-    publisher: str | None,
-    group: str | None,
-    version: str | None,
-) -> str | None:
-    """Best-effort URL resolution. Failures are non-fatal — the dry-run
-    still prints with ``resolved_url: null`` so the user can see (and
-    correct) what they asked for."""
-    try:
-        client = state.make_async_client()
-        return client._resolve_url(
-            endpoint,
-            record_id=record_id,
-            publisher=publisher,
-            group=group,
-            version=version,
-        )
-    except Exception:
-        return None
 
 
 def _render_human(payload: dict[str, Any]) -> None:

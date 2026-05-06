@@ -29,6 +29,7 @@ def patch_command(
 ) -> None:
     """PATCH (update) an existing record."""
     output_format = format or state.format
+    state.format = output_format  # propagate subcommand -f to dry-run + audit
     if output_format in ("json", "csv", "ndjson", "raw"):
         state.quiet = True
 
@@ -60,9 +61,18 @@ def patch_command(
 
 async def _audited_patch(endpoint, record_id, body, **kwargs):
     from bcli_cli._audit_wrap import audited_write
+    from bcli_cli._url_resolve import try_resolve_url
+    resolved_url = try_resolve_url(
+        endpoint,
+        record_id=record_id,
+        publisher=kwargs.get("publisher"),
+        group=kwargs.get("group"),
+        version=kwargs.get("version"),
+    )
     return await audited_write(
         _execute_patch(endpoint, record_id, body, **kwargs),
         method="PATCH", endpoint=endpoint, body=body, record_id=record_id,
+        resolved_url=resolved_url,
     )
 
 

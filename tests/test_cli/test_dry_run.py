@@ -162,6 +162,33 @@ class TestHumanOutput:
         assert "alpha" in captured.err or "alpha" in captured.out
 
 
+class TestForceStandardResolution:
+    """When ``force_standard=True`` (e.g. ``bcli attach upload --standard``),
+    the dry-run preview URL must reflect the standard /api/v2.0/ route, not
+    whatever the registry might say. Otherwise the preview misleads users
+    about exactly the escape-hatch case the flag exists for."""
+
+    def test_force_standard_uses_v2_route(self, configured_state, capsys, monkeypatch):
+        # Stub make_async_client so the client's _resolve_url would lie if
+        # called. force_standard=True must bypass it entirely.
+        class _LyingClient:
+            def _resolve_url(self, *_a, **_kw):
+                return "https://example.test/CUSTOM/PATH/should-not-be-used"
+
+        monkeypatch.setattr(state, "make_async_client", lambda **_: _LyingClient())
+        state.format = "json"
+        with pytest.raises(typer.Exit):
+            render_dry_run(
+                "UPLOAD", "documentAttachments",
+                force_standard=True,
+                extra={"file_path": "/tmp/x"},
+            )
+        payload = _capture_json_payload(capsys)
+        assert payload["resolved_url"] is not None
+        assert "/api/v2.0/" in payload["resolved_url"]
+        assert "CUSTOM/PATH" not in payload["resolved_url"]
+
+
 class TestResolutionFailure:
     def test_failed_url_resolution_does_not_break_dry_run(
         self, configured_state, capsys, monkeypatch
