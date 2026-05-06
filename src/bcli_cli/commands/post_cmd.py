@@ -38,18 +38,26 @@ def post_command(
     body = _parse_data(data)
 
     if state.dry_run:
-        console.print(f"[yellow]--dry-run: would POST to {endpoint}[/yellow]")
-        console.print(json.dumps(body, indent=2))
-        raise typer.Exit()
+        from bcli_cli._dry_run import render_dry_run
+        render_dry_run(
+            "POST", endpoint, body=body,
+            publisher=publisher, group=group, version=version,
+        )
 
     try:
-        result = asyncio.run(
-            _execute_post(endpoint, body, publisher=publisher, group=group, version=version)
-        )
+        result = asyncio.run(_audited_post(endpoint, body, publisher=publisher, group=group, version=version))
         format_output([result] if result else [], output_format)
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
+
+
+async def _audited_post(endpoint, body, **kwargs):
+    from bcli_cli._audit_wrap import audited_write
+    return await audited_write(
+        _execute_post(endpoint, body, **kwargs),
+        method="POST", endpoint=endpoint, body=body,
+    )
 
 
 async def _execute_post(endpoint, body, **kwargs):

@@ -34,17 +34,30 @@ def delete_command(
     confirm_write_or_exit("DELETE", endpoint, yes=yes)
 
     if state.dry_run:
-        console.print(f"[yellow]--dry-run: would DELETE {endpoint}({record_id})[/yellow]")
-        raise typer.Exit()
+        from bcli_cli._dry_run import render_dry_run
+        render_dry_run(
+            "DELETE", endpoint, record_id=record_id,
+            publisher=publisher, group=group, version=version,
+            extra={"etag": etag},
+        )
 
     try:
-        asyncio.run(
-            _execute_delete(endpoint, record_id, etag=etag, publisher=publisher, group=group, version=version)
-        )
+        asyncio.run(_audited_delete(
+            endpoint, record_id,
+            etag=etag, publisher=publisher, group=group, version=version,
+        ))
         console.print(f"[green]✓[/green] Deleted {endpoint}({record_id})")
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
+
+
+async def _audited_delete(endpoint, record_id, **kwargs):
+    from bcli_cli._audit_wrap import audited_write
+    return await audited_write(
+        _execute_delete(endpoint, record_id, **kwargs),
+        method="DELETE", endpoint=endpoint, record_id=record_id,
+    )
 
 
 async def _execute_delete(endpoint, record_id, **kwargs):

@@ -161,6 +161,67 @@ user, don't loop.
 
 ---
 
+## Dry-run before writes
+
+Before any `post` / `patch` / `delete` / `attach upload`, run with `--dry-run`
+and `-f json` to get a structured preview the user can sanity-check:
+
+```bash
+bcli --dry-run -f json post customers --data '{"displayName": "Test"}'
+```
+
+The response is a JSON envelope:
+
+```json
+{
+  "dry_run": true,
+  "method": "POST",
+  "endpoint": "customers",
+  "resolved_url": "https://.../api/v2.0/companies(<id>)/customers",
+  "profile": "dev",
+  "environment": "Sandbox",
+  "company_id": "<id>",
+  "body": {"displayName": "Test"}
+}
+```
+
+`PATCH` and `DELETE` envelopes also include `record_id`. The shape is stable —
+field names won't change. Use it to:
+
+* Show the user the resolved URL + body before they approve a real write.
+* Catch typos in the endpoint name before any HTTP call goes out.
+* Verify the right environment / company is targeted.
+
+## Caution levels for write endpoints
+
+Every endpoint exposes a `caution` level (`low` / `medium` / `high`) via
+`bcli endpoint info` and the `list_endpoints` MCP tool. Endpoints whose name
+contains a mutation verb (`post`, `release`, `cancel`, `void`, `reverse`,
+`apply`, `unapply`) are flagged `high` automatically. Treat `high` as: "do
+not write without explicit user confirmation, even if the user previously
+authorised a similar action." Examples:
+
+* `customers` → `low` (CRUD on a master-data record)
+* `salesInvoicePost` → `high` (irreversibly posts an invoice)
+* `customerLedgerEntryApply` → `high` (modifies posted ledger state)
+
+## Audit log location
+
+When the user has `[audit] enabled = true` in `~/.config/bcli/config.toml`,
+every write you trigger appends a JSON line to
+`~/.config/bcli/audit/<profile>.jsonl` (or whatever the user configured).
+Each entry includes `outcome` (`completed` / `failed` / `dry_run`),
+`correlation_id` (BC's `x-ms-correlation-request-id`), `latency_ms`, and the
+redacted request body. Useful for:
+
+* Showing the user "here's what just happened" after a multi-step task.
+* Grepping for the BC correlation ID when debugging a 500 the user reported.
+* Reconciling intent (`dry_run` entries) against actual writes.
+
+You don't need to enable the log yourself — it's the user's choice. If they
+ask "did that POST go through?" the audit log is the canonical answer when it's
+on, and the CLI exit code is the answer when it's off.
+
 ## When you have an MCP server
 
 If the user has mounted `bcli-mcp` (see [`docs/mcp-server.md`](docs/mcp-server.md)),

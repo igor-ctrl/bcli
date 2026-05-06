@@ -127,6 +127,69 @@ api_version = "v1.0"
 Imported endpoint registries are preferred; route defaults are only an escape
 hatch for ad-hoc access.
 
+## Audit Log
+
+Optional, opt-in audit trail for write operations. When enabled, every CLI write
+(POST / PATCH / DELETE / attach upload) appends one JSONL line to a per-profile
+file. Captures the resolved URL, response status, BC correlation ID, latency,
+and outcome — enough to reconstruct what happened (and what was attempted).
+
+Add an `[audit]` block to `~/.config/bcli/config.toml`:
+
+```toml
+[audit]
+enabled = true
+backend = "jsonl"
+path = "~/.config/bcli/audit/{profile}.jsonl"   # default; {profile} interpolated
+max_size_mb = 50
+include_reads = false
+redact_keys = ["password", "secret", "token", "key", "apiKey", "authorization"]
+```
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `enabled` | `false` | Master switch. When false, the audit code path is a no-op. |
+| `backend` | `"jsonl"` | `"jsonl"` (file) or `"null"` (drop). |
+| `path` | `~/.config/bcli/audit/{profile}.jsonl` | File location. `{profile}` is interpolated to the active profile name. |
+| `max_size_mb` | `50` | Rotation threshold. When the file exceeds this, the existing content moves to `<path>.1` and a fresh file is started. Only one backup is kept. |
+| `include_reads` | `false` | Reserved for a future release; currently writes only. |
+| `redact_keys` | `["password", "secret", ...]` | Substring-matched (case-insensitive) on request-body field names. Matched values are replaced with `***REDACTED***` before write. |
+
+Each entry is one JSON object with the following keys:
+
+```json
+{
+  "ts": "2026-05-06T10:00:00Z",
+  "profile": "production",
+  "environment": "Production",
+  "company_id": "<company-id>",
+  "method": "POST",
+  "endpoint": "customers",
+  "resolved_url": "https://api.businesscentral.dynamics.com/.../customers",
+  "record_id": null,
+  "request_body": {"displayName": "Test"},
+  "status": 201,
+  "correlation_id": "abc-...",
+  "latency_ms": 312,
+  "cli_version": "0.2.0",
+  "caller": "cli",
+  "outcome": "completed",
+  "error": null
+}
+```
+
+`outcome` is one of:
+
+- `completed` — the write succeeded.
+- `failed` — the write raised; `status`, `correlation_id`, and `error` capture
+  what BC said.
+- `dry_run` — the user passed `--dry-run`; no HTTP call fired but the intent
+  is recorded.
+
+The SDK (`AsyncBCClient`) does NOT auto-emit. Audit is a CLI-layer ergonomic;
+programmatic SDK users get unfiltered access by design and can wire their own
+logging.
+
 ## File Locations
 
 | File | Purpose |
@@ -135,4 +198,5 @@ hatch for ad-hoc access.
 | `~/.config/bcli/tokens.json` | Cached auth tokens |
 | `~/.config/bcli/registries/*.json` | Imported custom API registries |
 | `~/.config/bcli/queries/*.yaml` | Saved queries |
+| `~/.config/bcli/audit/*.jsonl` | Per-profile audit log (when `[audit] enabled = true`) |
 | `.bcli.toml` | Project-level config override |
