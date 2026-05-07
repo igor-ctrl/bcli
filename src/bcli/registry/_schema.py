@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+CautionLevel = Literal["low", "medium", "high"]
 
 
 class EndpointMetadata(BaseModel):
@@ -22,6 +26,13 @@ class EndpointMetadata(BaseModel):
 
     # Domain classification: "standard", "finance", "technical"
     domain: str = "standard"
+
+    # Caution level for agent driving — "low" (plain CRUD), "medium"
+    # (writes possible but reversible), "high" (mutates posted/closed
+    # records; agents should require explicit user approval). Defaults to
+    # ``low``; importers may set explicitly or use ``_infer_caution()`` to
+    # derive from the entity-set name.
+    caution: CautionLevel = "low"
 
     # Optional metadata from imports
     source_table: str = ""

@@ -29,6 +29,7 @@ def patch_command(
 ) -> None:
     """PATCH (update) an existing record."""
     output_format = format or state.format
+    state.format = output_format  # propagate subcommand -f to dry-run + audit
     if output_format in ("json", "csv", "ndjson", "raw"):
         state.quiet = True
 
@@ -40,18 +41,39 @@ def patch_command(
     body = _parse_data(data)
 
     if state.dry_run:
-        console.print(f"[yellow]--dry-run: would PATCH {endpoint}({record_id})[/yellow]")
-        console.print(json.dumps(body, indent=2))
-        raise typer.Exit()
+        from bcli_cli._dry_run import render_dry_run
+        render_dry_run(
+            "PATCH", endpoint, body=body, record_id=record_id,
+            publisher=publisher, group=group, version=version,
+            extra={"etag": etag},
+        )
 
     try:
-        result = asyncio.run(
-            _execute_patch(endpoint, record_id, body, etag=etag, publisher=publisher, group=group, version=version)
-        )
+        result = asyncio.run(_audited_patch(
+            endpoint, record_id, body,
+            etag=etag, publisher=publisher, group=group, version=version,
+        ))
         format_output([result] if result else [], output_format)
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
+
+
+async def _audited_patch(endpoint, record_id, body, **kwargs):
+    from bcli_cli._audit_wrap import audited_write
+    from bcli_cli._url_resolve import try_resolve_url
+    resolved_url = try_resolve_url(
+        endpoint,
+        record_id=record_id,
+        publisher=kwargs.get("publisher"),
+        group=kwargs.get("group"),
+        version=kwargs.get("version"),
+    )
+    return await audited_write(
+        _execute_patch(endpoint, record_id, body, **kwargs),
+        method="PATCH", endpoint=endpoint, body=body, record_id=record_id,
+        resolved_url=resolved_url,
+    )
 
 
 async def _execute_patch(endpoint, record_id, body, **kwargs):

@@ -8,7 +8,53 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from bcli.config._defaults import REGISTRIES_DIR
-from bcli.registry._schema import EndpointMetadata
+from bcli.registry._schema import CautionLevel, EndpointMetadata
+
+# Verbs in BC entity-set names that mutate posted/closed records.
+# Hits any of these (case-insensitive, camelCase or all-caps token) →
+# ``caution: high``. Generic BC terms only — no domain-specific vocabulary.
+_DANGEROUS_VERBS = frozenset({
+    "post",
+    "release",
+    "cancel",
+    "void",
+    "reverse",
+    "apply",
+    "unapply",
+})
+
+# Splits a name into tokens by camelCase boundaries:
+#   "salesInvoicePost"  -> ["sales", "Invoice", "Post"]
+#   "PaymentReverse"    -> ["Payment", "Reverse"]
+#   "salesinvoiceCANCEL"-> ["salesinvoice", "CANCEL"]
+# Falls back to a single all-caps chunk when there are no boundaries
+# (e.g. ``SALESINVOICEPOST``); we substring-check those separately.
+_CAMEL_SPLIT = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+")
+
+
+def _infer_caution(entity_set_name: str) -> CautionLevel:
+    """Heuristic ``caution`` level from an entity-set name.
+
+    Returns ``"high"`` if the name contains any of ``_DANGEROUS_VERBS`` as a
+    discrete token (camelCase boundary aware) or as a prefix/suffix of an
+    all-uppercase string. Returns ``"low"`` otherwise. Never returns
+    ``"medium"`` — that level is reserved for explicit setting by importers
+    or curators who know the endpoint's actual semantics.
+    """
+    if not entity_set_name:
+        return "low"
+
+    if entity_set_name.isupper():
+        lowered = entity_set_name.lower()
+        for verb in _DANGEROUS_VERBS:
+            if lowered.startswith(verb) or lowered.endswith(verb):
+                return "high"
+        return "low"
+
+    for token in _CAMEL_SPLIT.findall(entity_set_name):
+        if token.lower() in _DANGEROUS_VERBS:
+            return "high"
+    return "low"
 
 
 def import_from_postman(postman_file: Path) -> list[EndpointMetadata]:
@@ -71,6 +117,7 @@ def import_from_postman(postman_file: Path) -> list[EndpointMetadata]:
                 source_table=source_table,
                 supports=[method],
                 key_field="systemId",
+                caution=_infer_caution(entity_set_name),
             )
         else:
             existing = endpoints[key]
@@ -149,6 +196,8 @@ def import_from_json(json_file: Path) -> list[EndpointMetadata]:
     # bcli format
     if "endpoints" in raw:
         for entry in raw["endpoints"]:
+            # Backfill caution from heuristic when the source file omits it.
+            entry.setdefault("caution", _infer_caution(entry.get("entity_set_name", "")))
             endpoints.append(EndpointMetadata.model_validate(entry))
         return endpoints
 
@@ -158,8 +207,9 @@ def import_from_json(json_file: Path) -> list[EndpointMetadata]:
             continue
         for entry in items:
             api_group = entry.get("api_group", group_name)
+            entity_set_name = entry.get("entity_set_name", "")
             meta = EndpointMetadata(
-                entity_set_name=entry.get("entity_set_name", ""),
+                entity_set_name=entity_set_name,
                 entity_name=entry.get("entity_name", ""),
                 api_publisher=entry.get("api_publisher", ""),
                 api_group=api_group,
@@ -171,6 +221,7 @@ def import_from_json(json_file: Path) -> list[EndpointMetadata]:
                 key_field=entry.get("odata_key_fields", "systemId"),
                 editable=entry.get("editable", "false").lower() == "true",
                 supports=["GET"] if entry.get("data_access_intent") == "ReadOnly" else ["GET", "POST", "PATCH", "DELETE"],
+                caution=entry.get("caution") or _infer_caution(entity_set_name),
             )
             if meta.entity_set_name:
                 endpoints.append(meta)
@@ -269,6 +320,7 @@ def _parse_metadata_xml(
             supports=["GET"],  # Conservative default — metadata doesn't always tell us
             key_field="systemId",
             field_names=fields_by_type.get(entity_type, []),
+            caution=_infer_caution(entity_set_name),
         ))
 
     return sorted(endpoints, key=lambda e: e.entity_set_name)

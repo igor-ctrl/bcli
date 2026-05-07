@@ -30,6 +30,7 @@ def _endpoint_to_dict(ep) -> dict:
         "group": ep.api_group,
         "version": ep.api_version,
         "description": ep.description or "",
+        "caution": ep.caution,
     }
 
 
@@ -154,6 +155,8 @@ def endpoint_info(
     console.print(f"  Operations:   {', '.join(ep.supports)}")
     console.print(f"  Key field:    {ep.key_field}")
     console.print(f"  Category:     {ep.category}")
+    caution_color = {"low": "green", "medium": "yellow", "high": "red"}[ep.caution]
+    console.print(f"  Caution:      [{caution_color}]{ep.caution}[/{caution_color}]")
     console.print(f"  Custom:       {'Yes' if ep.is_custom else 'No (standard v2.0)'}")
     if ep.description:
         console.print(f"  Description:  {ep.description}")

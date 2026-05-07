@@ -53,13 +53,51 @@ bcli delete customers "a1b2c3d4-..." --etag 'W/"ABC123"'
 
 ## Dry Run
 
-Preview write operations without executing:
+Preview write operations without executing. Works on `post`, `patch`, `delete`,
+and `attach upload`. The output adapts to `--format`:
+
+**Human format (default):** rich panel on stderr with the resolved URL, profile
+context, and the request body.
 
 ```bash
 bcli --dry-run post customers --data '{"displayName": "Test"}'
-# --dry-run: would POST to customers
-# {"displayName": "Test"}
+# --dry-run: would POST customers
+#   URL:        https://api.businesscentral.dynamics.com/.../api/v2.0/companies(<id>)/customers
+#   Profile:    dev
+#   Env:        Sandbox
+#   Company:    <company-id>
+# {
+#   "displayName": "Test"
+# }
 ```
+
+**Machine format (`-f json` / `-f ndjson` / `-f raw`):** a single JSON envelope
+on stdout that an agent can parse before deciding whether to proceed:
+
+```bash
+bcli --dry-run -f json post customers --data '{"displayName": "Test"}'
+```
+
+```json
+{
+  "dry_run": true,
+  "method": "POST",
+  "endpoint": "customers",
+  "resolved_url": "https://api.businesscentral.dynamics.com/.../customers",
+  "profile": "dev",
+  "environment": "Sandbox",
+  "company_id": "<company-id>",
+  "body": {"displayName": "Test"}
+}
+```
+
+`PATCH` and `DELETE` envelopes also include `record_id`. `attach upload` adds
+`file_path`, `byte_size`, `parent_type`, and `parent_id`. The envelope shape is
+stable — agents can rely on the field names.
+
+When the audit log is enabled (see [Audit Log](configuration.md#audit-log)), each
+dry-run is recorded with `outcome: "dry_run"` so the paper trail captures intent
+even when no HTTP call fires.
 
 ## Custom API Routes
 
