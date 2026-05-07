@@ -154,12 +154,54 @@ class TelemetryConfig(BaseModel):
         return self.enabled and self.backend.strip().lower() not in ("", "null")
 
 
+class AuditConfig(BaseModel):
+    """Optional audit log for write operations.
+
+    When ``enabled = true`` every CLI write (POST / PATCH / DELETE / attach
+    upload) appends one JSONL line to a per-profile log file. Captures
+    request shape, resolved URL, response status, BC correlation id,
+    latency, and outcome — sufficient for forensic review and for agent-
+    driven workflows where you want a paper trail of what was done.
+
+    Defaults are off and conservative: zero overhead when disabled, no
+    capture of read traffic, and request bodies are key-redacted before
+    write.
+
+    Built-in backends:
+
+    * ``"null"``  — drop everything (effectively disabled).
+    * ``"jsonl"`` — append one JSON object per line to ``path`` (default).
+
+    The path supports a ``{profile}`` placeholder so a single global
+    config produces a per-profile log file automatically.
+    """
+
+    enabled: bool = False
+    backend: str = "jsonl"
+    path: str | None = None
+    max_size_mb: int = Field(default=50, ge=1)
+    include_reads: bool = False
+    redact_keys: list[str] = Field(
+        default_factory=lambda: [
+            "password",
+            "secret",
+            "token",
+            "key",
+            "apiKey",
+            "authorization",
+        ]
+    )
+
+    model_config = {"extra": "allow"}
+
+
 class BCConfig(BaseModel):
     """Top-level configuration."""
 
     defaults: BCDefaults = Field(default_factory=BCDefaults)
     profiles: dict[str, BCProfile] = Field(default_factory=dict)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
+    audit: AuditConfig = Field(default_factory=AuditConfig)
 
     model_config = {"extra": "allow"}
 

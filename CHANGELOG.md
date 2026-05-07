@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-06
+
+### Added
+
+- **Structured `--dry-run` output** — write commands (`post`, `patch`,
+  `delete`, `attach upload`) now emit a stable JSON envelope on stdout
+  when `--format json` / `ndjson` / `raw` is selected. Includes
+  `dry_run`, `method`, `endpoint`, `resolved_url`, `profile`,
+  `environment`, `company_id`, `body`, and `record_id` (when applicable).
+  Agents can parse the envelope before deciding whether to proceed. The
+  human format keeps the same yellow rich panel on stderr but is now
+  augmented with the resolved URL and profile context. See
+  `docs/write-operations.md`.
+- **Opt-in audit log** — new `[audit]` config section persists every
+  write to a per-profile JSONL file. Each entry captures the resolved
+  URL, response status, BC `correlation_id`, latency, redacted request
+  body, and outcome (`completed` / `failed` / `dry_run`). Bounded disk
+  usage via single-backup rotation. SDK (`AsyncBCClient`) does NOT
+  auto-emit; this is a CLI-layer ergonomic on top of BC permission sets.
+  See `docs/configuration.md#audit-log`.
+- **Endpoint `caution` flag** — `EndpointMetadata` now carries a
+  `caution: low | medium | high` level. Importers populate it
+  automatically from a verb-name heuristic (entities containing `post`,
+  `release`, `cancel`, `void`, `reverse`, `apply`, `unapply` are flagged
+  `high`). Surfaced in `bcli endpoint info` and the `list_endpoints` MCP
+  tool so agents can require explicit user confirmation before mutating
+  posted/closed records.
+- New `AGENTS.md` recipes for dry-run-first writes, caution-level
+  interpretation, and audit-log location.
+
 ## [0.1.5] — 2026-05-05
 
 ### Added

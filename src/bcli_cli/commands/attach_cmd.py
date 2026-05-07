@@ -61,6 +61,7 @@ def upload_command(
     take priority. Force a specific route with ``--publisher/--group/--version``.
     """
     output_format = format or state.format
+    state.format = output_format  # propagate subcommand -f to dry-run + audit
     if output_format in ("json", "csv", "ndjson", "raw"):
         state.quiet = True
 
@@ -70,14 +71,30 @@ def upload_command(
     confirm_write_or_exit("UPLOAD", "documentAttachments", yes=yes)
 
     if state.dry_run:
-        console.print(
-            f"[yellow]--dry-run: would upload {file_path} ({file_path.stat().st_size} bytes) "
-            f"as attachment on {parent_type}({parent_id})[/yellow]"
+        from bcli_cli._dry_run import render_dry_run
+        render_dry_run(
+            "UPLOAD", "documentAttachments",
+            publisher=publisher, group=group, version=version,
+            force_standard=standard,
+            extra={
+                "file_path": str(file_path),
+                "byte_size": file_path.stat().st_size,
+                "parent_type": parent_type,
+                "parent_id": parent_id,
+                "file_name": file_name or file_path.name,
+                "force_standard": standard,
+            },
         )
-        raise typer.Exit()
 
     try:
-        result = asyncio.run(
+        from bcli_cli._audit_wrap import audited_write
+        from bcli_cli._url_resolve import try_resolve_url
+        resolved_url = try_resolve_url(
+            "documentAttachments",
+            publisher=publisher, group=group, version=version,
+            force_standard=standard,
+        )
+        result = asyncio.run(audited_write(
             _execute_attach(
                 file_path=file_path,
                 parent_type=parent_type,
@@ -88,8 +105,17 @@ def upload_command(
                 group=group,
                 version=version,
                 force_standard=standard,
-            )
-        )
+            ),
+            method="UPLOAD",
+            endpoint="documentAttachments",
+            body={
+                "parent_type": parent_type,
+                "parent_id": parent_id,
+                "file_name": file_name or file_path.name,
+                "byte_size": file_path.stat().st_size,
+            },
+            resolved_url=resolved_url,
+        ))
         format_output([result] if result else [], output_format)
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -116,17 +142,26 @@ def test_command(
     upload in one shot.
     """
     output_format = format or state.format
+    state.format = output_format  # propagate subcommand -f to dry-run + audit
     if output_format in ("json", "csv", "ndjson", "raw"):
         state.quiet = True
 
     print_context_banner()
 
     if state.dry_run:
-        console.print(
-            f"[yellow]--dry-run: would create draft purchaseInvoice for vendor {vendor_id}, "
-            f"then attach {file_path}[/yellow]"
+        from bcli_cli._dry_run import render_dry_run
+        render_dry_run(
+            "TEST_ATTACH", "purchaseInvoices+documentAttachments",
+            publisher=publisher, group=group, version=version,
+            force_standard=standard,
+            extra={
+                "vendor_id": vendor_id,
+                "invoice_date": invoice_date,
+                "file_path": str(file_path),
+                "byte_size": file_path.stat().st_size,
+                "force_standard": standard,
+            },
         )
-        raise typer.Exit()
 
     try:
         result = asyncio.run(
