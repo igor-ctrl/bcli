@@ -8,10 +8,6 @@ the same global config produces a per-profile log automatically.
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from bcli.audit._factory import get_audit_sink
 from bcli.audit._protocol import JSONLAuditSink, NullAuditSink
 from bcli.config._model import AuditConfig
