@@ -1,26 +1,24 @@
 """Bundle verification — content checksum today, pluggable signature later.
 
-.. warning::
+.. note::
 
-    :class:`Sha256Verifier` is **not** an authenticity check. It proves
-    that the bundle on disk is internally consistent (each file matches
-    its declared hash, and the contents-roll-up hash matches the manifest
-    field). It does **not** prove the bundle came from the publisher.
+    :class:`Sha256Verifier` is an **integrity** check, not an
+    **authenticity** check. It proves that the bundle on disk is
+    internally consistent (each file matches its declared hash, and
+    the contents-roll-up hash matches the manifest field). It does
+    not prove the bundle came from any particular publisher.
 
-    A compromised CDN can mint a malicious ``registry.json``, recompute
-    the per-file hashes, recompute the roll-up, and pass verification.
-    Until a real cryptographic signer (minisign / cosign / ed25519 +
-    pinned public key) lands at this seam, the team must distribute
-    bundles only via private blob storage with org-level auth and an
-    HTTPS-only contract. **Do not roll out to production without that
-    constraint, or without landing the signing upgrade.**
+    Operators distributing bundles via a trusted private channel
+    (org-authenticated HTTPS to a private blob, or an internal
+    artifact registry) get authenticity from the channel itself; the
+    integrity check then catches in-flight corruption. Operators who
+    want defense-in-depth — or who are distributing over a path they
+    do not fully trust — should plug in :class:`Ed25519Verifier`
+    (tracked separately) at this seam.
 
-The :class:`Verifier` protocol is the seam for cryptographic signing.
-A real signer plugs in here without touching apply / fetch / publish —
-refusing to ship phase 2 without a signer would have blocked the rest
-of the rollout on a tooling decision that doesn't need to be made yet,
-but tracking that decision as a phase-2-extension ship-blocker (see
-``docs/plans/team-deployment.md`` "Risks") is mandatory.
+The :class:`Verifier` protocol is the seam for plugging in stronger
+verification (cryptographic signing, transparency logs, etc.) without
+touching the apply / fetch / publish code paths.
 
 Why content hashes instead of "hash the tarball wire bytes": tarballs
 encode file mtimes, ownership, and ordering, so the wire bytes aren't

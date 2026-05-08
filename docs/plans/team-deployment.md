@@ -1,6 +1,8 @@
-# Team Deployment Plan
+# Beautech Team Deployment Plan
 
-Status: draft. Target: finance team (~10 users) + engine technical team (~10 users) on the existing scoped-profile substrate.
+Status: draft. **Beautech-internal bootstrap document, not part of the OSS bcli roadmap.** The bcli OSS tool ships independently of this plan; the work below describes how Beautech rolls bundles + diagnostics to its own finance and engine-tech teams on top of the upstream substrate.
+
+Target: finance team (~10 users) + engine technical team (~10 users) on the existing scoped-profile substrate.
 
 ## Why this plan exists
 
@@ -266,17 +268,20 @@ Backend: pluggable `cache_backend` with `redis` extra, mirroring the existing `[
 
 ## Risks and open questions
 
-- **Phase 2 signing is a ship-blocker for finance rollout.** The current
+- **Beautech rollout gate: publisher signing.** The current
   `Sha256Verifier` only proves internal consistency: each file matches
   its declared hash, and the manifest's roll-up matches the contents
   map. It does NOT authenticate the publisher. A compromised CDN can
   mint a malicious `registry.json`, recompute the hashes, and pass
-  verification. Before bundles go to finance, either ship a real
-  cryptographic signer (`minisign` / `cosign` / ed25519 + pinned key)
-  at the `bcli.bundle.Verifier` seam, or restrict bundle distribution
-  to private blob storage with org-level auth and treat HTTPS+auth as
-  the trust boundary. Document the choice; do not ship "verified"
-  without one of the two.
+  verification. Before Beautech rolls bundles to finance / engine-tech,
+  either ship a real cryptographic signer (`minisign` / `cosign` /
+  ed25519 + pinned key) at the `bcli.bundle.Verifier` seam, or restrict
+  bundle distribution to private blob storage with org-level auth and
+  treat HTTPS+auth as the trust boundary. Document the choice
+  internally; do not enable `bcli config refresh` for finance/engine-
+  tech without one of the two. Note: this is a Beautech deployment
+  gate, not an OSS bcli release gate — the upstream tool can ship the
+  bundle infra without dictating how operators use it.
 - **Signing key custody.** Who owns the bundle signing key, and how is it rotated when an owner leaves? Decide before phase 2 ships.
 - **Bundle URL discovery.** First-time install needs to know where to refresh from. Likely `bcli config init --scoped --bundle-url <url>` extends the existing wizard. Verify this fits the wizard's current shape.
 - **Field discovery in scoped profiles.** Today `bcli endpoint fields` writes back to the local registry. With overlay-off-by-default, sandboxed users can't improve their own setup. The plan: those discoveries get logged to a "candidate fields" file the user can email to their bundle owner. Better mechanism welcome.
