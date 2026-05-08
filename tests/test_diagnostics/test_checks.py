@@ -6,7 +6,6 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 
 from bcli.config import BCConfig, BCProfile, BCDefaults
 from bcli.diagnostics._checks import (
