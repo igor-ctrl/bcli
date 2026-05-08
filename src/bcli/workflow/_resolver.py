@@ -9,11 +9,13 @@ from bcli.errors import WorkflowError
 from bcli.workflow._models import WorkflowContext
 
 # Matches  ${{ steps.name.path }}  or  ${{ params.key }}
-REFERENCE_PATTERN = re.compile(r"\$\{\{\s*(steps|params)\.([\w.]+)\s*\}\}")
+# Identifier set: word chars + dot (for nested step output paths) + hyphen
+# (param names like ``vendor-no`` are commonly used by saved queries).
+REFERENCE_PATTERN = re.compile(r"\$\{\{\s*(steps|params)\.([\w.\-]+)\s*\}\}")
 
 # Same pattern, but must be the *entire* string (for type preservation).
 FULL_REFERENCE_PATTERN = re.compile(
-    r"^\s*\$\{\{\s*(steps|params)\.([\w.]+)\s*\}\}\s*$"
+    r"^\s*\$\{\{\s*(steps|params)\.([\w.\-]+)\s*\}\}\s*$"
 )
 
 

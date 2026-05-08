@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hyphenated saved-query param names** — the workflow template
+  resolver now accepts hyphens in identifiers, so references like
+  `${{ params.vendor-no }}` substitute correctly. Previously the regex
+  matched only `[\w.]`, silently leaving the literal `${{ … }}` token
+  in the rendered filter (BC then 400'd or, worse, returned mismatched
+  rows). Affects both `bcli q` saved queries and `bcli batch`
+  workflows.
+
 ## [0.2.0] — 2026-05-06
 
 ### Added
