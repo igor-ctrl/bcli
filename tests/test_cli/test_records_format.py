@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
 
-from bcli_cli.output import _formatters
 from bcli_cli.output._formatters import (
     _format_records,
     _should_auto_records,

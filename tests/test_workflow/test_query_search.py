@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from bcli.workflow._query_search import (
     QueryEntry,
