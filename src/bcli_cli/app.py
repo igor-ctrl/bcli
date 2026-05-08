@@ -79,6 +79,7 @@ def main(
     state.company_override = company
     resolved_format = format or detect_default_format()
     state.format = resolved_format
+    state.format_explicit = format is not None
     state.verbose = verbose
     state.debug = debug
     state.dry_run = dry_run
@@ -164,6 +165,7 @@ from bcli_cli.commands import (  # noqa: E402
     config_cmd,
     context_cmd,
     delete_cmd,
+    doctor_cmd,
     endpoint_cmd,
     env_cmd,
     get_cmd,
@@ -189,6 +191,7 @@ app.command(name="patch")(patch_cmd.patch_command)
 app.command(name="delete")(delete_cmd.delete_command)
 app.command(name="q", help="Run a saved query (no OData required)")(query_cmd.query_command)
 app.command(name="ai-context")(context_cmd.ai_context_command)
+app.command(name="doctor", help="Diagnose your bcli install (self-rescue for team users)")(doctor_cmd.doctor_command)
 
 # ETL command — optional, only available when dlt is installed
 try:

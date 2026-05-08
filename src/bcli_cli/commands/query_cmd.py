@@ -10,6 +10,15 @@ YAML schema (per file)::
     queries:
       <name>:
         description: "human description"
+        # — discoverability metadata (all optional, all additive) —
+        aliases:   [synonym1, synonym2]
+        tags:      [period-close, ap, intercompany]
+        owner:     finance-ops
+        freshness: live          # live | daily | reference
+        examples:
+          - bcli q <name> name=Fabrikam
+        related:   [other-query-name]
+        # — query body —
         endpoint: <entitySetName>
         params:
           <key>:
@@ -20,11 +29,17 @@ YAML schema (per file)::
             min: 1                                       # numeric lower bound
             max: 1000                                    # numeric upper bound
             enum: ["Open", "Posted"]                    # allowed literal set
+            hint: "BC Vendor No."                       # shown in `bcli q info`
         filter:  "displayName eq '${{ params.name }}'"
         select:  "number,displayName,email,phoneNumber"
         orderby: "displayName asc"
         top: 50
         all: false
+
+The metadata fields exist purely for human discoverability — ``bcli q list``
+filters by tag/owner, ``bcli q search`` ranks across name/alias/tag/desc,
+and ``bcli q info`` shows the full record. None of the metadata changes
+how a query executes.
 
 Defense-in-depth notes:
 
@@ -87,6 +102,8 @@ def query_command(
       bcli q customer-by-name name=Fabrikam
       bcli q open-invoices-by-customer customer-id=C00010 limit=20
       bcli q customer-by-name name=Fabrikam --show
+      bcli q search "overdue invoices"        # discover by NL phrase
+      bcli q info customer-by-name             # full metadata for one query
     """
     profile_name = state.active_profile_name
     queries_file = QUERIES_DIR / f"{profile_name}.yaml"
@@ -95,14 +112,70 @@ def query_command(
         _list_queries(profile_name, queries_file)
         return
 
+    # Sub-verb dispatch.
+    #
+    # The first positional arg can be a real query name, a reserved
+    # sub-verb (`list`, `search`, `find`, `info`), or `run` — the
+    # explicit escape hatch for cases where someone has authored a
+    # query whose name shadows a sub-verb. Reserved names produce a
+    # hard error at bundle-load time (see `_check_reserved_names` in
+    # the saved-query loader) so this branch is never reached for a
+    # well-formed bundle, but `bcli q run <name>` ensures users always
+    # have a way to invoke a hypothetically-misnamed query without
+    # editing the bundle.
+    if name == "run":
+        if not params:
+            console.print("[red]`bcli q run <name> [key=value …]` expected.[/red]")
+            raise typer.Exit(2)
+        # Re-enter with name=<first param>, params=<rest> — keeps the
+        # validation path identical to the regular invocation.
+        run_name, *run_params = params
+        return query_command(
+            name=run_name,
+            params=run_params or None,
+            show=show,
+            format=format,
+        )
+    if name in ("search", "find"):
+        if not params:
+            console.print("[red]`bcli q search <phrase>` expected.[/red]")
+            raise typer.Exit(2)
+        _search_queries(profile_name, queries_file, " ".join(params))
+        return
+    if name == "info":
+        if not params:
+            console.print("[red]`bcli q info <query-name>` expected.[/red]")
+            raise typer.Exit(2)
+        _query_info(profile_name, queries_file, params[0])
+        return
+    if name == "list":
+        # Optional filters live in `params` as `tag=foo owner=bar` pairs.
+        flt = {k: v for k, _, v in (p.partition("=") for p in (params or []))}
+        _list_queries(
+            profile_name,
+            queries_file,
+            tag=flt.get("tag"),
+            owner=flt.get("owner"),
+            freshness=flt.get("freshness"),
+        )
+        return
+
     saved = _load_saved_queries(queries_file)
     if name not in saved:
-        available = ", ".join(sorted(saved.keys())) or "(none)"
-        console.print(
-            f"[red]Saved query '{name}' not found.[/red] Available: {available}\n"
-            f"[dim]Edit {queries_file} to add one.[/dim]"
-        )
-        raise typer.Exit(1)
+        # Try alias resolution before giving up — a curated bundle uses
+        # aliases to bridge "the query is called overdue-ic but the user
+        # typed overdue-intercompany" without forcing duplicate definitions.
+        alias_hit = _resolve_alias(saved, name)
+        if alias_hit is not None:
+            name = alias_hit
+        else:
+            available = ", ".join(sorted(saved.keys())) or "(none)"
+            console.print(
+                f"[red]Saved query '{name}' not found.[/red] Available: {available}\n"
+                f"[dim]Edit {queries_file} to add one,"
+                f" or run `bcli q search '{name}'` to find a near match.[/dim]"
+            )
+            raise typer.Exit(1)
 
     spec = saved[name]
     resolved_params = _resolve_params(spec.get("params", {}), params or [])
@@ -118,6 +191,7 @@ def query_command(
         return
 
     output_format = format or state.format
+    explicit_format = (format is not None) or state.format_explicit
     if output_format in ("json", "csv", "ndjson", "raw"):
         state.quiet = True
 
@@ -136,7 +210,7 @@ def query_command(
     started = _time.monotonic()
     try:
         records = asyncio.run(_run_saved_query(endpoint, resolved))
-        format_output(records, output_format)
+        format_output(records, output_format, auto_format=not explicit_format)
         latency_ms = (_time.monotonic() - started) * 1000.0
         capture_filter = state.config.telemetry.capture_filter_text
         sink.emit(*_tev.query(
@@ -165,8 +239,18 @@ def query_command(
 # ─── Helpers ─────────────────────────────────────────────────────────
 
 
-def _list_queries(profile_name: str, queries_file: Path) -> None:
-    """Print a table of saved queries for the active profile."""
+def _list_queries(
+    profile_name: str,
+    queries_file: Path,
+    *,
+    tag: str | None = None,
+    owner: str | None = None,
+    freshness: str | None = None,
+) -> None:
+    """Print a table of saved queries for the active profile.
+
+    Optional filters narrow the catalog by tag / owner / freshness.
+    """
     if not queries_file.is_file():
         console.print(
             f"[dim]No saved queries for profile '{profile_name}'.[/dim]\n"
@@ -180,27 +264,164 @@ def _list_queries(profile_name: str, queries_file: Path) -> None:
         console.print(f"[dim]{queries_file} has no queries defined.[/dim]")
         return
 
-    table = Table(show_header=True, header_style="bold", title=f"Saved queries — {profile_name}")
+    from bcli.workflow._query_search import filter_entries, normalize_queries
+
+    entries = normalize_queries(queries)
+    entries = filter_entries(entries, tag=tag, owner=owner, freshness=freshness)
+    if not entries:
+        active = ", ".join(
+            f"{k}={v}" for k, v in (("tag", tag), ("owner", owner), ("freshness", freshness)) if v
+        )
+        console.print(
+            f"[dim]No queries match {active or '(no filters)'}.[/dim]\n"
+            "[dim]Run `bcli q list` with no filters to see the whole catalog.[/dim]"
+        )
+        return
+
+    title_bits = [f"Saved queries — {profile_name}"]
+    for label, value in (("tag", tag), ("owner", owner), ("freshness", freshness)):
+        if value:
+            title_bits.append(f"{label}={value}")
+    table = Table(
+        show_header=True,
+        header_style="bold",
+        title=" · ".join(title_bits),
+    )
     table.add_column("Name", style="cyan")
     table.add_column("Endpoint")
-    table.add_column("Params")
-    table.add_column("Description", max_width=60)
+    table.add_column("Tags")
+    table.add_column("Owner")
+    table.add_column("Description", max_width=50, overflow="fold")
 
-    for q_name in sorted(queries.keys()):
-        spec = queries[q_name]
-        decl_params = spec.get("params") or {}
+    for entry in entries:
+        decl_params = entry.params or {}
         param_summary = ", ".join(
             f"{k}{'*' if (isinstance(v, dict) and v.get('required', True)) else ''}"
             for k, v in decl_params.items()
         )
+        endpoint_cell = entry.endpoint or "?"
+        if param_summary:
+            endpoint_cell = f"{endpoint_cell} ({param_summary})"
         table.add_row(
-            q_name,
-            spec.get("endpoint", "?"),
-            param_summary or "—",
-            spec.get("description", ""),
+            entry.name,
+            endpoint_cell,
+            ", ".join(entry.tags) or "—",
+            entry.owner or "—",
+            entry.description,
         )
     console.print(table)
-    console.print("[dim]Run with: bcli q <name> [key=value ...][/dim]")
+    console.print(
+        "[dim]Run with: bcli q <name> [key=value ...]   "
+        "Discover with: bcli q search <phrase>[/dim]"
+    )
+
+
+def _search_queries(profile_name: str, queries_file: Path, phrase: str) -> None:
+    """Rank queries by name / alias / tag / description match."""
+    queries = _load_saved_queries(queries_file)
+    if not queries:
+        console.print(f"[dim]No saved queries for profile '{profile_name}'.[/dim]")
+        return
+
+    from bcli.workflow._query_search import normalize_queries, search_entries
+
+    entries = normalize_queries(queries)
+    hits = search_entries(entries, phrase)
+    if not hits:
+        console.print(
+            f"[yellow]No queries matched '{phrase}'.[/yellow]\n"
+            "[dim]Try a shorter phrase or run `bcli q list` to browse.[/dim]"
+        )
+        raise typer.Exit(1)
+
+    table = Table(
+        show_header=True,
+        header_style="bold",
+        title=f"Search — '{phrase}'",
+    )
+    table.add_column("Score", justify="right", style="dim")
+    table.add_column("Name", style="cyan")
+    table.add_column("Tags")
+    table.add_column("Description", max_width=60, overflow="fold")
+    for score, entry in hits:
+        table.add_row(
+            str(score),
+            entry.name,
+            ", ".join(entry.tags) or "—",
+            entry.description,
+        )
+    console.print(table)
+    console.print(
+        "[dim]Open one with: bcli q info <name>     Run with: bcli q <name> ...[/dim]"
+    )
+
+
+def _query_info(profile_name: str, queries_file: Path, name: str) -> None:
+    """Print full metadata for one query."""
+    queries = _load_saved_queries(queries_file)
+    if name not in queries:
+        alias_hit = _resolve_alias(queries, name)
+        if alias_hit is None:
+            console.print(
+                f"[red]Saved query '{name}' not found.[/red] "
+                f"Run `bcli q search '{name}'` to find similar."
+            )
+            raise typer.Exit(1)
+        name = alias_hit
+
+    from bcli.workflow._query_search import QueryEntry
+
+    entry = QueryEntry.from_raw(name, queries[name])
+
+    console.print(f"[bold cyan]{entry.name}[/bold cyan]")
+    if entry.description:
+        console.print(f"  {entry.description}")
+    console.print()
+    if entry.aliases:
+        console.print(f"  [dim]aliases:[/dim]    {', '.join(entry.aliases)}")
+    if entry.tags:
+        console.print(f"  [dim]tags:[/dim]       {', '.join(entry.tags)}")
+    if entry.owner:
+        console.print(f"  [dim]owner:[/dim]      {entry.owner}")
+    if entry.freshness:
+        console.print(f"  [dim]freshness:[/dim]  {entry.freshness}")
+    if entry.endpoint:
+        console.print(f"  [dim]endpoint:[/dim]   {entry.endpoint}")
+    if entry.params:
+        console.print("  [dim]params:[/dim]")
+        for pname, pdef in entry.params.items():
+            if isinstance(pdef, dict):
+                bits = []
+                if pdef.get("required"):
+                    bits.append("required")
+                if "default" in pdef:
+                    bits.append(f"default={pdef['default']!r}")
+                if pdef.get("type"):
+                    bits.append(pdef["type"])
+                if pdef.get("hint"):
+                    bits.append(f"hint={pdef['hint']!r}")
+                tail = f" ({', '.join(bits)})" if bits else ""
+            else:
+                tail = ""
+            console.print(f"    {pname}{tail}")
+    if entry.examples:
+        console.print("  [dim]examples:[/dim]")
+        for ex in entry.examples:
+            console.print(f"    {ex}")
+    if entry.related:
+        console.print(f"  [dim]related:[/dim]    {', '.join(entry.related)}")
+
+
+def _resolve_alias(queries: dict[str, dict[str, Any]], term: str) -> str | None:
+    """Return the canonical query name when ``term`` matches an alias."""
+    term_lower = term.lower()
+    for q_name, body in queries.items():
+        aliases = body.get("aliases") or []
+        if not isinstance(aliases, (list, tuple)):
+            continue
+        if any(str(a).lower() == term_lower for a in aliases):
+            return q_name
+    return None
 
 
 def _print_starter_example(queries_file: Path) -> None:
@@ -217,6 +438,13 @@ def _print_starter_example(queries_file: Path) -> None:
         "[dim]    select: number,displayName,email[/dim]\n"
         "[dim]    top: 25[/dim]\n"
     )
+
+
+# Reserved names that the `bcli q` sub-verb dispatch consumes. A query
+# whose name lives here is unreachable except via `bcli q run <name>`,
+# so the loader hard-errors at parse time — this is a misconfigured
+# bundle and the right place to catch it is at refresh, not at runtime.
+_RESERVED_QUERY_NAMES = frozenset({"list", "search", "find", "info", "run"})
 
 
 def _load_saved_queries(queries_file: Path) -> dict[str, dict[str, Any]]:
@@ -239,6 +467,18 @@ def _load_saved_queries(queries_file: Path) -> dict[str, dict[str, Any]]:
     if not isinstance(queries, dict):
         console.print(f"[red]{queries_file}: 'queries' must be a mapping.[/red]")
         raise typer.Exit(1)
+
+    collisions = sorted(set(queries) & _RESERVED_QUERY_NAMES)
+    if collisions:
+        console.print(
+            f"[red]{queries_file}: reserved query names used: "
+            f"{', '.join(collisions)}.[/red]\n"
+            f"[dim]These names collide with `bcli q` sub-verbs. "
+            f"Rename the queries or invoke them via `bcli q run <name>`. "
+            f"Reserved: {sorted(_RESERVED_QUERY_NAMES)}[/dim]"
+        )
+        raise typer.Exit(1)
+
     return queries
 
 
