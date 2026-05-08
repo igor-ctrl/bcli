@@ -1,6 +1,6 @@
 # Beautech Team Deployment Plan
 
-Status: draft. **Beautech-internal bootstrap document, not part of the OSS bcli roadmap.** The bcli OSS tool ships independently of this plan; the work below describes how Beautech rolls bundles + diagnostics to its own finance and engine-tech teams on top of the upstream substrate.
+Status: draft. **Beautech-internal bootstrap document, not part of the OSS bcli roadmap.** The bcli OSS tool ships independently of this plan; the work below describes how Beautech rolls bundles + diagnostics to its own finance and technical teams on top of the upstream substrate.
 
 Target: finance team (~10 users) + engine technical team (~10 users) on the existing scoped-profile substrate.
 
@@ -17,7 +17,7 @@ This plan ships three boring high-leverage things to address (1)–(3), explicit
 ## Phase 0 — pre-flight (this sprint)
 
 - Decide bundle storage backend: pick whichever of `S3`, `Azure Blob`, or `GitHub Releases` the org already authenticates to cleanly. Decision lives in `docs/plans/team-deployment.md` once made.
-- Identify two bundle owners: one finance, one engine-tech. They are the publish path.
+- Identify two bundle owners: one finance, one technical. They are the publish path.
 - Land a minimal telemetry sink config so phase 4 has data when it's time. The pluggable `[telemetry]` substrate already exists at `src/bcli/telemetry/`; pick `console` for dev, set up Azure Monitor or a custom HTTP sink for prod. Capture `bcli.command`, `bcli.query`, `bcli.error` at minimum. **Do not** capture filter text or UPN unless privacy review approves.
 
 ## Phase 1 — `bcli doctor` (ships first)
@@ -124,7 +124,7 @@ finance-2026.05.07-1.tar.gz
 
 ```
 bcli config refresh                       # refresh active profile
-bcli config refresh --profile engine-tech # explicit profile
+bcli config refresh --profile technical # explicit profile
 bcli config refresh --dry-run             # show diff vs local, no writes
 bcli config refresh --rollback            # restore previous version
 bcli config refresh --check               # exit code only, no output (cron-friendly)
@@ -273,7 +273,7 @@ Backend: pluggable `cache_backend` with `redis` extra, mirroring the existing `[
   its declared hash, and the manifest's roll-up matches the contents
   map. It does NOT authenticate the publisher. A compromised CDN can
   mint a malicious `registry.json`, recompute the hashes, and pass
-  verification. Before Beautech rolls bundles to finance / engine-tech,
+  verification. Before Beautech rolls bundles to finance / technical,
   either ship a real cryptographic signer (`minisign` / `cosign` /
   ed25519 + pinned key) at the `bcli.bundle.Verifier` seam, or restrict
   bundle distribution to private blob storage with org-level auth and
@@ -285,14 +285,14 @@ Backend: pluggable `cache_backend` with `redis` extra, mirroring the existing `[
 - **Signing key custody.** Who owns the bundle signing key, and how is it rotated when an owner leaves? Decide before phase 2 ships.
 - **Bundle URL discovery.** First-time install needs to know where to refresh from. Likely `bcli config init --scoped --bundle-url <url>` extends the existing wizard. Verify this fits the wizard's current shape.
 - **Field discovery in scoped profiles.** Today `bcli endpoint fields` writes back to the local registry. With overlay-off-by-default, sandboxed users can't improve their own setup. The plan: those discoveries get logged to a "candidate fields" file the user can email to their bundle owner. Better mechanism welcome.
-- **Bundle drift between teams.** If finance and engine-tech import the same standard endpoint into both bundles and they diverge, which wins? Today: each profile is isolated. Keep it that way.
+- **Bundle drift between teams.** If finance and technical import the same standard endpoint into both bundles and they diverge, which wins? Today: each profile is isolated. Keep it that way.
 - **Telemetry privacy.** Phase 0 telemetry must not capture filter text or UPN by default. Confirm with the legal/privacy reviewer.
 
 ## Validation gates per phase
 
 | Phase | Gate |
 |---|---|
-| 1 | `bcli doctor` runs on engine-tech and finance laptops cold; output makes sense to a non-developer |
+| 1 | `bcli doctor` runs on technical and finance laptops cold; output makes sense to a non-developer |
 | 2 | Bundle round-trip works: admin publishes, user runs `refresh`, signature verifies, rollback works |
 | 3 | Existing queries unchanged; `q search "overdue invoices"` finds `overdue-ic` |
 | 4 | Telemetry triggers met before any code is written |
