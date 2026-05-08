@@ -32,7 +32,7 @@ _SAMPLE = {
     "engine-by-esn": {
         "description": "Engine record by serial number",
         "tags": ["engine", "ops"],
-        "owner": "engine-tech",
+        "owner": "technical",
         "freshness": "live",
         "endpoint": "enginesView",
     },
@@ -64,7 +64,7 @@ def test_filter_by_tag():
 
 def test_filter_by_owner():
     entries = normalize_queries(_SAMPLE)
-    out = filter_entries(entries, owner="engine-tech")
+    out = filter_entries(entries, owner="technical")
     assert [e.name for e in out] == ["engine-by-esn"]
 
 

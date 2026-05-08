@@ -147,7 +147,7 @@ def check_auth_mode(ctx: CheckContext) -> CheckResult:
             "auth",
             CheckStatus.FAIL,
             "auth_method missing",
-            hint="set `auth_method = \"device_code\"` for finance/engine-tech profiles",
+            hint="set `auth_method = \"device_code\"` for finance/technical profiles",
         )
     return CheckResult(
         "auth",
