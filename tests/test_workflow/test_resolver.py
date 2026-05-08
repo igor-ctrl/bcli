@@ -55,6 +55,16 @@ class TestParamResolution:
         ctx = _ctx(params={"active": True})
         assert resolve_references("${{ params.active }}", ctx) is True
 
+    def test_hyphenated_param_name(self):
+        ctx = _ctx(params={"vendor-no": "V00011", "ship-no": "SHIP0045"})
+        # Embedded reference with hyphenated key
+        assert (
+            resolve_references("vendor eq '${{ params.vendor-no }}'", ctx)
+            == "vendor eq 'V00011'"
+        )
+        # Full-string reference with hyphenated key (type preservation path)
+        assert resolve_references("${{ params.ship-no }}", ctx) == "SHIP0045"
+
     def test_mixed_string_interpolation(self):
         ctx = _ctx(params={"vendor_no": "V00011"})
         result = resolve_references("Invoice for ${{ params.vendor_no }}", ctx)
