@@ -21,6 +21,11 @@ class CLIState:
     env_override: str | None = None
     company_override: str | None = None
     format: str = "table"
+    # ``True`` when the user passed ``--format/-f`` explicitly. Read by
+    # `format_output` to decide whether to auto-flip wide single-row
+    # results to vertical-records view: explicit format = honor the
+    # contract, auto-detected = optimize for readability.
+    format_explicit: bool = False
     verbose: bool = False
     debug: bool = False
     dry_run: bool = False

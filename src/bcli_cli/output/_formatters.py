@@ -1,4 +1,4 @@
-"""Output formatters: table, markdown, json, csv, ndjson, raw."""
+"""Output formatters: table, markdown, records, json, csv, ndjson, raw."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import os
+import shutil
 import sys
 from typing import Any
 
@@ -55,14 +56,64 @@ def detect_default_format() -> str:
     return "table"
 
 
-def format_output(records: list[dict[str, Any]], fmt: str = "table") -> None:
-    """Format and print records."""
+def format_output(
+    records: list[dict[str, Any]],
+    fmt: str = "table",
+    *,
+    auto_format: bool = True,
+) -> None:
+    """Format and print records.
+
+    When ``auto_format`` is ``True`` (the default for code paths that
+    chose the format via :func:`detect_default_format`), wide single-row
+    results in ``table`` / ``markdown`` modes flip to vertical records
+    view. A user who explicitly passed ``-f markdown`` or set
+    ``BCLI_FORMAT=markdown`` gets exactly markdown — the contract they
+    asked for is honored even when the output is too wide to render
+    cleanly. Pass ``auto_format=False`` from CLI dispatchers when the
+    user supplied ``-f`` directly.
+    """
     if not records:
         stderr_console.print("[dim]No records found.[/dim]")
         return
 
+    if auto_format and fmt in ("table", "markdown", "md") and _should_auto_records(records):
+        fmt = "records"
+
     formatter = _FORMATTERS.get(fmt, _format_table)
     formatter(records)
+
+
+def _should_auto_records(records: list[dict[str, Any]]) -> bool:
+    """Decide whether to flip a wide table into a vertical record view.
+
+    Triggers when:
+      * the user has not pinned a format explicitly (BCLI_FORMAT respected
+        upstream — see ``detect_default_format``),
+      * the record set is small (1-2 rows), AND
+      * either the column count exceeds 8 OR the rendered first-row width
+        would exceed the terminal width.
+
+    A small record count is the safety bound: vertical view scales badly
+    past ~5 records and the user is better served by JSON/CSV at that point.
+    """
+    if os.environ.get("BCLI_NO_AUTO_RECORDS"):
+        return False
+    if len(records) > 2:
+        return False
+    columns = [k for k in records[0].keys() if not k.startswith("@odata")]
+    if len(columns) <= 6:
+        return False
+    # Always flip when there are very many columns — terminal width can't
+    # be trusted on Windows Terminal under some shells, and 8+ columns in
+    # 1-2 rows is the canonical "give me the engine record" lookup shape.
+    if len(columns) > 8:
+        return True
+    width = shutil.get_terminal_size((120, 24)).columns
+    estimated = sum(
+        max(len(c), len(_format_cell(records[0].get(c)))) + 3 for c in columns
+    )
+    return estimated > width
 
 
 def _format_table(records: list[dict[str, Any]]) -> None:
@@ -188,10 +239,59 @@ def _format_cell_markdown(value: Any) -> str:
     return cell.replace("|", "\\|").replace("\n", " ").replace("\r", "")
 
 
+def _format_records(records: list[dict[str, Any]]) -> None:
+    """Vertical "psql \\x"-style view: one field per line, blank line between rows.
+
+    Output shape (line-wrapping aside, every field stays on its own line):
+
+        record 1
+          systemId           : b1fc5e63-…
+          engineSerialNumber : 194108
+          engineType         : CF34-8C
+          …
+
+        record 2
+          …
+
+    This is the right view for wide records on narrow terminals (Windows
+    PowerShell with ~120 columns and an engine record with ~30 fields is the
+    motivating case). It works in any terminal — no box-drawing, no ANSI,
+    safe to redirect.
+    """
+    if not records:
+        return
+
+    columns = [k for k in records[0].keys() if not k.startswith("@odata")]
+    if not columns:
+        return
+    label_width = min(40, max(len(c) for c in columns))
+
+    multi = len(records) > 1
+    for idx, record in enumerate(records, start=1):
+        if multi:
+            print(f"record {idx}")
+        for col in columns:
+            label = col.ljust(label_width)
+            value = _format_cell(record.get(col))
+            # A multi-line cell becomes "label : line1\n  <padding> | line2"
+            # rather than re-printing the label, so the grouping stays visible.
+            lines = value.splitlines() or [""]
+            print(f"  {label} : {lines[0]}")
+            for extra in lines[1:]:
+                print(f"  {' ' * label_width}   {extra}")
+        if idx != len(records):
+            print()
+    stderr_console.print(f"[dim]{len(records)} record(s)[/dim]")
+
+
 _FORMATTERS = {
     "table": _format_table,
     "markdown": _format_markdown,
     "md": _format_markdown,
+    "records": _format_records,
+    "record": _format_records,
+    "r": _format_records,
+    "vertical": _format_records,
     "json": _format_json,
     "csv": _format_csv,
     "ndjson": _format_ndjson,
