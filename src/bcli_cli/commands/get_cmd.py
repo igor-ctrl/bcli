@@ -42,6 +42,7 @@ def get_command(
     """
     # Local --format overrides global
     output_format = format or state.format
+    explicit_format = (format is not None) or state.format_explicit
     if output_format in ("json", "csv", "ndjson", "raw"):
         state.quiet = True
 
@@ -88,7 +89,7 @@ def get_command(
                     publisher=publisher, group=group, version=version,
                 )
             )
-            format_output(records, output_format)
+            format_output(records, output_format, auto_format=not explicit_format)
         except Exception as e:
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1)

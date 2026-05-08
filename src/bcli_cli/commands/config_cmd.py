@@ -424,6 +424,16 @@ def path() -> None:
     typer.echo(str(CONFIG_FILE))
 
 
+# ─── Bundle commands (registered here so they live under `bcli config`) ──
+
+from bcli_cli.commands import refresh_cmd as _refresh  # noqa: E402
+
+app.command("refresh", help="Pull the latest team bundle for a profile")(_refresh.refresh_command)
+app.command("rollback", help="Restore the previous bundle for a profile")(_refresh.rollback_command)
+app.command("bundle-status", help="Show the currently-installed bundle's manifest")(_refresh.bundle_status_command)
+app.command("make-bundle", help="Build a bundle tarball from a directory (admin)")(_refresh.make_bundle_command)
+
+
 @app.command()
 def edit() -> None:
     """Open the config file in $EDITOR and re-validate on save."""
