@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Clean SIGPIPE handling for piped output** — `bcli <cmd> | head`,
+  `| grep -m 1`, and similar pipe-truncating consumers now terminate
+  the CLI silently, matching `cat` and `grep` conventions, instead of
+  emitting a `BrokenPipeError: [Errno 32] Broken pipe` traceback at
+  interpreter shutdown. Implemented as a new `bcli_cli.app:main`
+  console-script entry point that installs `SIGPIPE -> SIG_DFL` on
+  POSIX with a `BrokenPipeError` safety net for Windows.
 - **Hyphenated saved-query param names** — the workflow template
   resolver now accepts hyphens in identifiers, so references like
   `${{ params.vendor-no }}` substitute correctly. Previously the regex
