@@ -200,6 +200,16 @@ try:
 except ImportError:
     pass
 
+# Extract command — always wired; backend is lazy. Falls back to NullExtractor
+# with a helpful error when [extract] extra isn't installed.
+from bcli_cli.commands import extract_cmd  # noqa: E402
+
+app.add_typer(
+    extract_cmd.app,
+    name="extract",
+    help="PDF → batch.yaml via AI vision (requires bc-cli\\[extract] + API key)",
+)
+
 
 def main() -> None:
     """Console-script entry point.

@@ -9,7 +9,7 @@ build-backend = "hatchling.build"
 # installed CLI binary (`bcli`) are unaffected — only `pip install` /
 # `uv tool install` use this name.
 name = "bc-cli"
-version = "0.2.0"
+version = "0.3.0"
 description = "Python SDK and CLI for Microsoft Dynamics 365 Business Central APIs"
 readme = "README.md"
 license = "Apache-2.0"
@@ -59,6 +59,18 @@ etl = [
 telemetry = [
     "azure-monitor-opentelemetry>=1.6",
 ]
+extract = [
+    "bc-cli[extract-claude]",
+    "bc-cli[extract-openai]",
+]
+extract-claude = [
+    "anthropic>=0.40",
+    "pypdf>=4.0",
+]
+extract-openai = [
+    "openai>=1.50",
+    "pypdf>=4.0",
+]
 mcp = [
     "mcp>=1.0",
 ]
@@ -70,6 +82,7 @@ polaris = [
 dev = [
     "bc-cli[etl]",
     "bc-cli[mcp]",
+    "bc-cli[extract]",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-httpx>=0.30",

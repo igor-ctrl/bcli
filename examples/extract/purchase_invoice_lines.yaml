@@ -1,0 +1,61 @@
+name: "Purchase invoice line items"
+description: |
+  Illustrative schema for extracting line items from a vendor PDF
+  invoice. One PDF typically contains many line items as a single
+  table; this schema captures the common columns.
+
+  Adjust the field map to match your tenant's purchaseLines field
+  names. Treat this file as a starting point, not production-ready —
+  every supplier formats invoices differently, and the prompt below
+  may need sharpening for your specific vendor templates.
+
+prompt: |
+  This PDF is a vendor purchase invoice. Extract one record per
+  line item in the line-items table. Skip the header row, subtotal
+  rows, tax rows, and the grand total — those are not line items.
+
+  Expected columns (names vary by vendor; match by meaning):
+    - Item / SKU / Part number   → item_no
+    - Description / Item name    → description
+    - Quantity / Qty             → quantity
+    - Unit price / Rate          → unit_price
+    - Line total / Amount        → line_total
+
+  If a row's item_no or quantity is illegible, OMIT the row rather
+  than guessing. Record the 1-indexed PDF page in source_pages.
+
+list: true
+
+fields:
+  item_no:
+    type: string
+    description: "Item number / SKU / part number from the leftmost identifier column."
+    required: true
+  description:
+    type: string
+    description: "Item description / name."
+    required: true
+  quantity:
+    type: number
+    description: "Quantity ordered. Numeric only."
+    required: true
+  unit_price:
+    type: number
+    description: "Unit price / unit cost. Numeric only, no currency symbol."
+  line_total:
+    type: number
+    description: "Line total (quantity × unit_price). Numeric only."
+
+output:
+  endpoint: purchaseLines
+  action: post
+  parent_field: documentNo
+  parent_param: invoice_no
+  field_map:
+    "no": item_no
+    description: description
+    quantity: quantity
+    directUnitCost: unit_price
+  constants:
+    documentType: "Invoice"
+    type: "Item"
