@@ -201,5 +201,37 @@ except ImportError:
     pass
 
 
+def main() -> None:
+    """Console-script entry point.
+
+    Wraps the Typer ``app`` with a SIGPIPE handler so that ``bcli ... | head``
+    and similar pipe-truncating consumers terminate the CLI silently —
+    matching the Unix idiom of ``cat``, ``grep`` and friends — instead of
+    surfacing ``BrokenPipeError`` at interpreter shutdown.
+
+    On Windows the ``signal.SIGPIPE`` constant is absent; the safety-net
+    ``try`` below catches the error in that path.
+    """
+    import signal
+
+    if hasattr(signal, "SIGPIPE"):
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+    try:
+        app()
+    except BrokenPipeError:
+        # Closing stdout/stderr before exit prevents Python's atexit flush
+        # from re-triggering the same error on a now-dead pipe.
+        try:
+            sys.stdout.close()
+        except Exception:
+            pass
+        try:
+            sys.stderr.close()
+        except Exception:
+            pass
+        sys.exit(0)
+
+
 if __name__ == "__main__":
-    app()
+    main()

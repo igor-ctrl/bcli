@@ -47,7 +47,7 @@ Issues = "https://github.com/igor-ctrl/bcli/issues"
 Documentation = "https://github.com/igor-ctrl/bcli/tree/main/docs"
 
 [project.scripts]
-bcli = "bcli_cli.app:app"
+bcli = "bcli_cli.app:main"
 bcli-mcp = "bcli_mcp:main"
 
 [project.optional-dependencies]
