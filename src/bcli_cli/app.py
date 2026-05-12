@@ -62,7 +62,7 @@ def version_callback(value: bool) -> None:
 
 
 @app.callback()
-def main(
+def _root_callback(
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Connection profile name"),
     env: Optional[str] = typer.Option(None, "--env", "-e", help="Override environment name"),
     company: Optional[str] = typer.Option(None, "--company", "-c", help="Override company ID"),
