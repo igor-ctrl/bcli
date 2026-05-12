@@ -33,3 +33,6 @@ PRD-*.md
 TODOS.md
 bcapi_cli_prd.md
 .planning/
+
+# Codex CLI session metadata — local-only, not part of the repo
+.context/

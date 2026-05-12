@@ -67,3 +67,7 @@ class SafetyError(BCLIError):
 
 class WorkflowError(BCLIError):
     """Workflow template resolution or execution error."""
+
+
+class ExtractError(BCLIError):
+    """PDF / document extraction failure (schema, backend, or PDF preflight)."""

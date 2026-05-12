@@ -195,6 +195,53 @@ class AuditConfig(BaseModel):
     model_config = {"extra": "allow"}
 
 
+class ExtractConfig(BaseModel):
+    """Optional PDF → structured-data extraction backend for ``bcli extract``.
+
+    Mirrors the pluggable shape of :class:`TelemetryConfig`. Built-in backends:
+
+    * ``"null"``    — no extraction; ``bcli extract`` errors with guidance.
+    * ``"claude"``  — Anthropic Claude vision API (requires ``[extract-claude]``
+                      and ``ANTHROPIC_API_KEY``).
+    * ``"openai"``  — OpenAI vision API (requires ``[extract-openai]`` and
+                      ``OPENAI_API_KEY``).
+
+    Custom backends:
+      * ``"my_pkg.module:MyExtractor"`` — any importable class implementing the
+        :class:`bcli.extract.ExtractorBackend` protocol. Useful for AWS
+        Textract, Firecrawl, OpenDataLoader, or a self-hosted vision model.
+
+    The class must expose a ``from_config(cls, config: ExtractConfig)``
+    classmethod that builds an instance.
+
+    ``model`` and ``api_key_env`` default to backend-appropriate values when
+    left blank, so most users only need to set ``backend`` (e.g.
+    ``backend = "openai"`` picks ``gpt-5`` and ``OPENAI_API_KEY``). Override
+    when you want a non-default model or a custom env-var name.
+
+    High-stakes-data note: this layer extracts; it does **not** post to
+    BC. The CLI emits a batch.yaml + ``.extracted.json`` traceability sidecar
+    so a human reviews per-field source pages against the PDF before the
+    batch runner mutates anything — required workflow for regulated
+    records, financial postings, or any data with real-world blast radius.
+    """
+
+    backend: str = "null"
+    model: str = ""               # backend-specific default applied at from_config
+    api_key_env: str = ""         # backend-specific default applied at from_config
+    schemas_dir: str | None = None  # ~/.config/bcli/extract/schemas/ if None
+    # Anthropic per-document limits at time of writing. OpenAI's vary by
+    # model + Files API path; the backend overrides these when needed.
+    max_pdf_bytes: int = 32 * 1024 * 1024
+    max_pdf_pages: int = 100
+    max_output_tokens: int = 8000
+    # OpenAI-specific overrides (ignored by other backends).
+    openai_base_url: str | None = None
+    openai_organization: str | None = None
+
+    model_config = {"extra": "allow", "protected_namespaces": ()}
+
+
 class BCConfig(BaseModel):
     """Top-level configuration."""
 
@@ -202,6 +249,7 @@ class BCConfig(BaseModel):
     profiles: dict[str, BCProfile] = Field(default_factory=dict)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     audit: AuditConfig = Field(default_factory=AuditConfig)
+    extract: ExtractConfig = Field(default_factory=ExtractConfig)
 
     model_config = {"extra": "allow"}
 
