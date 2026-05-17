@@ -35,6 +35,11 @@ def delete_command(
         "--result-fd",
         help="Write the JSON result envelope to this file descriptor and close it.",
     ),
+    idempotency_key: Optional[str] = typer.Option(
+        None,
+        "--idempotency-key",
+        help="Opaque token forwarded as Idempotency-Key header (AIP §Phase 4d).",
+    ),
 ) -> None:
     """DELETE a record."""
     validate_flags(result_out, result_fd)
@@ -82,6 +87,7 @@ def delete_command(
             asyncio.run(_audited_delete(
                 endpoint, record_id,
                 etag=etag, publisher=publisher, group=group, version=version,
+                idempotency_key=idempotency_key,
             ))
             cap.emit_success()
             console.print(f"[green]✓[/green] Deleted {endpoint}({record_id})")

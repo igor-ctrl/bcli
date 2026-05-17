@@ -58,6 +58,11 @@ def upload_command(
         "--result-fd",
         help="Write the JSON result envelope to this file descriptor and close it.",
     ),
+    idempotency_key: Optional[str] = typer.Option(
+        None,
+        "--idempotency-key",
+        help="Opaque token forwarded as Idempotency-Key header on the metadata POST (AIP §Phase 4d).",
+    ),
 ) -> None:
     """Upload a file as a documentAttachment linked to an existing parent record.
 
@@ -130,6 +135,7 @@ def upload_command(
                     group=group,
                     version=version,
                     force_standard=standard,
+                    idempotency_key=idempotency_key,
                 ),
                 method="UPLOAD",
                 endpoint="documentAttachments",
@@ -239,6 +245,7 @@ async def _execute_attach(
     group: Optional[str],
     version: Optional[str],
     force_standard: bool = False,
+    idempotency_key: Optional[str] = None,
 ) -> dict:
     async with state.make_async_client() as client:
         return await client.upload_attachment(
@@ -251,6 +258,7 @@ async def _execute_attach(
             group=group,
             version=version,
             force_standard=force_standard,
+            idempotency_key=idempotency_key,
         )
 
 

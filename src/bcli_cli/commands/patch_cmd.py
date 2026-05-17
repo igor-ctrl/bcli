@@ -37,6 +37,11 @@ def patch_command(
         "--result-fd",
         help="Write the JSON result envelope to this file descriptor and close it.",
     ),
+    idempotency_key: Optional[str] = typer.Option(
+        None,
+        "--idempotency-key",
+        help="Opaque token forwarded as Idempotency-Key header (AIP §Phase 4d).",
+    ),
 ) -> None:
     """PATCH (update) an existing record."""
     validate_flags(result_out, result_fd)
@@ -86,6 +91,7 @@ def patch_command(
             result = asyncio.run(_audited_patch(
                 endpoint, record_id, body,
                 etag=etag, publisher=publisher, group=group, version=version,
+                idempotency_key=idempotency_key,
             ))
             cap.emit_success()
             format_output([result] if result else [], output_format)
