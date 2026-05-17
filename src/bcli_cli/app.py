@@ -175,6 +175,7 @@ from bcli_cli.commands import (  # noqa: E402
     query_cmd,
     registry_cmd,
     skill_init_cmd,
+    skill_cmd,  # noqa: F401 — import-time side effect registers `skill install`
     test_cmd,
 )
 
@@ -187,6 +188,10 @@ app.add_typer(registry_cmd.app, name="registry", help="Custom API registry manag
 app.add_typer(test_cmd.app, name="test", help="Connection and endpoint testing")
 app.add_typer(batch_cmd.app, name="batch", help="Batch operations from YAML files")
 app.add_typer(attach_cmd.app, name="attach", help="Document-attachment workflows (two-phase /attachments upload)")
+# `skill` is a single Typer group shared by ``skill_init_cmd`` (init / update)
+# and ``skill_cmd`` (install). PR #19 owns the group registration; the
+# ``skill_cmd`` module aliases ``skill_init_cmd.app`` so ``@app.command("install")``
+# attaches to the same group without a duplicate ``add_typer`` call.
 app.add_typer(skill_init_cmd.app, name="skill", help="Generate a per-user bcli skill bundle (AIP Phase 7)")
 app.command(name="get")(get_cmd.get_command)
 app.command(name="post")(post_cmd.post_command)
