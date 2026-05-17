@@ -25,6 +25,7 @@ from rich.console import Console
 from rich.table import Table
 
 from bcli.batch.ledger import Ledger
+from bcli.exit_codes import EXIT_POLICY
 from bcli_cli._envelope_wrap import capture, validate_flags
 from bcli_cli._state import state
 from bcli_cli.output import format_output, print_context_banner
@@ -229,6 +230,11 @@ def run_batch(
         "--result-fd",
         help="Write the JSON result envelope to this file descriptor and close it.",
     ),
+    progress_fd: int | None = typer.Option(
+        None,
+        "--progress-fd",
+        help="Stream JSON ``step_started`` / ``step_completed`` events to this fd (AIP §Phase 4e).",
+    ),
 ) -> None:
     """Execute a YAML batch file (sequence of API calls).
 
@@ -363,22 +369,41 @@ def run_batch(
             try:
                 confirm_write_or_exit("BATCH WRITE", preview, yes=yes)
             except typer.Exit:
-                # Policy refusal. Mark ledger + envelope as failed so the
-                # operator sees a consistent attestation, then re-raise.
+                # Policy refusal. Keep failure-path ordering consistent
+                # with the BaseException branch below: emit the envelope
+                # BEFORE finalizing the ledger so both attestations
+                # describe the same outcome. Pass the explicit
+                # EXIT_POLICY so the envelope's ``exit_code`` matches
+                # what the CLI actually exits with.
+                cap.emit_failure(
+                    RuntimeError("BATCH WRITE refused by disable_writes gate"),
+                    exit_code=EXIT_POLICY,
+                )
                 final_state = ledger.compute_run_state(run_id)
                 if final_state not in {"partially_committed", "failed"}:
                     final_state = "failed"
                 ledger.finish_run(run_id, final_state)
                 ledger.close()
-                cap.emit_failure(RuntimeError("BATCH WRITE refused by disable_writes gate"))
                 raise
 
         output_format = format
 
+        from bcli_cli._progress import ProgressEmitter
+
+        progress = ProgressEmitter(fd=progress_fd)
         try:
-            results = asyncio.run(
-                _execute_batch(steps, context=context, output_format=output_format, ledger=ledger)
-            )
+            try:
+                results = asyncio.run(
+                    _execute_batch(
+                        steps, context=context, output_format=output_format,
+                        ledger=ledger, progress=progress,
+                    )
+                )
+            finally:
+                # Close the progress fd as soon as the batch finishes so
+                # the consumer EOFs and can stop reading. The result
+                # envelope still lands separately on --result-out/-fd.
+                progress.close()
 
             succeeded = sum(1 for r in results if r.get("status") == "ok")
             failed_count = sum(1 for r in results if r.get("status") == "error")
@@ -491,16 +516,25 @@ async def _execute_batch(
     context: Any | None = None,
     output_format: str | None = None,
     ledger: Ledger | None = None,
+    progress: Any | None = None,
 ) -> list[dict]:
     """Execute the batch steps, writing intent + outcome rows around each
     HTTP call when a ``ledger`` is supplied.
 
-    The ``ledger`` argument is keyword-only and optional so existing
+    ``ledger`` and ``progress`` are keyword-only and optional so existing
     integration tests that call this function directly continue to work
-    unchanged.
+    unchanged. ``progress`` is a :class:`bcli_cli._progress.ProgressEmitter`
+    that receives a JSON event before and after each step (AIP §Phase 4e).
     """
+    import time as _time
+
     from bcli.workflow._models import StepResult, WorkflowContext
     from bcli.workflow._resolver import resolve_references
+
+    # Lightweight no-op stand-in if the caller didn't pass an emitter.
+    class _NullProgress:
+        def emit(self, **_: Any) -> None: ...
+    prog = progress if progress is not None else _NullProgress()
 
     results: list[dict] = []
     async with state.make_async_client() as client:
@@ -527,8 +561,69 @@ async def _execute_batch(
             params = step.get("params", {})
             record_id = step.get("id")
             etag = step.get("etag", "*")
+            # AIP §Phase 4d — optional per-step idempotency token; same-run
+            # replay protection is enforced below.
+            idempotency_key = step.get("idempotency_key")
 
             console.print(f"  [dim]Step {i}:[/dim] {action.upper()} {endpoint}...", end=" ")
+
+            # ── Same-run idempotency replay (AIP §Phase 4d). ──
+            # If the step carries an idempotency_key and a *prior* step in
+            # this same run already committed under that key, skip the
+            # HTTP call entirely and surface a "replayed" result. We do
+            # this BEFORE write_intent so a duplicate intent row isn't
+            # left behind — the prior committed row is the audit truth.
+            if (
+                ledger is not None
+                and idempotency_key
+                and action in {"post", "patch", "delete"}
+            ):
+                prior = ledger.find_committed_idempotent_step(idempotency_key)
+                if prior is not None:
+                    console.print(
+                        f"[yellow]↺[/yellow] replayed (idempotency_key='{idempotency_key}' "
+                        f"already committed at seq={prior['seq']})"
+                    )
+                    replayed_entry = {
+                        "step": i,
+                        "name": step_name,
+                        "action": action,
+                        "endpoint": endpoint,
+                        "status": "ok",
+                        "replayed": True,
+                        "prior_seq": prior["seq"],
+                        "prior_step_id": prior["step_id"],
+                        "prior_bc_correlation_id": prior.get("bc_correlation_id"),
+                        "idempotency_key": idempotency_key,
+                    }
+                    results.append(replayed_entry)
+                    if isinstance(context, WorkflowContext):
+                        context.set_result(
+                            step_name,
+                            StepResult(
+                                name=step_name, action=action, endpoint=endpoint,
+                                status="ok", data={},
+                            ),
+                        )
+                    # Emit a started/completed pair so the progress stream
+                    # still tells the agent "this step happened" with the
+                    # ``replayed`` outcome.
+                    step_method_replay = action.upper()
+                    started_ns_replay = _time.monotonic_ns()
+                    prog.emit(
+                        event="step_started",
+                        seq=i, name=step_name, method=step_method_replay,
+                        endpoint=endpoint, replayed=True,
+                    )
+                    prog.emit(
+                        event="step_completed",
+                        seq=i, name=step_name, method=step_method_replay,
+                        endpoint=endpoint, status="replayed",
+                        idempotency_key=idempotency_key,
+                        prior_seq=prior["seq"],
+                        duration_ms=max(0, int((_time.monotonic_ns() - started_ns_replay) / 1_000_000)),
+                    )
+                    continue
 
             # ── Ledger: write intent BEFORE the HTTP call. ──
             # The resolved URL is computed lazily via the client's
@@ -556,7 +651,24 @@ async def _execute_batch(
                     method=action.upper() if action != "get" else "GET",
                     url=intent_url,
                     body_hash=_body_hash(data) if data is not None else None,
+                    idempotency_key=idempotency_key,
                 )
+
+            # AIP §Phase 4e — emit one ``step_started`` event per step.
+            step_method = action.upper() if action != "get" else "GET"
+            step_started_ns = _time.monotonic_ns()
+            prog.emit(
+                event="step_started",
+                seq=i,
+                name=step_name,
+                method=step_method,
+                endpoint=endpoint,
+            )
+
+            # Sentinel that each branch updates so the matching
+            # ``step_completed`` event reports the right outcome.
+            step_terminal_status = "unknown"
+            step_terminal_error: str | None = None
 
             try:
                 if action == "get":
@@ -594,9 +706,13 @@ async def _execute_batch(
                             bc_correlation_id=None, error_message=None,
                             rollback_url=None,  # GETs are not rollback-eligible
                         )
+                    step_terminal_status = "committed"
 
                 elif action == "post":
-                    result = await client.post(endpoint, data or {})
+                    result = await client.post(
+                        endpoint, data or {},
+                        idempotency_key=idempotency_key,
+                    )
                     console.print("[green]✓[/green] created")
                     result_entry = {"step": i, "name": step_name, "action": action, "endpoint": endpoint, "status": "ok", "data": [result] if result else []}
                     results.append(result_entry)
@@ -617,6 +733,7 @@ async def _execute_batch(
                             bc_correlation_id=None, error_message=None,
                             rollback_url=rb_url,
                         )
+                    step_terminal_status = "committed"
 
                 elif action == "patch":
                     if not record_id:
@@ -629,8 +746,23 @@ async def _execute_batch(
                                 error_message="missing id",
                                 rollback_url=None,
                             )
+                        step_terminal_status = "failed"
+                        step_terminal_error = "missing id"
+                        # Emit step_completed before the early ``continue``
+                        # so the agent sees a complete pair.
+                        prog.emit(
+                            event="step_completed",
+                            seq=i, name=step_name, method=step_method,
+                            endpoint=endpoint, status=step_terminal_status,
+                            error=step_terminal_error,
+                            duration_ms=max(0, int((_time.monotonic_ns() - step_started_ns) / 1_000_000)),
+                        )
                         continue
-                    result = await client.patch(endpoint, record_id, data or {}, etag=etag)
+                    result = await client.patch(
+                        endpoint, record_id, data or {},
+                        etag=etag,
+                        idempotency_key=idempotency_key,
+                    )
                     console.print("[green]✓[/green] updated")
                     result_entry = {"step": i, "name": step_name, "action": action, "endpoint": endpoint, "status": "ok", "data": [result] if result else []}
                     results.append(result_entry)
@@ -650,6 +782,7 @@ async def _execute_batch(
                             # ``bcli batch rollback``.
                             rollback_url=None,
                         )
+                    step_terminal_status = "committed"
 
                 elif action == "delete":
                     if not record_id:
@@ -662,8 +795,21 @@ async def _execute_batch(
                                 error_message="missing id",
                                 rollback_url=None,
                             )
+                        step_terminal_status = "failed"
+                        step_terminal_error = "missing id"
+                        prog.emit(
+                            event="step_completed",
+                            seq=i, name=step_name, method=step_method,
+                            endpoint=endpoint, status=step_terminal_status,
+                            error=step_terminal_error,
+                            duration_ms=max(0, int((_time.monotonic_ns() - step_started_ns) / 1_000_000)),
+                        )
                         continue
-                    await client.delete(endpoint, record_id, etag=etag)
+                    await client.delete(
+                        endpoint, record_id,
+                        etag=etag,
+                        idempotency_key=idempotency_key,
+                    )
                     console.print("[green]✓[/green] deleted")
                     result_entry = {"step": i, "name": step_name, "action": action, "endpoint": endpoint, "status": "ok"}
                     results.append(result_entry)
@@ -680,6 +826,7 @@ async def _execute_batch(
                             bc_correlation_id=None, error_message=None,
                             rollback_url=None,  # DELETE has no clean inverse
                         )
+                    step_terminal_status = "committed"
 
                 else:
                     console.print(f"[yellow]? unknown action '{action}'[/yellow]")
@@ -691,6 +838,7 @@ async def _execute_batch(
                             error_message=f"unknown action '{action}'",
                             rollback_url=None,
                         )
+                    step_terminal_status = "skipped"
 
             except Exception as e:
                 console.print(f"[red]✗ {e}[/red]")
@@ -707,6 +855,19 @@ async def _execute_batch(
                         error_message=str(e),
                         rollback_url=None,
                     )
+                step_terminal_status = "failed"
+                step_terminal_error = str(e)
+
+            # AIP §Phase 4e — emit ``step_completed`` for every step that
+            # didn't ``continue`` out early (the early-continue branches
+            # emit their own completed event before exiting).
+            prog.emit(
+                event="step_completed",
+                seq=i, name=step_name, method=step_method,
+                endpoint=endpoint, status=step_terminal_status,
+                error=step_terminal_error,
+                duration_ms=max(0, int((_time.monotonic_ns() - step_started_ns) / 1_000_000)),
+            )
 
     return results
 

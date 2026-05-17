@@ -35,6 +35,11 @@ def post_command(
         "--result-fd",
         help="Write the JSON result envelope to this file descriptor and close it.",
     ),
+    idempotency_key: Optional[str] = typer.Option(
+        None,
+        "--idempotency-key",
+        help="Opaque token forwarded as Idempotency-Key header (AIP §Phase 4d).",
+    ),
 ) -> None:
     """POST (create) a new record."""
     validate_flags(result_out, result_fd)
@@ -83,6 +88,7 @@ def post_command(
             result = asyncio.run(_audited_post(
                 endpoint, body,
                 publisher=publisher, group=group, version=version,
+                idempotency_key=idempotency_key,
             ))
             cap.extract_record_id_from(result)
             cap.emit_success()
@@ -111,6 +117,7 @@ async def _audited_post(endpoint, body, **kwargs):
 
 async def _execute_post(endpoint, body, **kwargs):
     async with state.make_async_client() as client:
+        # ``client.post`` accepts ``idempotency_key``; passthrough.
         return await client.post(endpoint, body, **kwargs)
 
 

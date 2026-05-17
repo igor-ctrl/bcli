@@ -18,6 +18,7 @@ import sys
 import typer
 from rich.console import Console
 
+from bcli.exit_codes import EXIT_POLICY
 from bcli_cli._state import state
 
 _console = Console(stderr=True)
@@ -33,10 +34,10 @@ def confirm_write_or_exit(method: str, endpoint: str, yes: bool = False) -> None
       print a warning to stderr but proceed (scripted use).
     * Profile sets ``disable_writes = true``, interactive TTY, ``yes``
       is False → print warning, prompt, accept only the literal string
-      ``"yes"``; anything else exits 1.
+      ``"yes"``; anything else exits with ``EXIT_POLICY`` (8).
     * Profile sets ``disable_writes = true``, *non-interactive* (no
-      TTY), ``yes`` is False → exit 1 immediately. Scripts must opt in
-      with ``--yes``.
+      TTY), ``yes`` is False → exit with ``EXIT_POLICY`` (8) immediately.
+      Scripts must opt in with ``--yes``.
     """
     profile = state.profile
     if not getattr(profile, "disable_writes", False):
@@ -61,7 +62,7 @@ def confirm_write_or_exit(method: str, endpoint: str, yes: bool = False) -> None
             "[red]✗ Refusing to write: non-interactive session and "
             "--yes was not passed.[/red]"
         )
-        raise typer.Exit(1)
+        raise typer.Exit(EXIT_POLICY)
 
     answer = typer.prompt(
         "Type 'yes' to proceed, anything else to cancel",
@@ -70,4 +71,4 @@ def confirm_write_or_exit(method: str, endpoint: str, yes: bool = False) -> None
     )
     if answer.strip().lower() != "yes":
         _console.print("[red]✗ Cancelled.[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(EXIT_POLICY)

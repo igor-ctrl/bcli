@@ -452,6 +452,36 @@ def test_describe_cache_invalidates_on_registry_mtime(tmp_config):
     )
 
 
+# ─── Exit codes projection (Phase 4a) ────────────────────────────────
+
+
+def test_describe_includes_exit_codes(tmp_config):
+    """Phase 4a: top-level `exit_codes` projects the CLI taxonomy.
+
+    Agents consume `bcli describe` to learn how to interpret a non-zero
+    `bcli` exit. The map MUST include every documented code so the
+    runtime can render meaningful errors.
+    """
+    _write_basic_profile(tmp_config["config_file"])
+    result = _invoke_describe("--format", "json")
+    assert result.exit_code == 0, result.stderr or result.stdout
+    data = json.loads(result.stdout)
+    assert "exit_codes" in data, "top-level exit_codes key missing"
+    codes = data["exit_codes"]
+    keyset = {int(k) for k in codes.keys()}
+    for expected in (0, 1, 2, 3, 4, 5, 6, 7, 8):
+        assert expected in keyset, f"missing exit code {expected} in describe output"
+    for label in codes.values():
+        assert isinstance(label, str) and label
+
+
+def test_describe_subtree_drops_exit_codes(tmp_config):
+    """Subtree mode trims metadata — exit_codes belongs to the full doc."""
+    _write_basic_profile(tmp_config["config_file"])
+    sub = json.loads(_invoke_describe("get", "--format", "json").stdout)
+    assert "exit_codes" not in sub
+
+
 # ─── Table format smoke test ─────────────────────────────────────────
 
 

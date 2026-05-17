@@ -32,15 +32,22 @@ stderr_console = Console(stderr=True)
 def detect_default_format() -> str:
     """Pick a sensible default format based on environment.
 
-    AI coding agents (Claude Code, etc.) and piped/redirected stdout
-    get a markdown table — readable, parseable, no ANSI escapes or
-    box-drawing characters. Interactive TTYs get the rich table.
+    AIP §Phase 4b — when stdout isn't a TTY the consumer is programmatic
+    (pipe, redirect, CI step, agent runtime). Emit JSON: the canonical
+    machine-readable shape, no ANSI/box-drawing characters, no
+    ambiguity. Interactive TTYs still get the rich table.
 
-    On Windows, classic PowerShell pretends to be a TTY even when its
-    stdout is being captured by a parent process (e.g. an AI agent's
-    Bash tool), and renders rich's UTF-8 box-drawing as `�` mojibake on
-    the default codepage. So we treat anything-but-Windows-Terminal as
-    non-table by default. Set ``BCLI_FORMAT=table`` to force it.
+    Explicit user hints continue to win:
+
+    * ``BCLI_FORMAT=<fmt>``           — pin any format.
+    * ``CLAUDECODE`` / ``BCLI_AGENT`` — markdown (legacy AI-agent
+      semantics; agents that prefer JSON now can just pass
+      ``--format json`` or unset the env var).
+
+    On Windows, classic PowerShell pretends to be a TTY even when
+    captured. ``rich`` renders box-drawing as ``?`` mojibake there,
+    so anything-but-Windows-Terminal stays on markdown. Setting
+    ``BCLI_FORMAT=table`` forces tables if the user prefers.
     """
     if os.environ.get("BCLI_FORMAT"):
         return os.environ["BCLI_FORMAT"]
@@ -48,7 +55,9 @@ def detect_default_format() -> str:
     if os.environ.get("CLAUDECODE") or os.environ.get("BCLI_AGENT"):
         return "markdown"
     if not sys.stdout.isatty():
-        return "markdown"
+        # Phase 4b: pipes / redirects default to JSON for programmatic
+        # consumers. Explicit ``--format`` on the CLI always wins.
+        return "json"
     if sys.platform == "win32" and not os.environ.get("WT_SESSION"):
         # Legacy console host (conhost.exe) — table rendering is unreliable.
         # Windows Terminal sets WT_SESSION; keep tables there.

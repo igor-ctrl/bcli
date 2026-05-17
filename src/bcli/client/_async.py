@@ -168,11 +168,20 @@ class AsyncBCClient:
         publisher: str | None = None,
         group: str | None = None,
         version: str | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
-        """POST (create) a record."""
+        """POST (create) a record.
+
+        ``idempotency_key`` (AIP §Phase 4d) is forwarded as the IETF
+        ``Idempotency-Key`` HTTP header. BC may not consume it today;
+        it lets reverse proxies / gateways apply replay protection and
+        keeps the ledger key consistent with what was wired out.
+        """
         transport = self._ensure_transport()
         url = self._resolve_url(entity_set_name, publisher=publisher, group=group, version=version)
-        return await transport.post(url, json_body=body)
+        return await transport.post(
+            url, json_body=body, idempotency_key=idempotency_key,
+        )
 
     async def patch(
         self,
@@ -184,6 +193,7 @@ class AsyncBCClient:
         publisher: str | None = None,
         group: str | None = None,
         version: str | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """PATCH (update) a record."""
         transport = self._ensure_transport()
@@ -191,7 +201,9 @@ class AsyncBCClient:
             entity_set_name, record_id=record_id,
             publisher=publisher, group=group, version=version,
         )
-        return await transport.patch(url, json_body=body, etag=etag)
+        return await transport.patch(
+            url, json_body=body, etag=etag, idempotency_key=idempotency_key,
+        )
 
     async def delete(
         self,
@@ -202,6 +214,7 @@ class AsyncBCClient:
         publisher: str | None = None,
         group: str | None = None,
         version: str | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """DELETE a record."""
         transport = self._ensure_transport()
@@ -209,7 +222,9 @@ class AsyncBCClient:
             entity_set_name, record_id=record_id,
             publisher=publisher, group=group, version=version,
         )
-        return await transport.delete(url, etag=etag)
+        return await transport.delete(
+            url, etag=etag, idempotency_key=idempotency_key,
+        )
 
     async def delete_url(self, url: str, *, etag: str = "*") -> dict[str, Any]:
         """DELETE an already-resolved absolute URL.
@@ -235,6 +250,7 @@ class AsyncBCClient:
         group: str | None = None,
         version: str | None = None,
         force_standard: bool = False,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """Upload a file as a documentAttachment linked to a parent record (two-phase).
 
@@ -300,12 +316,16 @@ class AsyncBCClient:
                 company_id=self._profile.company_id,
                 entity_set_name="documentAttachments",
             )
-            metadata = await transport.post(post_url, json_body=metadata_body)
+            metadata = await transport.post(
+                post_url, json_body=metadata_body,
+                idempotency_key=idempotency_key,
+            )
         else:
             metadata = await self.post(
                 "documentAttachments",
                 metadata_body,
                 publisher=publisher, group=group, version=version,
+                idempotency_key=idempotency_key,
             )
         attachment_id = metadata.get("id") or metadata.get("systemId")
         if not attachment_id:

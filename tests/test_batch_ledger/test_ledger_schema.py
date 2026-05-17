@@ -77,7 +77,10 @@ class TestLedgerSchema:
         )
         with sqlite3.connect(base_dir / "r.db") as conn:
             (version,) = conn.execute("SELECT version FROM schema_version").fetchone()
-        assert version == 1
+        # AIP §Phase 4d bumped SCHEMA_VERSION 1 → 2 to introduce the
+        # ``step.idempotency_key`` column. Migration on existing v1
+        # ledgers is exercised in ``test_ledger_idempotency.py``.
+        assert version == 2
 
     def test_state_enum_allowed_values(self, base_dir):
         """Run.state CHECK enum includes every value in the contract."""
