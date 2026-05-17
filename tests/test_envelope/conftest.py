@@ -15,6 +15,21 @@ from bcli.config._model import BCConfig, BCDefaults, BCProfile
 from bcli_cli._state import state
 
 
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path, monkeypatch):
+    """Scope HOME (and Path.home) to tmp_path so the batch ledger doesn't
+    pollute the user's real ``~/.config/bcli/batch/`` directory when an
+    envelope test happens to invoke ``run_batch``.
+
+    Autouse so every envelope test gets isolation by default. Tests that
+    need to inspect the resulting DB can derive the path under
+    ``tmp_path / ".config" / "bcli" / "batch"``.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    yield tmp_path / ".config" / "bcli" / "batch"
+
+
 @pytest.fixture
 def cli_state(monkeypatch):
     """Active CLI state pointing at a writable Sandbox profile."""

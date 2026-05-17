@@ -165,6 +165,7 @@ from bcli_cli.commands import (  # noqa: E402
     config_cmd,
     context_cmd,
     delete_cmd,
+    describe_cmd,
     doctor_cmd,
     endpoint_cmd,
     env_cmd,
@@ -192,6 +193,10 @@ app.command(name="delete")(delete_cmd.delete_command)
 app.command(name="q", help="Run a saved query (no OData required)")(query_cmd.query_command)
 app.command(name="ai-context")(context_cmd.ai_context_command)
 app.command(name="doctor", help="Diagnose your bcli install (self-rescue for team users)")(doctor_cmd.doctor_command)
+app.command(
+    name="describe",
+    help="AIP v0.1 — project Typer surface + registry + profile as JSON for agents",
+)(describe_cmd.describe_command)
 
 # ETL command — optional, only available when dlt is installed
 try:

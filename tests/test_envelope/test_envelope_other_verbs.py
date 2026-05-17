@@ -213,8 +213,12 @@ class TestBatchRunEnvelope:
         assert env["endpoint"] == "batch"
         assert env["status"] == "succeeded"
         assert env["exit_code"] == 0
-        # Aggregate fields not applicable for batch envelope
-        assert env["record_id"] is None
+        # `record_id` carries the ledger run id for BATCH_RUN — that's the
+        # cross-reference an agent uses to fetch the per-step ledger
+        # detail with `bcli batch state <run-id>`. (#15 + #16 integration.)
+        assert env["record_id"] is not None
+        assert len(env["record_id"]) == 32  # uuid4 hex
+        # resolved_url is still not meaningful for a batch (multiple URLs).
         assert env["resolved_url"] is None
 
     def test_batch_run_envelope_failed_when_any_step_fails(
