@@ -561,8 +561,69 @@ async def _execute_batch(
             params = step.get("params", {})
             record_id = step.get("id")
             etag = step.get("etag", "*")
+            # AIP §Phase 4d — optional per-step idempotency token; same-run
+            # replay protection is enforced below.
+            idempotency_key = step.get("idempotency_key")
 
             console.print(f"  [dim]Step {i}:[/dim] {action.upper()} {endpoint}...", end=" ")
+
+            # ── Same-run idempotency replay (AIP §Phase 4d). ──
+            # If the step carries an idempotency_key and a *prior* step in
+            # this same run already committed under that key, skip the
+            # HTTP call entirely and surface a "replayed" result. We do
+            # this BEFORE write_intent so a duplicate intent row isn't
+            # left behind — the prior committed row is the audit truth.
+            if (
+                ledger is not None
+                and idempotency_key
+                and action in {"post", "patch", "delete"}
+            ):
+                prior = ledger.find_committed_idempotent_step(idempotency_key)
+                if prior is not None:
+                    console.print(
+                        f"[yellow]↺[/yellow] replayed (idempotency_key='{idempotency_key}' "
+                        f"already committed at seq={prior['seq']})"
+                    )
+                    replayed_entry = {
+                        "step": i,
+                        "name": step_name,
+                        "action": action,
+                        "endpoint": endpoint,
+                        "status": "ok",
+                        "replayed": True,
+                        "prior_seq": prior["seq"],
+                        "prior_step_id": prior["step_id"],
+                        "prior_bc_correlation_id": prior.get("bc_correlation_id"),
+                        "idempotency_key": idempotency_key,
+                    }
+                    results.append(replayed_entry)
+                    if isinstance(context, WorkflowContext):
+                        context.set_result(
+                            step_name,
+                            StepResult(
+                                name=step_name, action=action, endpoint=endpoint,
+                                status="ok", data={},
+                            ),
+                        )
+                    # Emit a started/completed pair so the progress stream
+                    # still tells the agent "this step happened" with the
+                    # ``replayed`` outcome.
+                    step_method_replay = action.upper()
+                    started_ns_replay = _time.monotonic_ns()
+                    prog.emit(
+                        event="step_started",
+                        seq=i, name=step_name, method=step_method_replay,
+                        endpoint=endpoint, replayed=True,
+                    )
+                    prog.emit(
+                        event="step_completed",
+                        seq=i, name=step_name, method=step_method_replay,
+                        endpoint=endpoint, status="replayed",
+                        idempotency_key=idempotency_key,
+                        prior_seq=prior["seq"],
+                        duration_ms=max(0, int((_time.monotonic_ns() - started_ns_replay) / 1_000_000)),
+                    )
+                    continue
 
             # ── Ledger: write intent BEFORE the HTTP call. ──
             # The resolved URL is computed lazily via the client's
@@ -590,6 +651,7 @@ async def _execute_batch(
                     method=action.upper() if action != "get" else "GET",
                     url=intent_url,
                     body_hash=_body_hash(data) if data is not None else None,
+                    idempotency_key=idempotency_key,
                 )
 
             # AIP §Phase 4e — emit one ``step_started`` event per step.
@@ -647,7 +709,10 @@ async def _execute_batch(
                     step_terminal_status = "committed"
 
                 elif action == "post":
-                    result = await client.post(endpoint, data or {})
+                    result = await client.post(
+                        endpoint, data or {},
+                        idempotency_key=idempotency_key,
+                    )
                     console.print("[green]✓[/green] created")
                     result_entry = {"step": i, "name": step_name, "action": action, "endpoint": endpoint, "status": "ok", "data": [result] if result else []}
                     results.append(result_entry)
@@ -693,7 +758,11 @@ async def _execute_batch(
                             duration_ms=max(0, int((_time.monotonic_ns() - step_started_ns) / 1_000_000)),
                         )
                         continue
-                    result = await client.patch(endpoint, record_id, data or {}, etag=etag)
+                    result = await client.patch(
+                        endpoint, record_id, data or {},
+                        etag=etag,
+                        idempotency_key=idempotency_key,
+                    )
                     console.print("[green]✓[/green] updated")
                     result_entry = {"step": i, "name": step_name, "action": action, "endpoint": endpoint, "status": "ok", "data": [result] if result else []}
                     results.append(result_entry)
@@ -736,7 +805,11 @@ async def _execute_batch(
                             duration_ms=max(0, int((_time.monotonic_ns() - step_started_ns) / 1_000_000)),
                         )
                         continue
-                    await client.delete(endpoint, record_id, etag=etag)
+                    await client.delete(
+                        endpoint, record_id,
+                        etag=etag,
+                        idempotency_key=idempotency_key,
+                    )
                     console.print("[green]✓[/green] deleted")
                     result_entry = {"step": i, "name": step_name, "action": action, "endpoint": endpoint, "status": "ok"}
                     results.append(result_entry)

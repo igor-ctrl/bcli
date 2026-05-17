@@ -43,7 +43,7 @@ def _fake_client(monkeypatch):
     return client
 
 
-def test_post_command_forwards_idempotency_key(monkeypatch, tmp_path):
+def test_post_command_forwards_idempotency_key(writable_state, monkeypatch, tmp_path):
     from bcli_cli.commands import post_cmd
 
     client = _fake_client(monkeypatch)
@@ -75,7 +75,7 @@ def test_post_command_forwards_idempotency_key(monkeypatch, tmp_path):
     assert kwargs.get("idempotency_key") == "op-key-1"
 
 
-def test_patch_command_forwards_idempotency_key(monkeypatch, tmp_path):
+def test_patch_command_forwards_idempotency_key(writable_state, monkeypatch, tmp_path):
     from bcli_cli.commands import patch_cmd
 
     client = _fake_client(monkeypatch)
@@ -106,7 +106,7 @@ def test_patch_command_forwards_idempotency_key(monkeypatch, tmp_path):
     assert kwargs.get("idempotency_key") == "op-patch-1"
 
 
-def test_delete_command_forwards_idempotency_key(monkeypatch):
+def test_delete_command_forwards_idempotency_key(writable_state, monkeypatch):
     from bcli_cli.commands import delete_cmd
 
     client = _fake_client(monkeypatch)
