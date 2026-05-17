@@ -107,4 +107,34 @@ def write_envelope(
         os.close(fd)
 
 
-__all__ = ["ENVELOPE_VERSION", "ResultEnvelope", "write_envelope"]
+def read_envelope(path: Path) -> ResultEnvelope:
+    """Inverse of :func:`write_envelope` — load a JSON envelope file.
+
+    Used by ``bcli_mcp`` to pick up the result of a mutating CLI
+    invocation. Tolerates missing optional fields so an older envelope
+    written by a previous bcli version still loads (forward-compat).
+    """
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    return ResultEnvelope(
+        version=raw.get("version", ENVELOPE_VERSION),
+        invocation_id=raw["invocation_id"],
+        tool_version=raw.get("tool_version", ""),
+        profile=raw.get("profile"),
+        environment=raw.get("environment"),
+        company=raw.get("company"),
+        method=raw["method"],
+        endpoint=raw["endpoint"],
+        resolved_url=raw.get("resolved_url"),
+        record_id=raw.get("record_id"),
+        dry_run=bool(raw.get("dry_run", False)),
+        status=raw["status"],
+        exit_code=int(raw["exit_code"]),
+        bc_correlation_id=raw.get("bc_correlation_id"),
+        telemetry_event_id=raw.get("telemetry_event_id"),
+        audit_log_offset=raw.get("audit_log_offset"),
+        started_at=raw.get("started_at", ""),
+        duration_ms=int(raw.get("duration_ms", 0)),
+    )
+
+
+__all__ = ["ENVELOPE_VERSION", "ResultEnvelope", "read_envelope", "write_envelope"]
