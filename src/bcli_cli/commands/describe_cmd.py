@@ -160,30 +160,86 @@ def _supported_formats_from_signature(sig: inspect.Signature) -> list[str]:
     return ["json"]
 
 
-def _options_from_signature(sig: inspect.Signature) -> list[dict[str, Any]]:
+# Safety bounds the MCP server's auto-generated tools must honour. Keys
+# are the (command-path-tuple, long-flag-name); the value rides as the
+# option's ``limits`` sub-object in describe's JSON output. This is the
+# *one* place that says "an agent must clamp this before invoking" —
+# Phase 5's tool generator (``bcli_mcp._tool_generator``) reads it
+# straight off describe.
+_OPTION_LIMITS: dict[tuple[tuple[str, ...], str], dict[str, Any]] = {
+    (("get",), "--top"): {"default": 50, "minimum": 1, "maximum": 1000},
+}
+
+
+def _options_from_signature(
+    sig: inspect.Signature, *, path: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
     options: list[dict[str, Any]] = []
     for name, param in sig.parameters.items():
         info = param.default
         param_decls = getattr(info, "param_decls", None)
         if not param_decls:
-            # Positional argument — describe lists options only.
+            # Positional argument — handled by ``_positionals_from_signature``.
             continue
         # Pick the longest decl (typically the ``--foo`` form).
         long_name = sorted(param_decls, key=lambda d: (-len(d), d))[0]
         type_name = _annotation_to_name(param.annotation)
         opt: dict[str, Any] = {"name": long_name, "type": type_name}
+        # Required options expose ``typer.Option(..., ...)`` — the
+        # default is the literal ellipsis. Phase 5's tool generator
+        # marks these as required in the JSON Schema so an agent
+        # doesn't construct a missing-argument call.
+        option_default = getattr(info, "default", None)
+        if option_default is Ellipsis:
+            opt["required"] = True
         # Crude validator hint — the spec example shows
         # ``validates: "odata-filter"`` for ``--filter``.
         if long_name == "--filter":
             opt["validates"] = "odata-filter"
+        # Optional safety-bounds for clamp-on-call (Phase 5 MCP wiring).
+        limits = _OPTION_LIMITS.get((path, long_name))
+        if limits is not None:
+            opt["limits"] = dict(limits)
         options.append(opt)
     return options
+
+
+def _positionals_from_signature(sig: inspect.Signature) -> list[dict[str, Any]]:
+    """List of positional arguments (Typer ``Argument``) per command.
+
+    Each entry has ``{name, type, required}``. ``required=True`` when
+    the parameter has no default; ``False`` when it does (Typer renders
+    optional positionals via ``typer.Argument(None, ...)``).
+    """
+    positionals: list[dict[str, Any]] = []
+    for name, param in sig.parameters.items():
+        info = param.default
+        param_decls = getattr(info, "param_decls", None)
+        if param_decls:
+            # Option / flag — skip.
+            continue
+        # ``typer.Argument(...)`` instances expose ``default`` on the info
+        # object; a missing default (``...``) means required.
+        argument_default = getattr(info, "default", None)
+        required = argument_default is Ellipsis or argument_default is None
+        # ``typer.Argument(None, ...)`` is the idiomatic optional form
+        # — default is ``None`` and the function accepts it. Treat as
+        # not-required to match the CLI's behaviour.
+        if argument_default is None:
+            required = False
+        positionals.append({
+            "name": name,
+            "type": _annotation_to_name(param.annotation),
+            "required": bool(required),
+        })
+    return positionals
 
 
 def _annotation_to_name(ann: Any) -> str:
     """Render a type annotation as a JSON-friendly string.
 
-    ``Optional[int]`` → ``"int"``, ``bool`` → ``"bool"``, etc.
+    ``Optional[int]`` → ``"int"``, ``bool`` → ``"bool"``,
+    ``list[str]`` → ``"list[str]"`` (preserved so MCP can branch on it).
     """
     if ann is inspect.Parameter.empty:
         return "string"
@@ -192,7 +248,15 @@ def _annotation_to_name(ann: Any) -> str:
         s = ann
     else:
         s = getattr(ann, "__name__", None) or str(ann)
-    s = s.replace("Optional[", "").rstrip("]")
+    s = s.replace("Optional[", "")
+    # Strip one trailing ``]`` that the Optional unwrap leaves behind.
+    if s.endswith("]") and s.count("[") < s.count("]"):
+        s = s[:-1]
+    # Take the last dotted component but preserve the bracket payload.
+    if "[" in s:
+        head, rest = s.split("[", 1)
+        head = head.split(".")[-1].lower()
+        return f"{head}[{rest}".rstrip()
     s = s.split(".")[-1]
     return s.lower() or "string"
 
@@ -223,7 +287,8 @@ def _walk_typer(typer_app, parent_path: tuple[str, ...] = ()) -> list[dict[str, 
         entry: dict[str, Any] = {
             "path": list(path),
             "summary": _summary_from_callback(callback),
-            "options": _options_from_signature(sig),
+            "options": _options_from_signature(sig, path=path),
+            "positionals": _positionals_from_signature(sig),
             "effects": _classify_effects(path),
             "supported_formats": _supported_formats_from_signature(sig),
         }

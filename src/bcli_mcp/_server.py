@@ -1,162 +1,243 @@
-"""FastMCP server with the day-1 bcli tool surface (4 tools).
+"""FastMCP server with a dynamically-generated bcli tool surface.
 
-Design constraints:
+Phase 5 of AIP v0.1. The server's tool list is no longer hand-written.
+On startup, ``_build_server`` subprocesses ``bcli describe --format json``
+and turns each command into one FastMCP tool via
+:func:`bcli_mcp._tool_generator.generate_tools`. New CLI commands light
+up automatically; deprecated ones disappear.
 
-* Token economy. Tool docstrings are short and concrete. ``query`` caps
-  ``top`` at 1000 with a sane default of 50 so an unbounded request can't
-  pull a whole table into context.
-* Subprocess only. Every tool delegates to ``run_bcli_json`` so profile
-  resolution, auth, retry, telemetry, and the registry filters that
-  ``bcli_cli._state`` applies (``disable_standard_api``,
-  ``allowed_categories``) are inherited for free.
-* Read-only. Mutating commands (post/patch/delete, batch, attach upload)
-  are deliberately NOT exposed — they go through the CLI directly where
-  the existing ``disable_writes`` prompt protects.
+Two invocation paths:
+
+* **Read** (``effects: ["read"]``) — append ``--format json``, parse
+  stdout, return the parsed JSON.
+* **Mutating** (``emits_result_envelope: True``) — pass
+  ``--result-out <tmp>``, read the envelope back, return its content
+  as the tool result. A ``status="failed"`` envelope surfaces as an
+  MCP ``ToolError`` with the envelope's correlation id quoted for the
+  agent to cite.
+
+If ``bcli describe`` fails on startup (bcli not on PATH, broken install,
+etc.), the server still starts — with zero tools registered and a stderr
+warning. The operator can fix the install and reconnect.
+
+The subprocess boundary inherits auth, retry, telemetry, profile gates
+for free — that's the whole point. No Python imports from ``bcli`` core.
 """
 
 from __future__ import annotations
 
+import inspect
+import json
+import os
+import subprocess
+import sys
+import tempfile
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
 
-from bcli_mcp._runner import run_bcli_json, run_bcli_side_effect
+from bcli.result_envelope import read_envelope
+from bcli_mcp._runner import (
+    _strip_rich,
+    run_bcli_json,
+    run_bcli_with_envelope,
+)
+from bcli_mcp._tool_generator import GeneratedTool, generate_tools
 
-mcp = FastMCP("bcli")
 
-# Hard caps so an agent can't accidentally pull a whole table.
-_QUERY_DEFAULT_TOP = 50
-_QUERY_MAX_TOP = 1000
+# Map JSON Schema primitive types back to Python types so FastMCP's
+# pydantic-based signature introspection picks up the right types.
+_PYTHON_TYPE_FOR_JSON: dict[str, type] = {
+    "string": str,
+    "integer": int,
+    "number": float,
+    "boolean": bool,
+}
 
 
-@mcp.tool()
-async def query(
-    entity: str,
-    filter: str | None = None,
-    select: str | None = None,
-    top: int | None = None,
-    skip: int | None = None,
-    orderby: str | None = None,
-    expand: str | None = None,
-    record_id: str | None = None,
-    publisher: str | None = None,
-    group: str | None = None,
-    version: str | None = None,
-    profile: str | None = None,
-) -> list[dict[str, Any]]:
-    """Run an OData query against a Business Central entity.
+def _python_type(json_type: str) -> type:
+    return _PYTHON_TYPE_FOR_JSON.get(json_type, str)
 
-    Returns a list of records. ``top`` defaults to 50 and is capped at
-    1000 — for browse-style "show me everything" use the bcli CLI directly.
-    Use ``select`` to limit fields and keep responses small.
 
-    ``entity`` is the OData entity-set name (e.g. ``customers``,
-    ``salesInvoices``). Use ``list_endpoints`` to discover what's
-    available; ``describe_endpoint`` to see the field shape.
+def _apply_dynamic_signature(handler, tool: GeneratedTool) -> None:
+    """Override ``handler`` so its signature matches the tool's input
+    schema. FastMCP's tool registration walks the function signature
+    (via pydantic) to build the JSON Schema agents see — without this
+    override every tool would show up as ``inputs: object`` and lose
+    its named parameters."""
+    properties = tool.input_schema.get("properties", {})
+    required = set(tool.input_schema.get("required", []))
+
+    params: list[inspect.Parameter] = []
+    annotations: dict[str, Any] = {}
+    for name, prop in properties.items():
+        py_type = _python_type(prop.get("type", "string"))
+        default = prop.get("default") if name not in required else inspect.Parameter.empty
+        param = inspect.Parameter(
+            name=name,
+            kind=inspect.Parameter.KEYWORD_ONLY,
+            default=inspect.Parameter.empty if name in required else default,
+            annotation=py_type,
+        )
+        params.append(param)
+        annotations[name] = py_type
+    # Every tool also accepts an optional ``profile`` override so the
+    # agent can scope a single call without restarting the server.
+    if "profile" not in annotations:
+        params.append(inspect.Parameter(
+            name="profile",
+            kind=inspect.Parameter.KEYWORD_ONLY,
+            default=None,
+            annotation=str | None,
+        ))
+        annotations["profile"] = str | None
+    annotations["return"] = Any
+    handler.__signature__ = inspect.Signature(params)
+    handler.__annotations__ = annotations
+
+
+def _load_describe_payload() -> dict[str, Any]:
+    """Subprocess ``bcli describe --format json`` and return parsed JSON.
+
+    Raises on any failure — caller decides whether to fall back to a
+    zero-tools server.
     """
-    effective_top = top if top is not None else _QUERY_DEFAULT_TOP
-    if effective_top < 1:
-        effective_top = 1
-    if effective_top > _QUERY_MAX_TOP:
-        effective_top = _QUERY_MAX_TOP
-
-    args: list[str] = ["get", entity]
-    if record_id:
-        args.append(record_id)
-    if filter:
-        args.extend(["--filter", filter])
-    if select:
-        args.extend(["--select", select])
-    args.extend(["--top", str(effective_top)])
-    if skip is not None:
-        args.extend(["--skip", str(skip)])
-    if orderby:
-        args.extend(["--orderby", orderby])
-    if expand:
-        args.extend(["--expand", expand])
-    if publisher:
-        args.extend(["--publisher", publisher])
-    if group:
-        args.extend(["--group", group])
-    if version:
-        args.extend(["--version", version])
-
-    result = run_bcli_json(*args, profile=profile)
-    # `bcli get <entity>` returns a list. `bcli get <entity> <id>`
-    # returns a single object — wrap so the tool's return type is stable.
-    if isinstance(result, dict):
-        return [result]
-    return result
+    proc = subprocess.run(
+        ["bcli", "describe", "--format", "json"],
+        capture_output=True, text=True, timeout=30.0, check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"bcli describe exited {proc.returncode}: "
+            f"{_strip_rich(proc.stderr or proc.stdout or '(no output)')}"
+        )
+    return json.loads(proc.stdout)
 
 
-@mcp.tool()
-async def list_endpoints(
-    category: str | None = None,
-    custom_only: bool = False,
-    standard_only: bool = False,
-    profile: str | None = None,
-) -> list[dict[str, Any]]:
-    """List Business Central entities the active profile can reach.
+def _make_read_handler(tool: GeneratedTool):
+    """Return an async callable FastMCP will register as the tool fn.
 
-    Returns ``[{name, category, custom, supported_ops, key_field,
-    publisher, group, version, description}]``. Honours profile-level
-    filters (``disable_standard_api``, ``allowed_categories``).
+    The signature is rewritten by :func:`_apply_dynamic_signature` so
+    FastMCP's pydantic-based introspection sees one keyword arg per
+    input-schema property — preserves the tool's input schema as the
+    agent actually receives it.
     """
-    args = ["endpoint", "list"]
-    if custom_only:
-        args.append("--custom")
-    if standard_only:
-        args.append("--standard")
-    if category:
-        args.extend(["--category", category])
-    return run_bcli_json(*args, profile=profile)
+    async def handler(**inputs: Any) -> Any:
+        # Drop None values so optional args that the agent didn't fill
+        # in don't pollute the argv builder.
+        inputs = {k: v for k, v in inputs.items() if v is not None}
+        profile = inputs.pop("profile", None)
+        args = tool.build_argv(inputs)
+        result = run_bcli_json(*args, profile=profile)
+        # Single-record dict from ``bcli get <entity> <id>`` is wrapped
+        # so the return type stays stable for the agent.
+        if tool.name == "bcli_get" and isinstance(result, dict):
+            return [result]
+        return result
+    handler.__name__ = tool.name
+    handler.__doc__ = tool.description
+    _apply_dynamic_signature(handler, tool)
+    return handler
 
 
-@mcp.tool()
-async def describe_endpoint(
-    name: str,
-    discover_fields: bool = False,
-    profile: str | None = None,
-) -> dict[str, Any]:
-    """Show fields, key, supported operations, and route for one entity.
+def _make_mutating_handler(tool: GeneratedTool):
+    """Mutating handler: passes ``--result-out``, reads envelope back."""
+    async def handler(**inputs: Any) -> dict[str, Any]:
+        inputs = {k: v for k, v in inputs.items() if v is not None}
+        profile = inputs.pop("profile", None)
+        args = list(tool.build_argv(inputs))
+        if profile:
+            args = ["--profile", profile, *args]
 
-    The response includes ``fields_discovered: bool``. When false, ``fields``
-    is empty *because the local registry hasn't probed BC for this entity
-    yet*, not because the entity has no fields. Two ways to recover:
+        env = os.environ.copy()
+        if profile:
+            env["BCLI_PROFILE"] = profile
 
-    * Pass ``discover_fields=True`` (this tool runs ``bcli endpoint fields
-      <name>`` first — costs one BC API call, populates the cache for every
-      future call).
-    * Or call ``query(entity=name, top=1)`` and read the keys off the first
-      record. Cheaper if you only need the schema for one analysis.
-
-    Note: some BC pages are "query objects" (read-only summary views) which
-    don't support server-side ``$orderby`` or ``$filter``. If a ``query()``
-    call against this entity 400s on those, fall back to client-side sort
-    over a bounded ``top`` window — see docs/mcp-server.md.
-    """
-    if discover_fields:
-        # ``bcli endpoint fields`` fetches one record from BC and persists
-        # the field names into the local registry. The text output is
-        # discarded — we only care about the cache write. If discovery
-        # fails (e.g. entity needs a filter, no records returned), the
-        # subsequent ``endpoint info`` call returns ``fields_discovered:
-        # false`` and the agent can fall back to a probe query.
+        # The envelope is written atomically by bcli; we just need a
+        # private path the subprocess can write to and we can read.
+        fd, env_path = tempfile.mkstemp(prefix="bcli-mcp-", suffix=".json")
+        os.close(fd)
         try:
-            run_bcli_side_effect("endpoint", "fields", name, profile=profile)
-        except Exception:
-            pass
+            exit_code, _stdout, stderr = run_bcli_with_envelope(
+                args, env=env, capture_envelope_path=env_path,
+            )
+            try:
+                envelope = read_envelope(env_path)
+            except (OSError, ValueError, KeyError) as exc:
+                # Envelope missing or malformed → bcli crashed before
+                # writing. Surface the stderr as the error so the agent
+                # can read it.
+                raise ToolError(
+                    f"bcli {' '.join(args)} exited {exit_code} without "
+                    f"writing an envelope: {_strip_rich(stderr or '(no output)')}"
+                ) from exc
 
-    return run_bcli_json("endpoint", "info", name, profile=profile)
+            if envelope.status == "failed":
+                corr = envelope.bc_correlation_id or "n/a"
+                raise ToolError(
+                    f"bcli {' '.join(args)} failed (exit_code="
+                    f"{envelope.exit_code}, correlation_id={corr})"
+                )
+            # Return the envelope as a plain dict so MCP can serialize.
+            from dataclasses import asdict
+            return asdict(envelope)
+        finally:
+            try:
+                os.unlink(env_path)
+            except OSError:
+                pass
+
+    handler.__name__ = tool.name
+    handler.__doc__ = tool.description
+    _apply_dynamic_signature(handler, tool)
+    return handler
 
 
-@mcp.tool()
-async def list_companies(
-    profile: str | None = None,
-) -> list[dict[str, Any]]:
-    """List companies on the active environment.
+def _register_tool(mcp: FastMCP, tool: GeneratedTool) -> None:
+    """Register one generated tool with FastMCP.
 
-    Returns ``[{id, name, alias, is_default}]``. ``alias`` is the local
-    nickname configured via ``bcli company alias …`` (null if unset).
+    Read handlers get a thin wrapper; mutating handlers get the
+    envelope-reading flow. Profile is always available as an extra
+    kwarg the agent can pass to scope the call.
     """
-    return run_bcli_json("company", "list", profile=profile)
+    if tool.emits_envelope:
+        fn = _make_mutating_handler(tool)
+    else:
+        fn = _make_read_handler(tool)
+    mcp.tool(name=tool.name, description=tool.description)(fn)
+
+
+def _build_server(*, describe_payload: dict[str, Any] | None = None) -> FastMCP:
+    """Build a FastMCP server with tools generated from describe.
+
+    ``describe_payload`` is injected for tests; production calls
+    :func:`_load_describe_payload` to subprocess the real CLI.
+    """
+    mcp = FastMCP("bcli")
+    if describe_payload is None:
+        try:
+            describe_payload = _load_describe_payload()
+        except Exception as exc:  # noqa: BLE001
+            sys.stderr.write(
+                f"bcli-mcp: warning — could not load describe payload "
+                f"({exc}). Starting with zero tools; fix the install and "
+                "reconnect.\n"
+            )
+            return mcp
+    for tool in generate_tools(describe_payload):
+        _register_tool(mcp, tool)
+    return mcp
+
+
+# Module-level singleton used by ``python -m bcli_mcp``. Built lazily so
+# the import is cheap and tests can patch ``_build_server`` cleanly.
+mcp: FastMCP | None = None
+
+
+def get_server() -> FastMCP:
+    """Return the module-level server, building it on first call."""
+    global mcp
+    if mcp is None:
+        mcp = _build_server()
+    return mcp

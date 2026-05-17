@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from bcli_mcp._runner import _strip_rich, run_bcli_json, run_bcli_side_effect
+from bcli_mcp._runner import _strip_rich, run_bcli_json, run_bcli_with_envelope
 from mcp.server.fastmcp.exceptions import ToolError
 
 
@@ -139,44 +139,77 @@ class TestRunnerErrors:
                 run_bcli_json("get", "customers", timeout=1)
 
 
-# ── run_bcli_side_effect ─────────────────────────────────────────────────
+# ── run_bcli_with_envelope ───────────────────────────────────────────────
 
 
-class TestSideEffectRunner:
-    def test_does_not_append_format_json(self):
-        """Side-effect commands have non-JSON human stdout — adding
-        --format json to commands like ``endpoint fields`` would either
-        be a no-op or change behaviour. Make sure we DON'T append it."""
+class TestRunBcliWithEnvelope:
+    """The mutating-tool helper: invoke ``bcli <args> --result-out <tmp>
+    --format json``, then read the envelope back. Returns
+    ``(exit_code, stdout, stderr)`` so the caller decides whether to
+    treat a non-zero exit as an error (the envelope's ``status`` field
+    is the true source of truth)."""
+
+    def test_appends_result_out_and_format_json(self, tmp_path):
+        env_path = tmp_path / "out.json"
         with patch("subprocess.run") as run:
-            run.return_value = _mock_completed(0, stdout="Fields for…")
-            run_bcli_side_effect("endpoint", "fields", "customers")
-        argv = run.call_args.args[0]
-        assert "--format" not in argv
-
-    def test_returns_none_on_success(self):
-        with patch("subprocess.run") as run:
-            run.return_value = _mock_completed(0, stdout="any text")
-            assert run_bcli_side_effect("endpoint", "fields", "customers") is None
-
-    def test_ignores_stdout_content(self):
-        """Non-JSON, garbage, empty — all fine as long as exit is 0."""
-        with patch("subprocess.run") as run:
-            run.return_value = _mock_completed(0, stdout="<html>")
-            run_bcli_side_effect("endpoint", "fields", "customers")  # no raise
-
-    def test_non_zero_exit_raises_toolerror(self):
-        with patch("subprocess.run") as run:
-            run.return_value = _mock_completed(
-                1, stdout="", stderr="[red]Endpoint not found[/red]",
+            run.return_value = _mock_completed(0, stdout="", stderr="")
+            rc, _stdout, _stderr = run_bcli_with_envelope(
+                ["post", "vendors", "--data", "{}"],
+                env=None,
+                capture_envelope_path=str(env_path),
             )
-            with pytest.raises(ToolError, match=r"Endpoint not found"):
-                run_bcli_side_effect("endpoint", "fields", "nope")
-
-    def test_profile_passes_through(self):
-        with patch("subprocess.run") as run:
-            run.return_value = _mock_completed(0, stdout="")
-            run_bcli_side_effect("endpoint", "fields", "customers", profile="prod")
         argv = run.call_args.args[0]
-        env = run.call_args.kwargs["env"]
-        assert "--profile" in argv and argv[argv.index("--profile") + 1] == "prod"
-        assert env["BCLI_PROFILE"] == "prod"
+        assert argv[0] == "bcli"
+        assert "--result-out" in argv
+        assert argv[argv.index("--result-out") + 1] == str(env_path)
+        assert "--format" in argv
+        assert argv[argv.index("--format") + 1] == "json"
+        assert rc == 0
+
+    def test_returns_exit_code_unchanged(self, tmp_path):
+        """Mutating tools care about the envelope's status, not the exit
+        code per se — but we still pass the exit code through so the
+        server can sanity-check against the envelope (e.g., if the
+        envelope is missing, fall back to the exit code)."""
+        with patch("subprocess.run") as run:
+            run.return_value = _mock_completed(6, stdout="", stderr="[red]oops[/red]")
+            rc, _stdout, stderr = run_bcli_with_envelope(
+                ["post", "vendors", "--data", "{}"],
+                env=None,
+                capture_envelope_path=str(tmp_path / "x.json"),
+            )
+        assert rc == 6
+        assert stderr == "[red]oops[/red]"  # raw — caller strips as needed
+
+    def test_passes_env_dict_through(self, tmp_path):
+        with patch("subprocess.run") as run:
+            run.return_value = _mock_completed(0)
+            run_bcli_with_envelope(
+                ["post", "v"],
+                env={"BCLI_PROFILE": "prod", "PATH": "/usr/bin"},
+                capture_envelope_path=str(tmp_path / "x.json"),
+            )
+        passed = run.call_args.kwargs["env"]
+        assert passed["BCLI_PROFILE"] == "prod"
+
+    def test_missing_bcli_binary_raises_toolerror(self, tmp_path):
+        with patch("subprocess.run", side_effect=FileNotFoundError("bcli")):
+            with pytest.raises(ToolError, match=r"bcli executable not found"):
+                run_bcli_with_envelope(
+                    ["post", "v"],
+                    env=None,
+                    capture_envelope_path=str(tmp_path / "x.json"),
+                )
+
+    def test_timeout_raises_toolerror(self, tmp_path):
+        with patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired(["bcli"], 1),
+        ):
+            with pytest.raises(ToolError, match=r"timed out"):
+                run_bcli_with_envelope(
+                    ["post", "v"],
+                    env=None,
+                    capture_envelope_path=str(tmp_path / "x.json"),
+                    timeout=1,
+                )

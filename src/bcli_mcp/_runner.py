@@ -6,6 +6,16 @@ per-call profile override are honoured), capture stdout + stderr, parse the
 JSON response, and surface a clean ``ToolError`` on non-zero exits with
 Rich markup stripped from the error message.
 
+Two entry points:
+
+* :func:`run_bcli_json` — read-only invocations. Append ``--format json``,
+  parse stdout, return the parsed value.
+* :func:`run_bcli_with_envelope` — mutating invocations. Append
+  ``--result-out <tmp>`` and ``--format json``; return
+  ``(exit_code, stdout, stderr)`` so the caller reads the envelope file
+  back via :func:`bcli.result_envelope.read_envelope`. The envelope is
+  the source of truth for outcome; stdout is mostly noise.
+
 We deliberately do NOT import ``bcli`` Python modules here. Subprocess
 delegation is the design — see ``docs/mcp-server.md``.
 """
@@ -16,7 +26,7 @@ import json
 import os
 import re
 import subprocess
-from typing import Any
+from typing import Any, Mapping
 
 # Imported lazily so the runner module is importable in environments
 # that don't have the optional ``mcp`` package installed (tests).
@@ -35,6 +45,13 @@ _RICH_MARKUP = re.compile(r"\[/?[a-zA-Z][a-zA-Z0-9 _#=,\-]*\]")
 
 def _strip_rich(text: str) -> str:
     return _RICH_MARKUP.sub("", text).strip()
+
+
+def _env_with_profile(profile: str | None) -> dict[str, str]:
+    env = os.environ.copy()
+    if profile:
+        env["BCLI_PROFILE"] = profile
+    return env
 
 
 def run_bcli_json(
@@ -57,17 +74,13 @@ def run_bcli_json(
     argv.extend(args)
     argv.extend(["--format", "json"])
 
-    env = os.environ.copy()
-    if profile:
-        env["BCLI_PROFILE"] = profile
-
     try:
         proc = subprocess.run(
             argv,
             capture_output=True,
             text=True,
             timeout=timeout,
-            env=env,
+            env=_env_with_profile(profile),
             check=False,
         )
     except FileNotFoundError as exc:
@@ -99,36 +112,33 @@ def run_bcli_json(
         ) from exc
 
 
-def run_bcli_side_effect(
-    *args: str,
-    profile: str | None = None,
-    timeout: float = 120.0,
-) -> None:
-    """Run ``bcli <args>`` for its side effect; ignore stdout content.
+def run_bcli_with_envelope(
+    args: list[str],
+    *,
+    env: Mapping[str, str] | None,
+    capture_envelope_path: str,
+    timeout: float = 300.0,
+) -> tuple[int, str, str]:
+    """Run a mutating ``bcli`` command with ``--result-out <path>``.
 
-    Some bcli subcommands (e.g. ``endpoint fields``) emit human-readable
-    text on stdout but persist their useful work to the local registry as
-    a side effect. We don't want that text — we want the cache write.
+    Returns ``(exit_code, stdout, stderr)``. The caller is expected to
+    read the envelope file at ``capture_envelope_path`` via
+    :func:`bcli.result_envelope.read_envelope` — that's the source of
+    truth for the mutation outcome.
 
-    Raises ``ToolError`` on non-zero exit (with Rich markup stripped) or
-    timeout. Otherwise silent on success.
+    The exit code is passed through so the caller can sanity-check (an
+    envelope missing on disk + a non-zero exit code is "bcli crashed
+    before writing the envelope" rather than "the mutation succeeded").
     """
-    argv = ["bcli"]
-    if profile:
-        argv.extend(["--profile", profile])
-    argv.extend(args)
-
-    env = os.environ.copy()
-    if profile:
-        env["BCLI_PROFILE"] = profile
-
+    argv = ["bcli", *args, "--result-out", capture_envelope_path, "--format", "json"]
+    effective_env = dict(env) if env is not None else os.environ.copy()
     try:
         proc = subprocess.run(
             argv,
             capture_output=True,
             text=True,
             timeout=timeout,
-            env=env,
+            env=effective_env,
             check=False,
         )
     except FileNotFoundError as exc:
@@ -141,8 +151,4 @@ def run_bcli_side_effect(
             f"bcli {' '.join(args)} timed out after {timeout}s"
         ) from exc
 
-    if proc.returncode != 0:
-        message = _strip_rich(proc.stderr or proc.stdout or "(no output)")
-        raise _ToolError(
-            f"bcli {' '.join(args)} exited {proc.returncode}: {message}"
-        )
+    return proc.returncode, proc.stdout, proc.stderr
