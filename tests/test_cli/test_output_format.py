@@ -35,9 +35,16 @@ class TestDefaultFormat:
         _force_tty(monkeypatch, True)
         assert detect_default_format() == "markdown"
 
-    def test_non_tty_gets_markdown(self, monkeypatch):
+    def test_non_tty_gets_json(self, monkeypatch):
+        """AIP §Phase 4b: pipes / redirects default to JSON.
+
+        Programmatic consumers (CI, agents, scripts) get the canonical
+        machine-readable shape unless they explicitly override.
+        """
         _force_tty(monkeypatch, False)
-        assert detect_default_format() == "markdown"
+        # Ensure platform is non-Windows so we exercise the Phase 4b branch.
+        monkeypatch.setattr("sys.platform", "linux")
+        assert detect_default_format() == "json"
 
     def test_posix_tty_gets_table(self, monkeypatch):
         monkeypatch.setattr("sys.platform", "linux")
