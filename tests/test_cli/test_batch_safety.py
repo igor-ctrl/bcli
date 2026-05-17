@@ -111,6 +111,18 @@ def non_interactive(monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _isolate_ledger_home(tmp_path, monkeypatch):
+    """Phase 3 ledger writes ~/.config/bcli/batch/<run-id>.db on every
+    ``run_batch`` invocation. These safety tests pre-date the ledger and
+    don't care about its output — but they MUST NOT pollute the
+    developer's real home dir. Redirect Path.home() to tmp_path so the
+    ledger files land in a tear-down-friendly location.
+    """
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    yield
+
+
 # ── Read-only profile blocks mutating batches ────────────────────────────
 
 
