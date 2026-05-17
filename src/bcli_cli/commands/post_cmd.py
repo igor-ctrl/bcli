@@ -46,9 +46,6 @@ def post_command(
 
     print_context_banner()
 
-    from bcli_cli._safety import confirm_write_or_exit
-    confirm_write_or_exit("POST", endpoint, yes=yes)
-
     body = _parse_data(data)
 
     with capture(
@@ -57,6 +54,7 @@ def post_command(
         result_out=result_out,
         result_fd=result_fd,
     ) as cap:
+        from bcli_cli._safety import confirm_write_or_exit
         from bcli_cli._url_resolve import try_resolve_url
 
         cap.set_resolved_url(try_resolve_url(
@@ -65,6 +63,12 @@ def post_command(
             group=group,
             version=version,
         ))
+
+        # Policy gate runs *inside* the capture block so a refused write
+        # still emits a failed envelope. The ``capture()`` salvage path
+        # turns the ``typer.Exit(1)`` into a status="failed" envelope.
+        # See PR #15 review.
+        confirm_write_or_exit("POST", endpoint, yes=yes)
 
         if state.dry_run:
             from bcli_cli._dry_run import render_dry_run

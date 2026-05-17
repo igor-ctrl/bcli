@@ -80,9 +80,6 @@ def upload_command(
 
     print_context_banner()
 
-    from bcli_cli._safety import confirm_write_or_exit
-    confirm_write_or_exit("UPLOAD", "documentAttachments", yes=yes)
-
     with capture(
         method="UPLOAD",
         endpoint="documentAttachments",
@@ -90,6 +87,7 @@ def upload_command(
         result_fd=result_fd,
     ) as cap:
         from bcli_cli._audit_wrap import audited_write
+        from bcli_cli._safety import confirm_write_or_exit
         from bcli_cli._url_resolve import try_resolve_url
         resolved_url = try_resolve_url(
             "documentAttachments",
@@ -97,6 +95,10 @@ def upload_command(
             force_standard=standard,
         )
         cap.set_resolved_url(resolved_url)
+
+        # Policy gate runs *inside* the capture block so a refused write
+        # still emits a failed envelope. See PR #15 review.
+        confirm_write_or_exit("UPLOAD", "documentAttachments", yes=yes)
 
         if state.dry_run:
             from bcli_cli._dry_run import render_dry_run

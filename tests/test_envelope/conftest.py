@@ -47,6 +47,42 @@ def cli_state(monkeypatch):
 
 
 @pytest.fixture
+def readonly_state(monkeypatch):
+    """Active CLI state pointing at a read-only Production profile.
+
+    Drives the policy-violation envelope tests: ``disable_writes=true`` +
+    non-interactive + no ``--yes`` must produce a failed envelope, not a
+    silent exit.
+    """
+    cfg = BCConfig(
+        defaults=BCDefaults(profile="prod"),
+        profiles={
+            "prod": BCProfile(
+                tenant_id="t1",
+                environment="Production",
+                company_id="c-999",
+                disable_writes=True,
+            ),
+        },
+    )
+    state._config = cfg
+    state._registry = None
+    state._telemetry = None
+    state.profile_name = None
+    state.env_override = None
+    state.company_override = None
+    state.format = "table"
+    state.dry_run = False
+    state.quiet = True
+    yield state
+    state._config = None
+    state._registry = None
+    state._telemetry = None
+    state.profile_name = None
+    state.dry_run = False
+
+
+@pytest.fixture
 def fake_client():
     """Async client with mockable post/patch/delete/upload_attachment.
 
