@@ -174,6 +174,7 @@ from bcli_cli.commands import (  # noqa: E402
     post_cmd,
     query_cmd,
     registry_cmd,
+    skill_init_cmd,
     test_cmd,
 )
 
@@ -186,6 +187,7 @@ app.add_typer(registry_cmd.app, name="registry", help="Custom API registry manag
 app.add_typer(test_cmd.app, name="test", help="Connection and endpoint testing")
 app.add_typer(batch_cmd.app, name="batch", help="Batch operations from YAML files")
 app.add_typer(attach_cmd.app, name="attach", help="Document-attachment workflows (two-phase /attachments upload)")
+app.add_typer(skill_init_cmd.app, name="skill", help="Generate a per-user bcli skill bundle (AIP Phase 7)")
 app.command(name="get")(get_cmd.get_command)
 app.command(name="post")(post_cmd.post_command)
 app.command(name="patch")(patch_cmd.patch_command)
