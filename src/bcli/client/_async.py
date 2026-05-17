@@ -211,6 +211,18 @@ class AsyncBCClient:
         )
         return await transport.delete(url, etag=etag)
 
+    async def delete_url(self, url: str, *, etag: str = "*") -> dict[str, Any]:
+        """DELETE an already-resolved absolute URL.
+
+        Used by the batch ledger's rollback path, where the inverse-op
+        URL was composed at POST-capture time and stored verbatim. The
+        registry would not be re-consulted at rollback (the original
+        endpoint may have moved between runs); we trust the captured
+        URL.
+        """
+        transport = self._ensure_transport()
+        return await transport.delete(url, etag=etag)
+
     async def upload_attachment(
         self,
         parent_type: str,
