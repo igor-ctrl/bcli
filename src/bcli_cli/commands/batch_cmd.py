@@ -230,6 +230,11 @@ def run_batch(
         "--result-fd",
         help="Write the JSON result envelope to this file descriptor and close it.",
     ),
+    progress_fd: int | None = typer.Option(
+        None,
+        "--progress-fd",
+        help="Stream JSON ``step_started`` / ``step_completed`` events to this fd (AIP §Phase 4e).",
+    ),
 ) -> None:
     """Execute a YAML batch file (sequence of API calls).
 
@@ -383,10 +388,22 @@ def run_batch(
 
         output_format = format
 
+        from bcli_cli._progress import ProgressEmitter
+
+        progress = ProgressEmitter(fd=progress_fd)
         try:
-            results = asyncio.run(
-                _execute_batch(steps, context=context, output_format=output_format, ledger=ledger)
-            )
+            try:
+                results = asyncio.run(
+                    _execute_batch(
+                        steps, context=context, output_format=output_format,
+                        ledger=ledger, progress=progress,
+                    )
+                )
+            finally:
+                # Close the progress fd as soon as the batch finishes so
+                # the consumer EOFs and can stop reading. The result
+                # envelope still lands separately on --result-out/-fd.
+                progress.close()
 
             succeeded = sum(1 for r in results if r.get("status") == "ok")
             failed_count = sum(1 for r in results if r.get("status") == "error")
@@ -499,16 +516,25 @@ async def _execute_batch(
     context: Any | None = None,
     output_format: str | None = None,
     ledger: Ledger | None = None,
+    progress: Any | None = None,
 ) -> list[dict]:
     """Execute the batch steps, writing intent + outcome rows around each
     HTTP call when a ``ledger`` is supplied.
 
-    The ``ledger`` argument is keyword-only and optional so existing
+    ``ledger`` and ``progress`` are keyword-only and optional so existing
     integration tests that call this function directly continue to work
-    unchanged.
+    unchanged. ``progress`` is a :class:`bcli_cli._progress.ProgressEmitter`
+    that receives a JSON event before and after each step (AIP §Phase 4e).
     """
+    import time as _time
+
     from bcli.workflow._models import StepResult, WorkflowContext
     from bcli.workflow._resolver import resolve_references
+
+    # Lightweight no-op stand-in if the caller didn't pass an emitter.
+    class _NullProgress:
+        def emit(self, **_: Any) -> None: ...
+    prog = progress if progress is not None else _NullProgress()
 
     results: list[dict] = []
     async with state.make_async_client() as client:
@@ -566,6 +592,22 @@ async def _execute_batch(
                     body_hash=_body_hash(data) if data is not None else None,
                 )
 
+            # AIP §Phase 4e — emit one ``step_started`` event per step.
+            step_method = action.upper() if action != "get" else "GET"
+            step_started_ns = _time.monotonic_ns()
+            prog.emit(
+                event="step_started",
+                seq=i,
+                name=step_name,
+                method=step_method,
+                endpoint=endpoint,
+            )
+
+            # Sentinel that each branch updates so the matching
+            # ``step_completed`` event reports the right outcome.
+            step_terminal_status = "unknown"
+            step_terminal_error: str | None = None
+
             try:
                 if action == "get":
                     from bcli.odata._query import Query
@@ -602,6 +644,7 @@ async def _execute_batch(
                             bc_correlation_id=None, error_message=None,
                             rollback_url=None,  # GETs are not rollback-eligible
                         )
+                    step_terminal_status = "committed"
 
                 elif action == "post":
                     result = await client.post(endpoint, data or {})
@@ -625,6 +668,7 @@ async def _execute_batch(
                             bc_correlation_id=None, error_message=None,
                             rollback_url=rb_url,
                         )
+                    step_terminal_status = "committed"
 
                 elif action == "patch":
                     if not record_id:
@@ -637,6 +681,17 @@ async def _execute_batch(
                                 error_message="missing id",
                                 rollback_url=None,
                             )
+                        step_terminal_status = "failed"
+                        step_terminal_error = "missing id"
+                        # Emit step_completed before the early ``continue``
+                        # so the agent sees a complete pair.
+                        prog.emit(
+                            event="step_completed",
+                            seq=i, name=step_name, method=step_method,
+                            endpoint=endpoint, status=step_terminal_status,
+                            error=step_terminal_error,
+                            duration_ms=max(0, int((_time.monotonic_ns() - step_started_ns) / 1_000_000)),
+                        )
                         continue
                     result = await client.patch(endpoint, record_id, data or {}, etag=etag)
                     console.print("[green]✓[/green] updated")
@@ -658,6 +713,7 @@ async def _execute_batch(
                             # ``bcli batch rollback``.
                             rollback_url=None,
                         )
+                    step_terminal_status = "committed"
 
                 elif action == "delete":
                     if not record_id:
@@ -670,6 +726,15 @@ async def _execute_batch(
                                 error_message="missing id",
                                 rollback_url=None,
                             )
+                        step_terminal_status = "failed"
+                        step_terminal_error = "missing id"
+                        prog.emit(
+                            event="step_completed",
+                            seq=i, name=step_name, method=step_method,
+                            endpoint=endpoint, status=step_terminal_status,
+                            error=step_terminal_error,
+                            duration_ms=max(0, int((_time.monotonic_ns() - step_started_ns) / 1_000_000)),
+                        )
                         continue
                     await client.delete(endpoint, record_id, etag=etag)
                     console.print("[green]✓[/green] deleted")
@@ -688,6 +753,7 @@ async def _execute_batch(
                             bc_correlation_id=None, error_message=None,
                             rollback_url=None,  # DELETE has no clean inverse
                         )
+                    step_terminal_status = "committed"
 
                 else:
                     console.print(f"[yellow]? unknown action '{action}'[/yellow]")
@@ -699,6 +765,7 @@ async def _execute_batch(
                             error_message=f"unknown action '{action}'",
                             rollback_url=None,
                         )
+                    step_terminal_status = "skipped"
 
             except Exception as e:
                 console.print(f"[red]✗ {e}[/red]")
@@ -715,6 +782,19 @@ async def _execute_batch(
                         error_message=str(e),
                         rollback_url=None,
                     )
+                step_terminal_status = "failed"
+                step_terminal_error = str(e)
+
+            # AIP §Phase 4e — emit ``step_completed`` for every step that
+            # didn't ``continue`` out early (the early-continue branches
+            # emit their own completed event before exiting).
+            prog.emit(
+                event="step_completed",
+                seq=i, name=step_name, method=step_method,
+                endpoint=endpoint, status=step_terminal_status,
+                error=step_terminal_error,
+                duration_ms=max(0, int((_time.monotonic_ns() - step_started_ns) / 1_000_000)),
+            )
 
     return results
 
