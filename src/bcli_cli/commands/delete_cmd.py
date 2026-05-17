@@ -46,15 +46,13 @@ def delete_command(
 
     print_context_banner()
 
-    from bcli_cli._safety import confirm_write_or_exit
-    confirm_write_or_exit("DELETE", endpoint, yes=yes)
-
     with capture(
         method="DELETE",
         endpoint=endpoint,
         result_out=result_out,
         result_fd=result_fd,
     ) as cap:
+        from bcli_cli._safety import confirm_write_or_exit
         from bcli_cli._url_resolve import try_resolve_url
 
         cap.set_resolved_url(try_resolve_url(
@@ -65,6 +63,10 @@ def delete_command(
             version=version,
         ))
         cap.set_record_id(record_id)
+
+        # Policy gate runs *inside* the capture block so a refused write
+        # still emits a failed envelope. See PR #15 review.
+        confirm_write_or_exit("DELETE", endpoint, yes=yes)
 
         if state.dry_run:
             from bcli_cli._dry_run import render_dry_run
