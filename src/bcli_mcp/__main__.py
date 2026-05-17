@@ -22,7 +22,7 @@ def main() -> None:
     os.chdir(os.path.expanduser("~"))
 
     try:
-        from bcli_mcp._server import mcp
+        from bcli_mcp._server import get_server
     except ImportError as exc:
         sys.stderr.write(
             f"bcli-mcp: failed to import server: {exc}\n"
@@ -30,7 +30,7 @@ def main() -> None:
         )
         raise SystemExit(1) from exc
 
-    mcp.run()
+    get_server().run()
 
 
 if __name__ == "__main__":
