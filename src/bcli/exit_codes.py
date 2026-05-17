@@ -32,6 +32,28 @@ EXIT_REMOTE_5XX = 7
 EXIT_POLICY = 8
 
 
+# Public, ordered taxonomy. ``bcli describe`` consumes this exact map so
+# AI agents can render meaningful errors from a CLI exit. The label is a
+# short human-readable string — keep it stable across minor versions;
+# breaking changes here are user-visible.
+EXIT_CODES: dict[int, str] = {
+    EXIT_OK: "success",
+    EXIT_GENERIC_ERROR: "uncategorised error",
+    EXIT_USAGE: "usage error",
+    EXIT_AUTH: "authentication failure",
+    EXIT_NOT_FOUND: "not found",
+    EXIT_VALIDATION: "input validation",
+    EXIT_REMOTE_4XX: "remote 4xx",
+    EXIT_REMOTE_5XX: "remote 5xx",
+    EXIT_POLICY: "policy violation",
+}
+
+
+def describe_exit_code(code: int) -> str:
+    """Return the short label for an exit code, or ``"unknown"``."""
+    return EXIT_CODES.get(code, "unknown")
+
+
 def exit_code_for_status(status_code: int | None) -> int:
     """Map an HTTP status to a CLI exit code.
 

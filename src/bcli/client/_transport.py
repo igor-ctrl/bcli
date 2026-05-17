@@ -124,6 +124,7 @@ class BCTransport:
         content: bytes | None = None,
         content_type: str | None = None,
         etag: str | None = None,
+        idempotency_key: str | None = None,
         log_context: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Execute an HTTP request with retry and error handling.
@@ -151,6 +152,13 @@ class BCTransport:
                     headers["If-Match"] = etag
                 if content is not None:
                     headers["Content-Type"] = content_type or "application/octet-stream"
+                if idempotency_key is not None:
+                    # AIP §Phase 4d — IETF draft "Idempotency-Key" header.
+                    # BC may not honor it server-side today; any gateway /
+                    # reverse-proxy in front can apply replay protection,
+                    # and we ledger the key so our own retry logic stays
+                    # deterministic regardless of server support.
+                    headers["Idempotency-Key"] = idempotency_key
 
                 logger.debug("%s %s (attempt %d)", method, url, attempt + 1)
 
@@ -294,13 +302,29 @@ class BCTransport:
         assert_bc_origin(url)
         return await self._request("GET", url)
 
-    async def post(self, url: str, *, json_body: dict[str, Any]) -> dict[str, Any]:
-        return await self._request("POST", url, json_body=json_body)
+    async def post(
+        self,
+        url: str,
+        *,
+        json_body: dict[str, Any],
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        return await self._request(
+            "POST", url, json_body=json_body, idempotency_key=idempotency_key,
+        )
 
     async def patch(
-        self, url: str, *, json_body: dict[str, Any], etag: str = "*"
+        self,
+        url: str,
+        *,
+        json_body: dict[str, Any],
+        etag: str = "*",
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
-        return await self._request("PATCH", url, json_body=json_body, etag=etag)
+        return await self._request(
+            "PATCH", url, json_body=json_body, etag=etag,
+            idempotency_key=idempotency_key,
+        )
 
     async def patch_binary(
         self,
@@ -309,14 +333,24 @@ class BCTransport:
         content: bytes,
         content_type: str = "application/octet-stream",
         etag: str = "*",
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """PATCH raw binary bytes with a custom Content-Type (e.g. attachments/content)."""
         return await self._request(
             "PATCH", url, content=content, content_type=content_type, etag=etag,
+            idempotency_key=idempotency_key,
         )
 
-    async def delete(self, url: str, *, etag: str = "*") -> dict[str, Any]:
-        return await self._request("DELETE", url, etag=etag)
+    async def delete(
+        self,
+        url: str,
+        *,
+        etag: str = "*",
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        return await self._request(
+            "DELETE", url, etag=etag, idempotency_key=idempotency_key,
+        )
 
 
 def _parse_bc_error(response: httpx.Response) -> tuple[str | None, str | None]:

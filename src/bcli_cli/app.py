@@ -219,10 +219,16 @@ app.add_typer(
 def main() -> None:
     """Console-script entry point.
 
-    Wraps the Typer ``app`` with a SIGPIPE handler so that ``bcli ... | head``
-    and similar pipe-truncating consumers terminate the CLI silently —
-    matching the Unix idiom of ``cat``, ``grep`` and friends — instead of
-    surfacing ``BrokenPipeError`` at interpreter shutdown.
+    Wraps the Typer ``app`` with:
+
+    1. A SIGPIPE handler so ``bcli ... | head`` and similar pipe-
+       truncating consumers terminate the CLI silently — matching the
+       Unix idiom of ``cat``, ``grep`` and friends — instead of
+       surfacing ``BrokenPipeError`` at interpreter shutdown.
+    2. AIP §Phase 4c centralized error handler — :class:`BCLIError`
+       subclasses are mapped to documented exit codes and the message
+       is enriched with a "Did you mean / run X" remediation hint.
+       Avoids touching every raise site.
 
     On Windows the ``signal.SIGPIPE`` constant is absent; the safety-net
     ``try`` below catches the error in that path.
@@ -246,6 +252,36 @@ def main() -> None:
         except Exception:
             pass
         sys.exit(0)
+    except SystemExit:
+        # ``typer.Exit`` raises SystemExit — propagate to let the
+        # configured exit code surface unchanged.
+        raise
+    except BaseException as exc:  # noqa: BLE001
+        # AIP §Phase 4c — central error handler. Map BCLIError subclasses
+        # to documented exit codes and inject a remediation hint. Other
+        # exceptions pass through so a real crash still surfaces a traceback.
+        from bcli.errors import BCLIError
+        from bcli_cli._error_handler import (
+            format_error_for_cli,
+            map_error_to_exit_code,
+        )
+
+        if not isinstance(exc, BCLIError):
+            raise
+
+        active_profile = state.profile_name
+        available: list[str] | None = None
+        try:
+            if state._config is not None:
+                available = list(state._config.profiles.keys())
+        except Exception:  # noqa: BLE001
+            available = None
+
+        msg = format_error_for_cli(
+            exc, active_profile=active_profile, available_profiles=available,
+        )
+        sys.stderr.write(f"Error: {msg}\n")
+        sys.exit(map_error_to_exit_code(exc))
 
 
 if __name__ == "__main__":

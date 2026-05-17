@@ -148,7 +148,7 @@ class TestReadonlyProfileBlocksMutatingSteps:
                     file=f, dry_run=False, output=None, format=None,
                     set_params=None, params_file=None, yes=False,
                 )
-        assert excinfo.value.exit_code == 1
+        assert excinfo.value.exit_code == 8  # AIP §Phase 4a: EXIT_POLICY
         fake_client.post.assert_not_awaited()
 
     def test_patch_step_aborts_without_yes(

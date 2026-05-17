@@ -39,7 +39,7 @@ from the step table:
 ``list_runs`` and ``batch state`` both call this on read so the operator
 always sees the truthful state, not a stale stamp.
 
-Schema (version 1)
+Schema (version 2)
 ------------------
 ::
 
@@ -63,13 +63,21 @@ Schema (version 1)
       status TEXT,             -- "committed" | "failed" | "rollback_skipped" | "rolled_back" | "unknown"
       bc_correlation_id TEXT,
       error_message TEXT,
-      rollback_url TEXT
+      rollback_url TEXT,
+      idempotency_key TEXT     -- v2 (AIP §Phase 4d)
     );
     CREATE TABLE schema_version (version INTEGER);
 
 The step ``status`` column is intentionally not constrained — rollback
 introduces transient states (e.g. ``rollback_skipped``) we don't want to
 keep adding to a CHECK enum.
+
+Migrations
+----------
+``_ensure_schema`` inspects ``schema_version`` on every connect. v1
+ledgers get an ``ALTER TABLE step ADD COLUMN idempotency_key TEXT`` and
+a version bump — non-destructive, preserves all existing rows. New
+ledgers get the column inline.
 """
 
 from __future__ import annotations
@@ -80,7 +88,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Allowed values for ``run.state``.  Mirrors the contract doc §Phase 3
 # enum.  Step-level statuses are deliberately *not* enforced — they
@@ -232,7 +240,8 @@ class Ledger:
                 status            TEXT,
                 bc_correlation_id TEXT,
                 error_message     TEXT,
-                rollback_url      TEXT
+                rollback_url      TEXT,
+                idempotency_key   TEXT
             )
             """,
         )
@@ -245,6 +254,21 @@ class Ledger:
             conn.execute(
                 "INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,)
             )
+        else:
+            # Migration: v1 → v2 adds the idempotency_key column. Inspect
+            # the live table (rather than just the version row) because a
+            # rolled-out v2 client may have created the table inline
+            # already — additive-only ALTER is the safe path either way.
+            existing_version = int(existing[0])
+            if existing_version < 2:
+                cols = {row[1] for row in conn.execute("PRAGMA table_info(step)")}
+                if "idempotency_key" not in cols:
+                    conn.execute(
+                        "ALTER TABLE step ADD COLUMN idempotency_key TEXT"
+                    )
+                conn.execute(
+                    "UPDATE schema_version SET version = ?", (SCHEMA_VERSION,)
+                )
 
     # ── Lifecycle ───────────────────────────────────────────────────
 
@@ -307,23 +331,59 @@ class Ledger:
         method: str,
         url: str,
         body_hash: str | None,
+        idempotency_key: str | None = None,
     ) -> int:
         """Insert the *intent* row for a step and return its ``step_id``.
 
         This is the row that survives a SIGKILL — we know we *tried* the
         HTTP call.  The matching ``write_outcome`` flips the state once
         the response (or an exception) comes back.
+
+        ``idempotency_key`` (AIP §Phase 4d) is the optional opaque token
+        the caller wants to associate with this step. Stored verbatim so
+        a same-run replay can be detected via
+        :meth:`find_committed_idempotent_step`.
         """
         conn = self._connect()
         cur = conn.execute(
             """
             INSERT INTO step (
-                run_id, seq, intent_ts, method, url, body_hash
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                run_id, seq, intent_ts, method, url, body_hash, idempotency_key
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (self.run_id, seq, _utc_now_iso(), method, url, body_hash),
+            (self.run_id, seq, _utc_now_iso(), method, url, body_hash,
+             idempotency_key),
         )
         return int(cur.lastrowid)
+
+    def find_committed_idempotent_step(
+        self, idempotency_key: str
+    ) -> dict[str, Any] | None:
+        """Return the prior committed step (if any) with this key in this run.
+
+        AIP §Phase 4d — same-run replay protection. A new write that
+        carries an idempotency_key already in the ``committed`` state
+        should be refused (the agent retried; the prior call landed).
+
+        Cross-run collision detection is deliberately out of scope for
+        v0.1: implementing it requires scanning every ``*.db`` under
+        ``batch/`` on each call. Document deferral in the PR.
+        """
+        if not idempotency_key:
+            return None
+        conn = self._connect()
+        row = conn.execute(
+            """
+            SELECT * FROM step
+             WHERE run_id = ?
+               AND idempotency_key = ?
+               AND status = 'committed'
+             ORDER BY seq ASC
+             LIMIT 1
+            """,
+            (self.run_id, idempotency_key),
+        ).fetchone()
+        return dict(row) if row is not None else None
 
     def write_outcome(
         self,

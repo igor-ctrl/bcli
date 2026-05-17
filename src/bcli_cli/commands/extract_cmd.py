@@ -52,6 +52,10 @@ def run_command(
         False, "--overwrite",
         help="Overwrite existing output files instead of erroring.",
     ),
+    progress_fd: Optional[int] = typer.Option(
+        None, "--progress-fd",
+        help="Stream JSON ``extract_started`` / ``extract_completed`` events to this fd (AIP §Phase 4e).",
+    ),
 ) -> None:
     """Extract structured records from a PDF and emit batch.yaml + sidecar.
 
@@ -88,14 +92,46 @@ def run_command(
         f"([dim]{cfg.extract.model}[/dim])"
     )
 
+    # AIP §Phase 4e — emit one ``extract_started`` event before the
+    # extraction call and a matching ``extract_completed`` after.
+    from bcli_cli._progress import ProgressEmitter
+    import time as _time
+
+    progress = ProgressEmitter(fd=progress_fd)
+    started_ns = _time.monotonic_ns()
+    progress.emit(
+        event="extract_started",
+        schema=schema_obj.name,
+        pdf=str(pdf_path),
+        backend=cfg.extract.backend,
+    )
+
     try:
         result = extractor.extract(pdf_path, schema_obj)
     except ExtractError as e:
+        progress.emit(
+            event="extract_completed",
+            schema=schema_obj.name,
+            pdf=str(pdf_path),
+            status="failed",
+            error=str(e),
+            duration_ms=max(0, int((_time.monotonic_ns() - started_ns) / 1_000_000)),
+        )
+        progress.close()
         console.print(f"[red]Extract failed:[/red] {e}")
         raise typer.Exit(1)
 
     if not result.records:
         joined = "; ".join(result.warnings) if result.warnings else "no warnings"
+        progress.emit(
+            event="extract_completed",
+            schema=schema_obj.name,
+            pdf=str(pdf_path),
+            status="empty",
+            warnings=list(result.warnings or []),
+            duration_ms=max(0, int((_time.monotonic_ns() - started_ns) / 1_000_000)),
+        )
+        progress.close()
         console.print(
             f"[yellow]No records extracted.[/yellow] {joined}"
         )
@@ -107,6 +143,17 @@ def run_command(
     out_json.write_text(
         render_sidecar_json(result, schema_obj, source_pdf=pdf_path), encoding="utf-8"
     )
+
+    progress.emit(
+        event="extract_completed",
+        schema=schema_obj.name,
+        pdf=str(pdf_path),
+        status="ok",
+        record_count=len(result.records),
+        warnings=list(result.warnings or []),
+        duration_ms=max(0, int((_time.monotonic_ns() - started_ns) / 1_000_000)),
+    )
+    progress.close()
 
     console.print(
         f"[green]✓[/green] {len(result.records)} record(s) → "
