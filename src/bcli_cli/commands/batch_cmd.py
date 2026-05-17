@@ -10,6 +10,7 @@ from typing import Any
 import typer
 from rich.console import Console
 
+from bcli_cli._envelope_wrap import capture, validate_flags
 from bcli_cli._state import state
 from bcli_cli.output import format_output, print_context_banner
 
@@ -137,6 +138,16 @@ def run_batch(
     set_params: list[str] | None = typer.Option(None, "--set", help="Set parameter: key=value (repeatable)"),
     params_file: Path | None = typer.Option(None, "--params", help="YAML file with parameter values"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip the read-only-profile prompt for mutating batch steps"),
+    result_out: Path | None = typer.Option(
+        None,
+        "--result-out",
+        help="Write a JSON result envelope to this path (atomic). See AIP §Phase 2.",
+    ),
+    result_fd: int | None = typer.Option(
+        None,
+        "--result-fd",
+        help="Write the JSON result envelope to this file descriptor and close it.",
+    ),
 ) -> None:
     """Execute a YAML batch file (sequence of API calls).
 
@@ -149,6 +160,8 @@ def run_batch(
         bcli batch run workflow.yaml --params values.yaml
         bcli batch run workflow.yaml --set vendor_no=V00011 --dry-run
     """
+    validate_flags(result_out, result_fd)
+
     print_context_banner()
 
     if not file.is_file():
@@ -165,85 +178,110 @@ def run_batch(
     from bcli.errors import WorkflowError
     from bcli.workflow import load_workflow_yaml
 
-    try:
-        raw = load_workflow_yaml(file)
-    except WorkflowError as e:
-        console.print(f"[red]Invalid workflow YAML:[/red] {e}")
-        raise typer.Exit(1)
-    batch_name = raw.get("name", file.stem)
-    steps = raw.get("steps", [])
+    with capture(
+        method="BATCH_RUN",
+        endpoint="batch",
+        result_out=result_out,
+        result_fd=result_fd,
+    ) as cap:
+        try:
+            raw = load_workflow_yaml(file)
+        except WorkflowError as e:
+            console.print(f"[red]Invalid workflow YAML:[/red] {e}")
+            cap.emit_failure(e)
+            raise typer.Exit(1)
+        batch_name = raw.get("name", file.stem)
+        steps = raw.get("steps", [])
 
-    if not steps:
-        console.print("[yellow]No steps found in batch file.[/yellow]")
-        raise typer.Exit()
+        if not steps:
+            console.print("[yellow]No steps found in batch file.[/yellow]")
+            cap.emit_success()
+            raise typer.Exit()
 
-    # Detect workflow mode: ${{ }} references OR top-level params OR --set/--params flags
-    is_workflow = (
-        "params" in raw
-        or set_params
-        or params_file is not None
-        or _has_references(steps)
-    )
-
-    context = None
-    if is_workflow:
-        from bcli.workflow._models import WorkflowContext
-
-        params = _build_workflow_params(raw, set_params, params_file)
-        context = WorkflowContext(params=params)
-        _validate_step_names(steps)
-
-    console.print(f"[bold]Batch:[/bold] {batch_name}")
-    if is_workflow and context and context.params:
-        console.print(f"[dim]Params: {context.params}[/dim]")
-    console.print(f"[dim]{len(steps)} step(s)[/dim]\n")
-
-    if dry_run or state.dry_run:
-        _print_dry_run(steps, context)
-        return
-
-    # Apply the same disable_writes gate that direct post/patch/delete commands
-    # use. Without this, a profile marked read-only would still execute
-    # mutating batch steps in non-interactive automation — see vuln-0002.
-    # We inspect raw steps here (workflow `${{ }}` references are resolved
-    # later inside `_execute_batch`); any step that statically declares a
-    # mutating action triggers a single batch-level confirmation.
-    mutating_actions = {"post", "patch", "delete"}
-    mutating_steps = [
-        step for step in steps
-        if (step.get("action") or "get").lower() in mutating_actions
-    ]
-    if mutating_steps:
-        from bcli_cli._safety import confirm_write_or_exit
-
-        preview = ", ".join(
-            f"{(step.get('action') or 'get').upper()} {step.get('endpoint', '?')}"
-            for step in mutating_steps[:3]
+        # Detect workflow mode: ${{ }} references OR top-level params OR --set/--params flags
+        is_workflow = (
+            "params" in raw
+            or set_params
+            or params_file is not None
+            or _has_references(steps)
         )
-        if len(mutating_steps) > 3:
-            preview += f", +{len(mutating_steps) - 3} more"
-        confirm_write_or_exit("BATCH WRITE", preview, yes=yes)
 
-    output_format = format
+        context = None
+        if is_workflow:
+            from bcli.workflow._models import WorkflowContext
 
-    try:
-        results = asyncio.run(_execute_batch(steps, context=context, output_format=output_format))
+            params = _build_workflow_params(raw, set_params, params_file)
+            context = WorkflowContext(params=params)
+            _validate_step_names(steps)
 
-        succeeded = sum(1 for r in results if r.get("status") == "ok")
-        console.print(f"\n[green]✓[/green] Batch complete: {succeeded}/{len(steps)} steps succeeded")
+        console.print(f"[bold]Batch:[/bold] {batch_name}")
+        if is_workflow and context and context.params:
+            console.print(f"[dim]Params: {context.params}[/dim]")
+        console.print(f"[dim]{len(steps)} step(s)[/dim]\n")
 
-        if output:
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output_data = {
-                "batch": batch_name,
-                "steps": results,
-            }
-            output.write_text(json.dumps(output_data, indent=2, default=str))
-            console.print(f"[dim]Results saved to {output}[/dim]")
+        if dry_run or state.dry_run:
+            _print_dry_run(steps, context)
+            cap.mark_dry_run()
+            cap.emit_success()
+            return
 
-    except Exception as e:
-        console.print(f"[red]Batch failed:[/red] {e}")
-        raise typer.Exit(1)
+        # Apply the same disable_writes gate that direct post/patch/delete commands
+        # use. Without this, a profile marked read-only would still execute
+        # mutating batch steps in non-interactive automation — see vuln-0002.
+        # We inspect raw steps here (workflow `${{ }}` references are resolved
+        # later inside `_execute_batch`); any step that statically declares a
+        # mutating action triggers a single batch-level confirmation.
+        mutating_actions = {"post", "patch", "delete"}
+        mutating_steps = [
+            step for step in steps
+            if (step.get("action") or "get").lower() in mutating_actions
+        ]
+        if mutating_steps:
+            from bcli_cli._safety import confirm_write_or_exit
+
+            preview = ", ".join(
+                f"{(step.get('action') or 'get').upper()} {step.get('endpoint', '?')}"
+                for step in mutating_steps[:3]
+            )
+            if len(mutating_steps) > 3:
+                preview += f", +{len(mutating_steps) - 3} more"
+            confirm_write_or_exit("BATCH WRITE", preview, yes=yes)
+
+        output_format = format
+
+        try:
+            results = asyncio.run(_execute_batch(steps, context=context, output_format=output_format))
+
+            succeeded = sum(1 for r in results if r.get("status") == "ok")
+            console.print(f"\n[green]✓[/green] Batch complete: {succeeded}/{len(steps)} steps succeeded")
+
+            if output:
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output_data = {
+                    "batch": batch_name,
+                    "steps": results,
+                }
+                output.write_text(json.dumps(output_data, indent=2, default=str))
+                console.print(f"[dim]Results saved to {output}[/dim]")
+
+            # Any step that didn't return status="ok" means the batch is not
+            # fully succeeded — surface that on the envelope so the caller
+            # knows to consult the (future) ledger or step logs.
+            if succeeded < len(results):
+                # Synthetic exception to carry the failure into emit_failure.
+                err = RuntimeError(
+                    f"{len(results) - succeeded} of {len(results)} steps failed",
+                )
+                cap.emit_failure(err)
+                raise typer.Exit(1)
+            cap.emit_success()
+
+        except typer.Exit:
+            raise
+        except Exception as e:
+            console.print(f"[red]Batch failed:[/red] {e}")
+            cap.emit_failure(e)
+            raise typer.Exit(1)
 
 
 # ─── Dry run ─────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ from typing import Optional
 import typer
 from rich.console import Console
 
+from bcli_cli._envelope_wrap import capture, validate_flags
 from bcli_cli._state import state
 from bcli_cli.output import format_output, print_context_banner
 
@@ -26,8 +27,20 @@ def patch_command(
     group: Optional[str] = typer.Option(None, "--group", hidden=True),
     version: Optional[str] = typer.Option(None, "--version", hidden=True),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip the read-only-profile warning prompt"),
+    result_out: Optional[Path] = typer.Option(
+        None,
+        "--result-out",
+        help="Write a JSON result envelope to this path (atomic). See AIP §Phase 2.",
+    ),
+    result_fd: Optional[int] = typer.Option(
+        None,
+        "--result-fd",
+        help="Write the JSON result envelope to this file descriptor and close it.",
+    ),
 ) -> None:
     """PATCH (update) an existing record."""
+    validate_flags(result_out, result_fd)
+
     output_format = format or state.format
     state.format = output_format  # propagate subcommand -f to dry-run + audit
     if output_format in ("json", "csv", "ndjson", "raw"):
@@ -40,23 +53,44 @@ def patch_command(
 
     body = _parse_data(data)
 
-    if state.dry_run:
-        from bcli_cli._dry_run import render_dry_run
-        render_dry_run(
-            "PATCH", endpoint, body=body, record_id=record_id,
-            publisher=publisher, group=group, version=version,
-            extra={"etag": etag},
-        )
+    with capture(
+        method="PATCH",
+        endpoint=endpoint,
+        result_out=result_out,
+        result_fd=result_fd,
+    ) as cap:
+        from bcli_cli._url_resolve import try_resolve_url
 
-    try:
-        result = asyncio.run(_audited_patch(
-            endpoint, record_id, body,
-            etag=etag, publisher=publisher, group=group, version=version,
+        cap.set_resolved_url(try_resolve_url(
+            endpoint,
+            record_id=record_id,
+            publisher=publisher,
+            group=group,
+            version=version,
         ))
-        format_output([result] if result else [], output_format)
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        cap.set_record_id(record_id)
+
+        if state.dry_run:
+            from bcli_cli._dry_run import render_dry_run
+            cap.mark_dry_run()
+            cap.emit_success()
+            render_dry_run(
+                "PATCH", endpoint, body=body, record_id=record_id,
+                publisher=publisher, group=group, version=version,
+                extra={"etag": etag},
+            )
+
+        try:
+            result = asyncio.run(_audited_patch(
+                endpoint, record_id, body,
+                etag=etag, publisher=publisher, group=group, version=version,
+            ))
+            cap.emit_success()
+            format_output([result] if result else [], output_format)
+        except Exception as e:
+            cap.emit_failure(e)
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
 
 
 async def _audited_patch(endpoint, record_id, body, **kwargs):
