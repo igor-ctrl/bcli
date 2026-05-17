@@ -26,6 +26,7 @@ from typing import Optional
 import typer
 from rich.console import Console
 
+from bcli_cli._envelope_wrap import capture, validate_flags
 from bcli_cli._state import state
 from bcli_cli.output import format_output, print_context_banner
 
@@ -47,6 +48,16 @@ def upload_command(
     standard: bool = typer.Option(False, "--standard", "--no-registry", help="Bypass the custom registry and force Microsoft's standard /api/v2.0/documentAttachments route. Use when a custom page isn't persisting (zero-GUID ids)."),
     format: Optional[str] = typer.Option(None, "--format", "-f", help="Output format: table, json, csv, ndjson, raw"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip the read-only-profile warning prompt"),
+    result_out: Optional[Path] = typer.Option(
+        None,
+        "--result-out",
+        help="Write a JSON result envelope to this path (atomic). See AIP §Phase 2.",
+    ),
+    result_fd: Optional[int] = typer.Option(
+        None,
+        "--result-fd",
+        help="Write the JSON result envelope to this file descriptor and close it.",
+    ),
 ) -> None:
     """Upload a file as a documentAttachment linked to an existing parent record.
 
@@ -60,6 +71,8 @@ def upload_command(
     Routing follows the registry — custom entries for ``documentAttachments``
     take priority. Force a specific route with ``--publisher/--group/--version``.
     """
+    validate_flags(result_out, result_fd)
+
     output_format = format or state.format
     state.format = output_format  # propagate subcommand -f to dry-run + audit
     if output_format in ("json", "csv", "ndjson", "raw"):
@@ -67,59 +80,74 @@ def upload_command(
 
     print_context_banner()
 
-    from bcli_cli._safety import confirm_write_or_exit
-    confirm_write_or_exit("UPLOAD", "documentAttachments", yes=yes)
-
-    if state.dry_run:
-        from bcli_cli._dry_run import render_dry_run
-        render_dry_run(
-            "UPLOAD", "documentAttachments",
-            publisher=publisher, group=group, version=version,
-            force_standard=standard,
-            extra={
-                "file_path": str(file_path),
-                "byte_size": file_path.stat().st_size,
-                "parent_type": parent_type,
-                "parent_id": parent_id,
-                "file_name": file_name or file_path.name,
-                "force_standard": standard,
-            },
-        )
-
-    try:
+    with capture(
+        method="UPLOAD",
+        endpoint="documentAttachments",
+        result_out=result_out,
+        result_fd=result_fd,
+    ) as cap:
         from bcli_cli._audit_wrap import audited_write
+        from bcli_cli._safety import confirm_write_or_exit
         from bcli_cli._url_resolve import try_resolve_url
         resolved_url = try_resolve_url(
             "documentAttachments",
             publisher=publisher, group=group, version=version,
             force_standard=standard,
         )
-        result = asyncio.run(audited_write(
-            _execute_attach(
-                file_path=file_path,
-                parent_type=parent_type,
-                parent_id=parent_id,
-                file_name=file_name,
-                content_type=content_type,
-                publisher=publisher,
-                group=group,
-                version=version,
+        cap.set_resolved_url(resolved_url)
+
+        # Policy gate runs *inside* the capture block so a refused write
+        # still emits a failed envelope. See PR #15 review.
+        confirm_write_or_exit("UPLOAD", "documentAttachments", yes=yes)
+
+        if state.dry_run:
+            from bcli_cli._dry_run import render_dry_run
+            cap.mark_dry_run()
+            cap.emit_success()
+            render_dry_run(
+                "UPLOAD", "documentAttachments",
+                publisher=publisher, group=group, version=version,
                 force_standard=standard,
-            ),
-            method="UPLOAD",
-            endpoint="documentAttachments",
-            body={
-                "parent_type": parent_type,
-                "parent_id": parent_id,
-                "file_name": file_name or file_path.name,
-                "byte_size": file_path.stat().st_size,
-            },
-            resolved_url=resolved_url,
-        ))
-        format_output([result] if result else [], output_format)
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+                extra={
+                    "file_path": str(file_path),
+                    "byte_size": file_path.stat().st_size,
+                    "parent_type": parent_type,
+                    "parent_id": parent_id,
+                    "file_name": file_name or file_path.name,
+                    "force_standard": standard,
+                },
+            )
+
+        try:
+            result = asyncio.run(audited_write(
+                _execute_attach(
+                    file_path=file_path,
+                    parent_type=parent_type,
+                    parent_id=parent_id,
+                    file_name=file_name,
+                    content_type=content_type,
+                    publisher=publisher,
+                    group=group,
+                    version=version,
+                    force_standard=standard,
+                ),
+                method="UPLOAD",
+                endpoint="documentAttachments",
+                body={
+                    "parent_type": parent_type,
+                    "parent_id": parent_id,
+                    "file_name": file_name or file_path.name,
+                    "byte_size": file_path.stat().st_size,
+                },
+                resolved_url=resolved_url,
+            ))
+            cap.extract_record_id_from(result)
+            cap.emit_success()
+            format_output([result] if result else [], output_format)
+        except Exception as e:
+            cap.emit_failure(e)
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
 
 
 @app.command("test")

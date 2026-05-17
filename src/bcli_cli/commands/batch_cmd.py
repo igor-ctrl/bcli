@@ -25,6 +25,7 @@ from rich.console import Console
 from rich.table import Table
 
 from bcli.batch.ledger import Ledger
+from bcli_cli._envelope_wrap import capture, validate_flags
 from bcli_cli._state import state
 from bcli_cli.output import format_output, print_context_banner
 
@@ -218,6 +219,16 @@ def run_batch(
     set_params: list[str] | None = typer.Option(None, "--set", help="Set parameter: key=value (repeatable)"),
     params_file: Path | None = typer.Option(None, "--params", help="YAML file with parameter values"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip the read-only-profile prompt for mutating batch steps"),
+    result_out: Path | None = typer.Option(
+        None,
+        "--result-out",
+        help="Write a JSON result envelope to this path (atomic). See AIP §Phase 2.",
+    ),
+    result_fd: int | None = typer.Option(
+        None,
+        "--result-fd",
+        help="Write the JSON result envelope to this file descriptor and close it.",
+    ),
 ) -> None:
     """Execute a YAML batch file (sequence of API calls).
 
@@ -234,6 +245,8 @@ def run_batch(
         bcli batch run workflow.yaml --params values.yaml
         bcli batch run workflow.yaml --set vendor_no=V00011 --dry-run
     """
+    validate_flags(result_out, result_fd)
+
     print_context_banner()
 
     if not file.is_file():
@@ -250,126 +263,186 @@ def run_batch(
     from bcli.errors import WorkflowError
     from bcli.workflow import load_workflow_yaml
 
-    try:
-        raw = load_workflow_yaml(file)
-    except WorkflowError as e:
-        console.print(f"[red]Invalid workflow YAML:[/red] {e}")
-        raise typer.Exit(1)
-    batch_name = raw.get("name", file.stem)
-    steps = raw.get("steps", [])
+    with capture(
+        method="BATCH_RUN",
+        endpoint="batch",
+        result_out=result_out,
+        result_fd=result_fd,
+    ) as cap:
+        try:
+            raw = load_workflow_yaml(file)
+        except WorkflowError as e:
+            console.print(f"[red]Invalid workflow YAML:[/red] {e}")
+            cap.emit_failure(e)
+            raise typer.Exit(1)
+        batch_name = raw.get("name", file.stem)
+        steps = raw.get("steps", [])
 
-    if not steps:
-        console.print("[yellow]No steps found in batch file.[/yellow]")
-        raise typer.Exit()
+        if not steps:
+            console.print("[yellow]No steps found in batch file.[/yellow]")
+            cap.emit_success()
+            raise typer.Exit()
 
-    # Detect workflow mode: ${{ }} references OR top-level params OR --set/--params flags
-    is_workflow = (
-        "params" in raw
-        or set_params
-        or params_file is not None
-        or _has_references(steps)
-    )
-
-    context = None
-    if is_workflow:
-        from bcli.workflow._models import WorkflowContext
-
-        params = _build_workflow_params(raw, set_params, params_file)
-        context = WorkflowContext(params=params)
-        _validate_step_names(steps)
-
-    console.print(f"[bold]Batch:[/bold] {batch_name}")
-    if is_workflow and context and context.params:
-        console.print(f"[dim]Params: {context.params}[/dim]")
-    console.print(f"[dim]{len(steps)} step(s)[/dim]\n")
-
-    if dry_run or state.dry_run:
-        _print_dry_run(steps, context)
-        return
-
-    # Apply the same disable_writes gate that direct post/patch/delete commands
-    # use. Without this, a profile marked read-only would still execute
-    # mutating batch steps in non-interactive automation — see vuln-0002.
-    # We inspect raw steps here (workflow `${{ }}` references are resolved
-    # later inside `_execute_batch`); any step that statically declares a
-    # mutating action triggers a single batch-level confirmation.
-    mutating_actions = {"post", "patch", "delete"}
-    mutating_steps = [
-        step for step in steps
-        if (step.get("action") or "get").lower() in mutating_actions
-    ]
-    if mutating_steps:
-        from bcli_cli._safety import confirm_write_or_exit
-
-        preview = ", ".join(
-            f"{(step.get('action') or 'get').upper()} {step.get('endpoint', '?')}"
-            for step in mutating_steps[:3]
-        )
-        if len(mutating_steps) > 3:
-            preview += f", +{len(mutating_steps) - 3} more"
-        confirm_write_or_exit("BATCH WRITE", preview, yes=yes)
-
-    output_format = format
-
-    # Spin up the ledger and write the run row BEFORE any HTTP fires.
-    # The run-id is a fresh uuid4 so we never collide with a prior run's
-    # ledger file. A defensive guard in start_run raises if it does.
-    run_id = uuid.uuid4().hex
-    ledger = Ledger(run_id=run_id)
-    ledger.start_run(
-        manifest_path=str(file.resolve()),
-        manifest_hash=_manifest_hash(file),
-        profile=state.active_profile_name,
-        environment=state.profile.environment,
-        company=state.profile.company_id or "",
-    )
-    _stderr.print(f"[dim]Ledger: {ledger.db_path}[/dim]")
-
-    final_state = "completed"
-    try:
-        results = asyncio.run(
-            _execute_batch(steps, context=context, output_format=output_format, ledger=ledger)
+        # Detect workflow mode: ${{ }} references OR top-level params OR --set/--params flags
+        is_workflow = (
+            "params" in raw
+            or set_params
+            or params_file is not None
+            or _has_references(steps)
         )
 
-        succeeded = sum(1 for r in results if r.get("status") == "ok")
-        failed_count = sum(1 for r in results if r.get("status") == "error")
-        if failed_count and succeeded:
-            final_state = "partially_committed"
-        elif failed_count:
-            final_state = "failed"
-        else:
-            final_state = "completed"
-        console.print(f"\n[green]✓[/green] Batch complete: {succeeded}/{len(steps)} steps succeeded")
-        _stderr.print(f"[dim]Run id: {run_id}[/dim]")
+        context = None
+        if is_workflow:
+            from bcli.workflow._models import WorkflowContext
 
-        if output:
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output_data = {
-                "batch": batch_name,
-                "run_id": run_id,
-                "steps": results,
-            }
-            output.write_text(json.dumps(output_data, indent=2, default=str))
-            console.print(f"[dim]Results saved to {output}[/dim]")
+            params = _build_workflow_params(raw, set_params, params_file)
+            context = WorkflowContext(params=params)
+            _validate_step_names(steps)
 
-    except BaseException as e:
-        # BaseException covers SystemExit / KeyboardInterrupt — anything
-        # short of SIGKILL passes through this branch, so the ledger
-        # always gets a derived final state.
-        if isinstance(e, Exception) and not isinstance(e, (KeyboardInterrupt, SystemExit)):
-            console.print(f"[red]Batch failed:[/red] {e}")
-        # Derive the truthful state from steps that landed before the
-        # crash. ``compute_run_state`` looks at intent_ts vs outcome_ts
-        # — exactly what we need for "POST committed, then we died."
-        final_state = ledger.compute_run_state(run_id)
+        console.print(f"[bold]Batch:[/bold] {batch_name}")
+        if is_workflow and context and context.params:
+            console.print(f"[dim]Params: {context.params}[/dim]")
+        console.print(f"[dim]{len(steps)} step(s)[/dim]\n")
+
+        # Spin up the ledger and write the run row BEFORE any HTTP fires.
+        # The run-id is a fresh uuid4 so we never collide with a prior
+        # run's ledger file (a defensive guard in start_run raises if it
+        # does). Sits inside the envelope capture block so the envelope
+        # can correlate via the run id below.
+        run_id = uuid.uuid4().hex
+        ledger = Ledger(run_id=run_id)
+        ledger.start_run(
+            manifest_path=str(file.resolve()),
+            manifest_hash=_manifest_hash(file),
+            profile=state.active_profile_name,
+            environment=state.profile.environment,
+            company=state.profile.company_id or "",
+        )
+        _stderr.print(f"[dim]Ledger: {ledger.db_path}[/dim]")
+        # Stash the run id on the envelope so an agent runtime can
+        # cross-reference: the envelope's ``record_id`` is the ledger
+        # run id when the verb is ``BATCH_RUN``.
+        cap.set_record_id(run_id)
+
+        final_state = "completed"
+
+        # Dry-run short-circuit. We still call ``ledger.finish_run`` so
+        # the row written by ``start_run`` doesn't dangle in the
+        # ``planned`` state — operators inspecting the ledger should see
+        # ``completed`` for an intentional no-op (the alternative is a
+        # zombie ``running`` row that never gets resolved). The envelope
+        # records ``dry_run=true`` for disambiguation.
+        if dry_run or state.dry_run:
+            _print_dry_run(steps, context)
+            ledger.finish_run(run_id, "completed")
+            ledger.close()
+            cap.mark_dry_run()
+            cap.emit_success()
+            return
+
+        # disable_writes gate — same one that direct post/patch/delete
+        # commands use (see vuln-0002). Runs *inside* the capture block
+        # so a refused write still emits a failed envelope (PR #15
+        # review). Lives after ``start_run`` so the ledger has a row to
+        # update; the BaseException branch below derives a truthful
+        # state from the (empty) step table when the gate fires.
+        mutating_actions = {"post", "patch", "delete"}
+        mutating_steps = [
+            step for step in steps
+            if (step.get("action") or "get").lower() in mutating_actions
+        ]
+        if mutating_steps:
+            from bcli_cli._safety import confirm_write_or_exit
+
+            preview = ", ".join(
+                f"{(step.get('action') or 'get').upper()} {step.get('endpoint', '?')}"
+                for step in mutating_steps[:3]
+            )
+            if len(mutating_steps) > 3:
+                preview += f", +{len(mutating_steps) - 3} more"
+            try:
+                confirm_write_or_exit("BATCH WRITE", preview, yes=yes)
+            except typer.Exit:
+                # Policy refusal. Mark ledger + envelope as failed so the
+                # operator sees a consistent attestation, then re-raise.
+                final_state = ledger.compute_run_state(run_id)
+                if final_state not in {"partially_committed", "failed"}:
+                    final_state = "failed"
+                ledger.finish_run(run_id, final_state)
+                ledger.close()
+                cap.emit_failure(RuntimeError("BATCH WRITE refused by disable_writes gate"))
+                raise
+
+        output_format = format
+
+        try:
+            results = asyncio.run(
+                _execute_batch(steps, context=context, output_format=output_format, ledger=ledger)
+            )
+
+            succeeded = sum(1 for r in results if r.get("status") == "ok")
+            failed_count = sum(1 for r in results if r.get("status") == "error")
+            if failed_count and succeeded:
+                final_state = "partially_committed"
+            elif failed_count:
+                final_state = "failed"
+            else:
+                final_state = "completed"
+            console.print(f"\n[green]✓[/green] Batch complete: {succeeded}/{len(steps)} steps succeeded")
+            _stderr.print(f"[dim]Run id: {run_id}[/dim]")
+
+            if output:
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output_data = {
+                    "batch": batch_name,
+                    "run_id": run_id,
+                    "steps": results,
+                }
+                output.write_text(json.dumps(output_data, indent=2, default=str))
+                console.print(f"[dim]Results saved to {output}[/dim]")
+
+            # Envelope ↔ ledger consistency: if any step didn't land
+            # cleanly, surface that on the envelope as a failure even
+            # though the run completed end-to-end. The ledger's
+            # final_state (failed / partially_committed) is the long-form
+            # detail; the envelope's status="failed" is the agent-facing
+            # one-line outcome.
+            if failed_count:
+                err = RuntimeError(
+                    f"{failed_count} of {len(results)} steps failed",
+                )
+                cap.emit_failure(err)
+                ledger.finish_run(run_id, final_state)
+                ledger.close()
+                raise typer.Exit(1)
+
+            cap.emit_success()
+
+        except typer.Exit:
+            # Already finalized above; let it propagate.
+            raise
+        except BaseException as e:
+            # BaseException covers SystemExit / KeyboardInterrupt — anything
+            # short of SIGKILL passes through this branch, so the ledger
+            # always gets a derived final state. Order matters: emit the
+            # envelope BEFORE finalizing the ledger so both attestations
+            # describe the same outcome.
+            if isinstance(e, Exception) and not isinstance(e, (KeyboardInterrupt, SystemExit)):
+                console.print(f"[red]Batch failed:[/red] {e}")
+                cap.emit_failure(e)
+            # Derive the truthful state from steps that landed before the
+            # crash. ``compute_run_state`` looks at intent_ts vs outcome_ts
+            # — exactly what we need for "POST committed, then we died."
+            final_state = ledger.compute_run_state(run_id)
+            ledger.finish_run(run_id, final_state)
+            ledger.close()
+            if isinstance(e, Exception) and not isinstance(e, (KeyboardInterrupt, SystemExit)):
+                raise typer.Exit(1)
+            raise
+
+        # Happy path — finalize the ledger row.
         ledger.finish_run(run_id, final_state)
         ledger.close()
-        if isinstance(e, Exception) and not isinstance(e, (KeyboardInterrupt, SystemExit)):
-            raise typer.Exit(1)
-        raise
-
-    ledger.finish_run(run_id, final_state)
-    ledger.close()
 
 
 # ─── Dry run ─────────────────────────────────────────────────────────
