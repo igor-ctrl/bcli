@@ -59,7 +59,9 @@ queries:
 
 | Field          | Type     | Notes                                                    |
 |----------------|----------|----------------------------------------------------------|
-| `description`  | string   | Shown in `bcli q` listing.                               |
+| `description`  | string   | Shown in `bcli q` listing **and** the generated slash command's frontmatter. |
+| `categories`   | list[str] | Optional. Used by `bcli skill install` to group commands in the generated `SKILL.md` index. Falls back to `["unsorted"]`. |
+| `args`         | list[obj] | Optional. Explicit positional ordering for the generated slash command. If omitted, inferred from `params:` keys (required first, optional second). See *Slash-command projection* below. |
 | `endpoint`     | string   | Required. Entity-set name (resolved through the registry).|
 | `params`       | mapping  | Optional. Each key declares a parameter; see *Param declarations* below. |
 | `filter`       | string   | OData `$filter`. Supports `${{ params.X }}` substitution. |
@@ -162,3 +164,74 @@ bcli --profile ops q items-low-stock min=10
 * `--format` — override the active profile's output format (`json`,
   `markdown`, `csv`, `ndjson`, `table`).
 * `--dry-run` (global) — skips execution after resolving.
+
+## Slash-command projection (`bcli skill install`)
+
+`bcli skill install` reads the saved queries for the active profile and
+generates one Claude Code slash command per query at
+`<target>/.claude/commands/bcli-<name>.md`, plus a top-level skill index
+at `<target>/.claude/skills/bcli/SKILL.md` grouped by `categories:`.
+
+Three optional fields on each query feed the generator:
+
+```yaml
+queries:
+  utilization-by-esn:
+    description: Engine utilization (cycles, hours, FSN) for an ESN
+    categories: [aviation, daily-ops]
+    args:
+      - name: esn
+        type: string
+        example: "424322"
+        required: true
+    # existing fields below — params/filter/select/etc.
+    endpoint: util_history
+    params:
+      esn: {required: true}
+    filter: "engine_serial eq '${{ params.esn }}'"
+```
+
+* `description` — used as the slash command's frontmatter `description:`
+  and listed under its category in `SKILL.md`.
+* `categories` — list of strings. Each category becomes a section in
+  `SKILL.md`. Queries with no categories land under `unsorted`.
+* `args` — explicit positional ordering for the generated slash command
+  body. Each entry: `{name, type, required, example}`. **If omitted, the
+  generator derives `args:` from `params:` keys** (required first,
+  optional with `default:` second, both in YAML insertion order). For
+  most queries you can leave `args:` out and the projected command will
+  still work; declare it explicitly when you want a different ordering
+  than the params dict gives you.
+
+The generated command body invokes `bcli q <name> arg1=$1 arg2=$2 …
+--format json`, so the positional → key mapping in the slash command
+matches your `args:` order.
+
+### Idempotency and manual overrides
+
+* Each generated file embeds a `content_hash: sha256:…` line in its
+  provenance comment. Re-running `bcli skill install` on unchanged
+  sources is a no-op (hash matches → file isn't rewritten).
+* To protect a hand-edited slash command file from regeneration, add
+  `manual: true` to its YAML frontmatter:
+  ```markdown
+  ---
+  manual: true
+  description: My customised command
+  ---
+  ```
+  The installer skips any file whose frontmatter declares `manual: true`,
+  even if a saved query by the same name exists.
+* Add `--dry-run` to preview without writing; add `--target PATH` to
+  point at a specific project root (defaults to CWD when it contains a
+  `.claude/` directory, else `$HOME`).
+
+### Batch templates
+
+Batch workflow YAMLs under `~/.config/bcli/batches/<profile>/*.yaml` are
+projected the same way as saved queries — one
+`.claude/commands/bcli-batch-<name>.md` per file, body invoking
+`bcli batch run <yaml> --set arg=$1 --format json --result-out …`.
+
+CWD-relative batch discovery (a `batches/` directory checked into a
+project repo) is a follow-up — open an issue if you need it.
