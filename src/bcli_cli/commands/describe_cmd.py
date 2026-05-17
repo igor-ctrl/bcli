@@ -348,6 +348,8 @@ def _build_payload() -> dict[str, Any]:
     else:
         registry_projection = _project_registry(registry, tier_2_enabled=tier_2_enabled)
 
+    from bcli.exit_codes import EXIT_CODES
+
     return {
         "version": "0.1",
         "tool": "bcli",
@@ -356,6 +358,10 @@ def _build_payload() -> dict[str, Any]:
         "commands": commands,
         "registry": registry_projection,
         "profile_constraints": _project_profile_constraints(profile),
+        # AIP §Phase 4a — project the documented exit-code taxonomy so an
+        # agent runtime can render a meaningful error from any non-zero
+        # bcli exit.
+        "exit_codes": {str(code): label for code, label in EXIT_CODES.items()},
     }
 
 

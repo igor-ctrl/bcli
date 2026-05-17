@@ -11,8 +11,9 @@ The fix moves the gate inside ``capture()``; the salvage path in
 ``_envelope_wrap.capture`` catches the resulting ``typer.Exit(1)`` and
 emits the failed envelope.
 
-Per the lead's review note: ``exit_code`` stays at ``1`` for now (don't
-rename to ``EXIT_POLICY`` / 8 — Phase 4 owns the taxonomy rename).
+Phase 4a renamed the policy-refusal exit from ``1`` to
+``EXIT_POLICY`` / ``8`` so an agent can distinguish a deliberate refusal
+from a generic crash.
 """
 
 from __future__ import annotations
@@ -44,7 +45,7 @@ def _assert_policy_failure_envelope(envelope_path: Path, *, method: str, endpoin
     )
     env = json.loads(envelope_path.read_text())
     assert env["status"] == "failed", env
-    assert env["exit_code"] == 1, env  # Phase 4 will rename to EXIT_POLICY (8)
+    assert env["exit_code"] == 8, env  # Phase 4a renamed: EXIT_POLICY
     assert env["method"] == method
     assert env["endpoint"] == endpoint
     # Profile context is captured even on a refused write — that's the
@@ -71,7 +72,7 @@ class TestPostEnvelopeOnPolicyViolation:
                 result_out=out,
                 result_fd=None,
             )
-        assert excinfo.value.exit_code == 1
+        assert excinfo.value.exit_code == 8
         _assert_policy_failure_envelope(out, method="POST", endpoint="vendors")
         fake_client.post.assert_not_awaited()
 
@@ -96,7 +97,7 @@ class TestPatchEnvelopeOnPolicyViolation:
                 result_out=out,
                 result_fd=None,
             )
-        assert excinfo.value.exit_code == 1
+        assert excinfo.value.exit_code == 8
         _assert_policy_failure_envelope(out, method="PATCH", endpoint="vendors")
         # record_id was captured before the gate refused — confirms the gate
         # is now inside the capture block.
@@ -124,7 +125,7 @@ class TestDeleteEnvelopeOnPolicyViolation:
                 result_out=out,
                 result_fd=None,
             )
-        assert excinfo.value.exit_code == 1
+        assert excinfo.value.exit_code == 8
         _assert_policy_failure_envelope(out, method="DELETE", endpoint="vendors")
         env = json.loads(out.read_text())
         assert env["record_id"] == "vnd-1"
@@ -155,7 +156,7 @@ class TestAttachUploadEnvelopeOnPolicyViolation:
                 result_out=out,
                 result_fd=None,
             )
-        assert excinfo.value.exit_code == 1
+        assert excinfo.value.exit_code == 8
         _assert_policy_failure_envelope(
             out, method="UPLOAD", endpoint="documentAttachments",
         )

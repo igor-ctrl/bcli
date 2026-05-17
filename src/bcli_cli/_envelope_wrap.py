@@ -225,14 +225,20 @@ class Capture:
         )
         _write_if_active(self._cap, env)
 
-    def emit_failure(self, exc: BaseException) -> None:
+    def emit_failure(
+        self,
+        exc: BaseException,
+        *,
+        exit_code: int | None = None,
+    ) -> None:
         if not self.is_active:
             return
         status_code = getattr(exc, "status_code", None)
         correlation_id = getattr(exc, "correlation_id", None)
-        exit_code = exit_code_for_status(status_code)
-        if exit_code == EXIT_GENERIC_ERROR and status_code is None:
-            exit_code = EXIT_GENERIC_ERROR
+        if exit_code is None:
+            exit_code = exit_code_for_status(status_code)
+            if exit_code == EXIT_GENERIC_ERROR and status_code is None:
+                exit_code = EXIT_GENERIC_ERROR
         env = _build_envelope(
             self._cap,
             status="failed",

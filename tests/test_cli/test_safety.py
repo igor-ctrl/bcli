@@ -70,7 +70,7 @@ class TestReadonlyProfile:
         monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
         with pytest.raises(typer.Exit) as excinfo:
             confirm_write_or_exit("POST", "vendors", yes=False)
-        assert excinfo.value.exit_code == 1
+        assert excinfo.value.exit_code == 8  # AIP §Phase 4a: EXIT_POLICY
 
     def test_interactive_yes_input_proceeds(self, readonly_profile, monkeypatch):
         # Pretend stdin is a TTY and the user types 'yes'
@@ -91,7 +91,7 @@ class TestReadonlyProfile:
         monkeypatch.setattr("typer.prompt", lambda *a, **kw: "y")  # not literal 'yes'
         with pytest.raises(typer.Exit) as excinfo:
             confirm_write_or_exit("POST", "vendors", yes=False)
-        assert excinfo.value.exit_code == 1
+        assert excinfo.value.exit_code == 8  # AIP §Phase 4a: EXIT_POLICY
 
     def test_empty_input_aborts(self, readonly_profile, monkeypatch):
         import sys

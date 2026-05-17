@@ -25,6 +25,7 @@ from rich.console import Console
 from rich.table import Table
 
 from bcli.batch.ledger import Ledger
+from bcli.exit_codes import EXIT_POLICY
 from bcli_cli._envelope_wrap import capture, validate_flags
 from bcli_cli._state import state
 from bcli_cli.output import format_output, print_context_banner
@@ -363,14 +364,21 @@ def run_batch(
             try:
                 confirm_write_or_exit("BATCH WRITE", preview, yes=yes)
             except typer.Exit:
-                # Policy refusal. Mark ledger + envelope as failed so the
-                # operator sees a consistent attestation, then re-raise.
+                # Policy refusal. Keep failure-path ordering consistent
+                # with the BaseException branch below: emit the envelope
+                # BEFORE finalizing the ledger so both attestations
+                # describe the same outcome. Pass the explicit
+                # EXIT_POLICY so the envelope's ``exit_code`` matches
+                # what the CLI actually exits with.
+                cap.emit_failure(
+                    RuntimeError("BATCH WRITE refused by disable_writes gate"),
+                    exit_code=EXIT_POLICY,
+                )
                 final_state = ledger.compute_run_state(run_id)
                 if final_state not in {"partially_committed", "failed"}:
                     final_state = "failed"
                 ledger.finish_run(run_id, final_state)
                 ledger.close()
-                cap.emit_failure(RuntimeError("BATCH WRITE refused by disable_writes gate"))
                 raise
 
         output_format = format

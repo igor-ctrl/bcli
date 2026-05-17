@@ -233,7 +233,8 @@ class TestEnvelopeOnPolicyRefusalForBatch:
     Chosen behavior: the ledger row exists (``start_run`` ran before the
     gate, so an audit trail of "the run was attempted" is preserved),
     finalized as ``failed``. The envelope is ``status="failed"``,
-    ``exit_code=1``. No ``_execute_batch`` call, no step rows.
+    ``exit_code=8`` (AIP §Phase 4a: ``EXIT_POLICY``). No
+    ``_execute_batch`` call, no step rows.
     """
 
     def test_policy_refusal_emits_failed_envelope_and_failed_ledger(
@@ -262,11 +263,11 @@ class TestEnvelopeOnPolicyRefusalForBatch:
                     set_params=None, params_file=None, yes=False,
                     result_out=out, result_fd=None,
                 )
-        assert excinfo.value.exit_code == 1
+        assert excinfo.value.exit_code == 8  # AIP §Phase 4a: EXIT_POLICY
 
         env = json.loads(out.read_text())
         assert env["status"] == "failed"
-        assert env["exit_code"] == 1
+        assert env["exit_code"] == 8
         assert env["profile"] == "prod"
         assert env["environment"] == "Production"
 
