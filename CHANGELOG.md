@@ -7,6 +7,159 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-18 — Agent Interface Profile v0.1
+
+The Agent Interface Profile (AIP) v0.1 lands: a small kernel of CLI
+primitives that any agent runtime can drive deterministically, without
+parallel schemas or hand-written MCP tools.
+
+### Added
+
+- **`bcli describe --format json`** — canonical machine-readable
+  projection of the live Typer surface + endpoint registry + active
+  profile. One command MCP, completions, and docs all consume; new CLI
+  commands light up automatically. Cached at
+  `~/.config/bcli/describe/<profile>.<hash>.json` with mtime
+  invalidation. Subtree mode (`bcli describe get`, `bcli describe batch
+  run`) returns narrow output for token-constrained agents. Includes
+  forward-compat declarations: `emits_result_envelope`,
+  `emits_operation_state`, `requires_confirmation: "production"`, plus
+  the new `exit_codes` taxonomy and per-command `positionals` /
+  `required` / `limits` extensions.
+- **Mutation result envelope (`--result-out PATH` / `--result-fd N`)**
+  on every mutating verb (`post`, `patch`, `delete`, `attach upload`,
+  `batch run`). Frozen 18-field JSON envelope written atomically
+  (`os.replace` + `fsync`); contains profile, environment, company,
+  method, endpoint, resolved URL, record id, status, exit code, BC
+  correlation id, started_at, duration_ms. Failed envelopes carry the
+  exit code (4 = not found, 6 = remote 4xx, 7 = remote 5xx, 8 = policy
+  refusal, etc.) so an agent can read it side-channel and act without
+  scraping stdout. For `batch run` the envelope's `record_id` is the
+  ledger run id — pivot directly to `bcli batch state <run-id>` for
+  per-step detail.
+- **Batch operation ledger (SQLite)** — one
+  `~/.config/bcli/batch/<run-id>.db` per `bcli batch run` invocation.
+  WAL + `synchronous=NORMAL`, intent row written before each HTTP call
+  (survives SIGKILL); outcome row after. Derived run state
+  distinguishes `partially_committed` from a stale `running` stamp. New
+  commands: `bcli batch state <run-id>`, `bcli batch list [--state
+  STATE] [--limit N]`, `bcli batch rollback <run-id> [--dry-run]
+  [--yes]`. Rollback issues `DELETE` for committed POSTs only; PATCH /
+  DELETE marked `rollback_skipped` (no clean inverse without pre-image
+  snapshots). `disable_writes` is a hard refusal on rollback (no
+  `--yes` bypass).
+- **Exit code taxonomy** — `bcli.exit_codes` defines 0/1/2/3/4/5/6/7/8
+  with short labels; `bcli describe` projects the map; centralized
+  error handler maps `BCLIError` subclasses (`AuthError → 3`,
+  `RegistryError → 4`, `ValidationError → 5`, `ConfigError → 2`,
+  `SafetyError → 8`).
+- **"Did you mean" remediation hints** on `BCLIError` paths: auth →
+  `Run 'bcli auth login --profile X'`, config (no profiles) →
+  `Run 'bcli config init'`, config (unknown profile) → fuzzy match,
+  registry (no fuzzy) → `Run 'bcli registry import …'`.
+- **JSON on pipe by default** — when stdout isn't a TTY and no
+  `--format` was passed, emit JSON. Pipelines, redirects, CI steps,
+  agent runtimes all get the canonical machine-readable shape with no
+  flag dance. The `CLAUDECODE` and `BCLI_AGENT` env hints keep their
+  markdown semantics (explicit user opt-in); legacy Windows console
+  host stays on markdown for the mojibake reason. `BCLI_FORMAT` and
+  explicit `--format` always win.
+- **`--idempotency-key KEY`** on `post`, `patch`, `delete`, `attach
+  upload`. IETF `Idempotency-Key` HTTP header sent on the first call
+  (gateway-level dedup remains in play). Same-run replay protection in
+  `bcli batch run`: if two mutating steps share an `idempotency_key:`
+  in the YAML, the second is replayed (no second HTTP, no duplicate
+  ledger row), and the result entry carries `prior_seq`,
+  `prior_step_id`, `prior_bc_correlation_id`. Ledger schema migrates
+  v1 → v2 non-destructively via `ALTER TABLE step ADD COLUMN
+  idempotency_key`.
+- **Progress events (`--progress-fd N`)** on `bcli batch run` and
+  `bcli extract run`. JSON-lines `step_started` / `step_completed`
+  written to a dedicated fd (separate from `--result-fd`). Stderr
+  stays human-readable; the fd channel is structured and stable for
+  agents to demux. Replayed steps emit a synthetic pair with
+  `status="replayed"` so the progress stream tells the truth.
+- **23 dynamically-generated MCP tools** in `bcli_mcp` (was 4
+  hand-written). Server subprocesses `bcli describe` once on startup
+  and registers one tool per command; new CLI commands light up as
+  MCP tools automatically. Five new mutating tools (`bcli_post`,
+  `bcli_patch`, `bcli_delete`, `bcli_attach_upload`, `bcli_batch_run`)
+  pass `--result-out` and return the envelope as their tool result.
+  `status="failed"` envelopes surface as MCP `ToolError` with the BC
+  correlation id quoted.
+- **`AsyncBCClient.delete_url(url, *, etag="*")`** — new SDK method
+  for absolute-URL deletes (used by the rollback path; avoids
+  re-resolving the registry at undo time).
+- **`bcli skill install`** — generates `.claude/commands/bcli-<name>.md`
+  per saved query and per batch template (`~/.config/bcli/batches/
+  <profile>/*.yaml`). Generates a top-level
+  `.claude/skills/bcli/SKILL.md` index grouped by `categories:`.
+  SHA-256 content hash embedded in the provenance comment for
+  byte-stable idempotency — no `generated_at` timestamp, so re-runs on
+  unchanged sources are mtime-preserving no-ops. `manual: true` in a
+  file's YAML frontmatter protects it from regeneration. `--dry-run`
+  previews; `--target` resolves to explicit path > CWD with `.claude/`
+  > `$HOME`. Stdlib only — no jinja2; atomic writes via
+  `tempfile.mkstemp` + `os.replace`.
+- **`bcli skill init`** — interactive wizard that reads `bcli describe
+  --format json` via subprocess, runs 4 Rich prompts (role / top-three
+  daily questions / slash-command style / generate-new-queries y/N),
+  fuzzy-matches existing saved queries against the top-three free
+  text (stdlib `difflib`), and proposes new role-tailored queries via
+  entry-point providers — each with a per-query `[y/N]` approval gate.
+  Generates `~/.claude/skills/bcli-<user>/SKILL.md` with YAML
+  provenance frontmatter. Atomic commit phase: snapshots existing
+  content, writes all targets, restores on first failure. Guardrails
+  via `_assert_writable` restrict writes to `~/.config/bcli/queries/`,
+  `~/.claude/skills/bcli-<user>/`, and `~/.config/bcli/skills/`;
+  symlink-safe via `Path.resolve(strict=False)` + `is_relative_to`.
+- **`bcli skill update`** — idempotent re-run via state cache at
+  `~/.config/bcli/skills/.last-init.json`. The cache persists both
+  the interview answers AND the approved-query bodies so a later
+  `--non-interactive` replay re-writes the same queries verbatim
+  (without re-asking the operator). Describe-payload-hash mismatch
+  refuses silent replay and asks for a re-interview when the describe
+  surface changed under the user's feet.
+- **Saved-query YAML schema extension** — three additive fields
+  (`description`, `categories`, `args`). Existing saved-query bundles
+  without these still work: when `args:` is omitted, `bcli skill
+  install` derives it from `params:` keys (required first, optional
+  second, both in YAML insertion order). Documented in
+  `docs/saved-queries.md`'s new "Slash-command projection" section.
+- **Entry-point group `bcli.skill_init.role_templates`** — OSS bcli
+  ships with an opinion-free default proposer (returns `[]` for every
+  role). Downstream packages plug in role templates by registering
+  callables under this entry-point group via standard Python
+  packaging. Discovered at wizard time via
+  `importlib.metadata.entry_points`. The provider signature is
+  `(interview, payload) -> list[ProposedQuery]`; downstream
+  integrators publish their own integration documentation.
+
+### Changed
+
+- **Policy refusal exit code 1 → 8.** Scripts that grep `if exit==1`
+  for "the read-only profile blocked me" need updating. Agents
+  consuming `bcli describe`'s new `exit_codes` field pick up the new
+  code automatically.
+- **MCP tool renames** (breaking for existing MCP clients — Claude
+  Desktop, MCP Inspector configs referencing the old names need an
+  update):
+  - `query` → `bcli_get`
+  - `list_endpoints` → `bcli_endpoint_list`
+  - `describe_endpoint` → `bcli_endpoint_info` (with
+    `bcli_endpoint_fields` split out for field discovery)
+  - `list_companies` → `bcli_company_list`
+
+  Migration table in `docs/mcp-server.md`. Tool names now consistently
+  match the CLI command path.
+- **MCP `bcli_get --top` cap remains 50 default / 1000 max** — parity
+  with the pre-rewrite hand-written `query` tool. CLI shell users can
+  still pass `--top 100000` directly; the cap is enforced only at the
+  MCP schema level (advisory for agent runtimes).
+- **Stderr routing for `bcli batch run` metadata** — the ledger path
+  and run id print to stderr, not stdout. Stdout matches legacy batch
+  output byte-for-byte (required by the additive constraint).
+
 ### Fixed
 
 - **Clean SIGPIPE handling for piped output** — `bcli <cmd> | head`,
@@ -23,6 +176,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the rendered filter (BC then 400'd or, worse, returned mismatched
   rows). Affects both `bcli q` saved queries and `bcli batch`
   workflows.
+
+### Breaking changes
+
+The two items above (exit code 1→8 + MCP tool renames) are intentional
+breaking changes called out in the AIP plan. Both have one-line
+migration paths. Skill install / skill init / skill update are
+additive — no breaking changes from the Skills layer.
+
+### Deferred to v0.5
+
+- **Cross-run idempotency replay** — would require scanning every
+  `*.db` in `~/.config/bcli/batch/` on each mutating call. Same-run
+  protection covers the agent-retry case which is the common one;
+  gateway-level Idempotency-Key dedup covers the rest.
+- **`batch run --idempotency-key`** as a run-level flag — collides
+  across multiple mutating steps. Per-step `idempotency_key:` in the
+  batch YAML is the correct surface.
+- **`telemetry_event_id` / `audit_log_offset` on the envelope** —
+  currently always `null`. Wiring requires extending the
+  `TelemetrySink` and audit protocols to return the emitted event id /
+  log offset, touching every backend including the optional Azure
+  Monitor extra.
+- **Plan-token binding for single mutations** — `batch run --plan-out`
+  works; `bcli post --plan-out` does not. Defer until requested.
+- **Direct FastMCP schema-introspection test** — the `__signature__`
+  patch is indirectly covered via tool-list registration tests; a
+  future FastMCP upgrade could silently degrade tool input schemas
+  without breaking tests.
+- **Etag capture in ledger** — rollback DELETEs use `etag="*"`. A
+  future concurrent edit between POST and rollback could clobber.
+- **CWD-relative batch template discovery** for `bcli skill install` —
+  today only `~/.config/bcli/batches/<profile>/*.yaml` is scanned;
+  project-local batches in `./batches/` would also be useful for the
+  per-project `.claude/` workflow.
+- **SKILL.md frontmatter `generated_at` churn cleanup** — the
+  timestamp ticks forward on every `bcli skill update
+  --non-interactive` replay, so the frontmatter changes even when the
+  body is byte-stable. Idempotency tests compare body-only; downstream
+  content-hash watchers would see noise. Cosmetic.
+- **`bcli skill update` separated from `init`** — today
+  `update_command` delegates to `init_command(...)` verbatim.
+  Documented for future evolution.
+- **Public `bcli.skill_init` namespace for the entry-point contract**
+  — downstream packages currently couple to
+  `bcli_cli.commands.skill_init_cmd` for `InterviewState` /
+  `ProposedQuery`. A future release could promote the protocol types
+  to a public `bcli.skill_init` namespace.
 
 ## [0.2.0] — 2026-05-06
 
@@ -249,6 +449,10 @@ moved to `bcli` (April 2026), then to the PyPI distribution name
 `bc-cli` (April 2026, after discovering the `bcli` PyPI name was
 squatted by an unrelated 2018 package).
 
-[Unreleased]: https://github.com/igor-ctrl/bcli/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/igor-ctrl/bcli/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/igor-ctrl/bcli/compare/v0.2.0...v0.4.0
+[0.2.0]: https://github.com/igor-ctrl/bcli/compare/v0.1.5...v0.2.0
+[0.1.5]: https://github.com/igor-ctrl/bcli/compare/v0.1.2...v0.1.5
+[0.1.2]: https://github.com/igor-ctrl/bcli/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/igor-ctrl/bcli/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/igor-ctrl/bcli/releases/tag/v0.1.0

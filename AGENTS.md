@@ -161,6 +161,106 @@ user, don't loop.
 
 ---
 
+## Mutation result envelope — read this, not stdout
+
+For real writes (not dry-run), pass `--result-out PATH` (or
+`--result-fd N` on Unix harnesses) and parse the JSON envelope written
+there. The envelope is the canonical record of what happened — stdout
+is for human consumers; agents shouldn't scrape it.
+
+```bash
+bcli --profile p post vendors --data '{"...": "..."}' --result-out /tmp/r.json
+# then jq < /tmp/r.json
+```
+
+The envelope is an 18-field JSON object: `invocation_id`,
+`tool_version`, `profile`, `environment`, `company`, `method`,
+`endpoint`, `resolved_url`, `record_id`, `dry_run`, `status`
+(`succeeded` / `failed`), `exit_code`, `bc_correlation_id`,
+`telemetry_event_id`, `audit_log_offset`, `started_at`,
+`duration_ms`, plus `version` of the envelope schema. Atomic write
+(tmp + `os.replace` + `fsync`) — the file appears whole or not at all.
+
+**Failed envelopes** keep the same shape with `status="failed"`,
+`exit_code` per the taxonomy below, and `bc_correlation_id` set when
+BC returned one. Use it to diagnose without scraping a Python
+traceback off stderr.
+
+For `bcli batch run`, the envelope's `record_id` IS the ledger run id.
+Pivot from there to `bcli batch state <run-id>` for per-step detail.
+
+## Batch operation state
+
+`bcli batch run` writes a durable SQLite ledger that survives SIGKILL.
+Three new commands let you inspect and undo runs:
+
+```bash
+bcli batch list --format json                  # recent runs, newest first
+bcli batch state <run-id> --format json        # per-step detail for one run
+bcli batch rollback <run-id> --dry-run         # preview undo
+bcli batch rollback <run-id>                   # apply undo (POST→DELETE only)
+```
+
+`bcli batch list` filters with `--state STATE` (`completed`, `failed`,
+`partially_committed`, `rolled_back`, `running`, `cancelled`). Use
+`partially_committed` to find runs that died mid-way — those are where
+ledger-based recovery is worth the cost.
+
+Rollback issues `DELETE` for committed POSTs only. PATCH and DELETE
+steps are marked `rollback_skipped` because there's no clean inverse
+without a pre-image snapshot. `disable_writes` profiles refuse rollback
+outright (no `--yes` bypass) — that's by design.
+
+## Exit code taxonomy
+
+Don't treat all non-zero as "generic error." The taxonomy is
+documented in `bcli describe`'s `exit_codes` field:
+
+| Code | Meaning |
+|---|---|
+| 0 | success |
+| 1 | generic crash / unhandled exception |
+| 2 | usage error (bad flag, missing arg) |
+| 3 | auth (token expired, login required) |
+| 4 | not found (endpoint, record, profile) |
+| 5 | validation (filter, param schema) |
+| 6 | remote 4xx (BC rejected the request) |
+| 7 | remote 5xx (BC server error) |
+| 8 | policy refusal (`disable_writes` triggered without `--yes`) |
+
+Key off the specific code. Exit `8` means "the profile is read-only";
+prompting for `--yes` and retrying is the right move. Exit `3` means
+"run `bcli auth login --profile X`." Exit `1` is the only one that
+warrants "report to user and stop."
+
+## Idempotency keys for retries
+
+For mutations you might retry, pass `--idempotency-key K`. The IETF
+`Idempotency-Key` HTTP header goes out on the first call so any
+gateway-level dedup applies; subsequent retries within the same `bcli
+batch run` short-circuit through the ledger (no second HTTP, no
+duplicate row).
+
+```bash
+KEY=$(uuidgen)
+bcli post vendors --data '{"...":"..."}' --idempotency-key "$KEY" --result-out r.json
+# If you need to retry, reuse the same KEY — same-run replay is safe.
+```
+
+Inside a batch YAML, declare per-step:
+
+```yaml
+steps:
+  - name: create_vendor
+    action: post
+    endpoint: vendors
+    idempotency_key: "${{ params.vendor_no }}-2026Q2"
+    body: { ... }
+```
+
+Cross-run replay is deferred (would mean scanning every ledger DB); the
+header is sent on every retry so gateway-level dedup remains in play.
+
 ## Dry-run before writes
 
 Before any `post` / `patch` / `delete` / `attach upload`, run with `--dry-run`
@@ -226,15 +326,26 @@ on, and the CLI exit code is the answer when it's off.
 
 If the user has mounted `bcli-mcp` (see [`docs/mcp-server.md`](docs/mcp-server.md)),
 prefer those tools — they collapse discovery + query into single calls
-with structured results:
+with structured results. As of 0.4.0 the MCP server generates 23 tools
+dynamically from `bcli describe`, including five new mutating verbs
+(`bcli_post`, `bcli_patch`, `bcli_delete`, `bcli_attach_upload`,
+`bcli_batch_run`) that internally pass `--result-out` and return the
+envelope as the tool result.
 
-- `list_endpoints()` — full registry as JSON
-- `describe_endpoint(name, discover_fields=True)` — metadata + field
-  discovery in one call
-- `query(endpoint, filter, ...)` — the same as `bcli get`, but typed
+**Tool names match the CLI command path** (`bcli_get`,
+`bcli_endpoint_list`, `bcli_endpoint_info`, `bcli_endpoint_fields`,
+`bcli_company_list`, …). The pre-0.4.0 names (`query`,
+`list_endpoints`, `describe_endpoint`, `list_companies`) are gone — see
+the migration table in [`docs/mcp-server.md`](docs/mcp-server.md) if
+your client config references the old names.
+
+For mutating tools, a `status="failed"` envelope surfaces as MCP
+`ToolError` with the BC correlation id quoted in the error message —
+you don't need to read the envelope separately for failures.
 
 The CLI recipes above still work fine if the MCP server isn't
-available; this is purely an "if you've got it, use it" optimization.
+available; the MCP tools are an "if you've got them, use them"
+optimization.
 
 ---
 
