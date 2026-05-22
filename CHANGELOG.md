@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Part 0 (context infrastructure for LLM features)
+
+- **`bcli.context` package** — shared, model-bound context layer that
+  future LLM-driven features consume (`bcli ask`, future `bcli agent`).
+  Standalone in this release; no CLI consumers yet.
+- **Typed `ContextBundle` dataclass** with `to_dict()` / `to_prompt_text()`
+  renderers. Frozen, JSON-serialisable, token-budgeted with source
+  attribution and an explicit `RedactionRecord` audit trail (R4).
+- **Three-layer redaction** (`bcli.context._redact`) — composes the
+  existing `bcli/audit/_redact.py` key-based stripper, the
+  `bcli/telemetry/events.py` token-pattern regex, and a new URL
+  query-param / GUID / attachment scrubber (R5). Every redaction is
+  logged with a stable `rule_id` so regressions are catchable in CI.
+- **Last-error capture** — central `BCLIError` handler now drops a
+  redacted snapshot to `~/.config/bcli/last-error.json`. **No
+  tracebacks by default**; `--debug` invocations also write a
+  `last-error-debug.json` sidecar at mode 0600 (R6).
+- **`bcli.http` rolling tail** — opt-in NDJSON tail at
+  `~/.config/bcli/http-tail.ndjson` enabled by `[context] tail = true`.
+  Size-bounded via `RotatingFileHandler`; URLs are query-stripped on
+  read so the bundle stays safe.
+- **`ContextConfig`** — new `[context]` config section with `tail`,
+  `redact_company_ids`, `attachment_max_bytes` knobs.
+
 ## [0.4.0] — 2026-05-18 — Agent Interface Profile v0.1
 
 The Agent Interface Profile (AIP) v0.1 lands: a small kernel of CLI
