@@ -194,6 +194,15 @@ def _compose_rollback_url(client: Any, entity: str, post_result: Any) -> str | N
     """
     if not isinstance(post_result, dict):
         return None
+    # OData actions (bound or unbound) have no inverse — there's no
+    # "DELETE the archiving" of ``examples(42)/Microsoft.NAV.archive``,
+    # nor of ``Microsoft.NAV.refreshAll``. If an action happens to
+    # return a body with an ``id`` field, composing a rollback URL by
+    # appending ``(id)`` would yield a nonsense path. The batch ledger
+    # should record ``rollback_skipped`` instead.
+    from bcli.client._async import _is_unbound_action, _parse_bound_action
+    if _parse_bound_action(entity) is not None or _is_unbound_action(entity):
+        return None
     record_id = post_result.get("id") or post_result.get("systemId")
     if not record_id:
         return None
