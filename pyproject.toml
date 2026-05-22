@@ -92,6 +92,23 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/bcli", "src/bcli_cli", "src/bcli_mcp"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"packs" = "bcli/packs/_builtin"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/",
+    "packs/",
+    "tests/",
+    "examples/",
+    "docs/",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "CHANGELOG.md",
+    "pyproject.toml",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

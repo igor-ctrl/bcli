@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Part 1 (`bcli pack`)
+
+- **`bcli pack`** command group: `list`, `info`, `install`,
+  `uninstall`. Discovers packs from three sources: built-in
+  (``packs/`` in the repo), entry-point group ``bcli.packs``, and
+  ``--path <dir>`` for local development.
+- **Pack manifest format** (``pack.yaml``) with `agent_fragments`,
+  `queries`, `batches`, `registry_presets`, and
+  `recommended_context_providers`. Each fragment declares
+  `targets:` (`agents` and/or `claude`); default `[agents]` (R3).
+- **Install ledger** at
+  ``~/.config/bcli/packs/<profile>/<pack>.json`` recording every
+  artefact written, with per-entry `rendered_hash` and `owner` so
+  uninstall is provenance-driven (R2).
+- **Conflict detection** on registry presets (R7): a second pack
+  cannot silently overwrite an endpoint owned by another pack —
+  ``--replace-owned --accept-conflicts`` is the two-flag escape
+  hatch.
+- **Idempotent re-install**: marker blocks in AGENTS.md / CLAUDE.md
+  are replaced in place via ID + content_hash, never duplicated.
+- **Two built-in packs**: `starter-generic` (6 queries, 2 batches,
+  3 fragments — uses only standard v2.0 endpoints) and
+  `cronus-demo` (Microsoft CRONUS demo workflow).
+
 ### Added — Part 0 (context infrastructure for LLM features)
 
 - **`bcli.context` package** — shared, model-bound context layer that
