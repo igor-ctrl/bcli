@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,56 @@ from bcli.odata._pagination import PageIterator
 from bcli.odata._query import Query
 from bcli.odata._response import ODataResponse
 from bcli.registry._registry import EndpointRegistry
+
+
+# OData v4 *bound action* (and bound function) invocation pattern:
+#
+#     <entitySet>(<key>)/<Namespace>.<...>.<Identifier>
+#
+# - ``<entitySet>`` is a normal identifier; it's the parent entity set
+#   that the registry validator looks up.
+# - ``<key>`` is anything inside the parentheses — a GUID, a single-
+#   quoted string, an int, or a composite ``k1='a',k2='b'``. We do not
+#   over-validate it; BC will reject malformed keys server-side and
+#   passing through preserves the user's spelling for debugging.
+# - The tail is a *qualified identifier* — at least one dot separates
+#   the namespace from the action/function name. We intentionally don't
+#   hardcode ``Microsoft.NAV`` so the parser works with any tenant's
+#   custom action namespaces.
+_BOUND_ACTION_RE = re.compile(
+    r"^(?P<entity>[A-Za-z_][A-Za-z0-9_]*)"
+    r"\((?P<key>.+)\)"
+    r"/(?P<qualified>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)$"
+)
+
+# An unbound action at the OData service root: ``Namespace.action``
+# with no parent entity. v0.1 explicitly rejects these — a future
+# revision could route them past the company-id URL builder, but the
+# bound-action case is the only one in the bug report this PR fixes.
+_UNBOUND_ACTION_RE = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+$"
+)
+
+
+def _parse_bound_action(entity_set_name: str) -> tuple[str, str, str] | None:
+    """Recognise a bound-action invocation in ``entity_set_name``.
+
+    Returns ``(parent_entity_set, key, qualified_action)`` if the
+    string matches the OData v4 bound-action shape, ``None`` otherwise.
+    A plain entity-set name (``customers``) or a record URL with no
+    action tail (``customers(123)``) also returns ``None`` — those go
+    through the standard validator path unchanged.
+    """
+    m = _BOUND_ACTION_RE.match(entity_set_name)
+    if m is None:
+        return None
+    return m.group("entity"), m.group("key"), m.group("qualified")
+
+
+def _is_unbound_action(entity_set_name: str) -> bool:
+    """Return ``True`` for a service-root unbound-action invocation
+    (``Namespace.action`` with no parent entity set)."""
+    return bool(_UNBOUND_ACTION_RE.match(entity_set_name))
 
 
 class AsyncBCClient:
@@ -459,6 +510,67 @@ class AsyncBCClient:
         if not company_id:
             raise ConfigError(
                 "No company_id configured. Run 'bcli config init' or 'bcli company use <id>'."
+            )
+
+        # ─── OData v4 bound action / function invocation ──────────────
+        #
+        # Pattern: ``<entitySet>(<key>)/<Namespace>.<...>.<Identifier>``.
+        # The registry validator should look up *only the parent
+        # entity set*; everything from the ``(`` onward is opaque to
+        # the registry and gets stitched back onto the resolved URL.
+        # This keeps ``disable_standard_api`` enforcement intact (gated
+        # on the parent, which is the security-relevant identity) and
+        # honours custom-route registry entries on the parent.
+        bound = _parse_bound_action(entity_set_name)
+        if bound is not None:
+            parent, key, qualified = bound
+            # Composing a parent URL with ``record_id`` here would
+            # double-append parens — actions encode the key inside the
+            # bound-action string, so we resolve the parent alone and
+            # then splice the ``(key)/qualified`` tail.
+            parent_url = self._resolve_url_for_target(
+                environment,
+                company_id,
+                parent,
+                record_id=None,
+                publisher=publisher,
+                group=group,
+                version=version,
+            )
+            return f"{parent_url}({key})/{qualified}"
+
+        # Service-root unbound action: ``Namespace.action`` with no
+        # parent entity. Resolves to ``companies(<cid>)/<Namespace>.<action>``
+        # under the chosen API route. Registry lookup is skipped (unbound
+        # actions aren't entity sets and can't be registered), but the
+        # ``disable_standard_api`` security gate still applies when no
+        # explicit publisher/group/version override is supplied.
+        if _is_unbound_action(entity_set_name):
+            if publisher and group and version:
+                return build_url(
+                    environment=environment,
+                    company_id=company_id,
+                    entity_set_name=entity_set_name,
+                    record_id=None,
+                    publisher=publisher,
+                    group=group,
+                    version=version,
+                )
+            if self._profile.disable_standard_api:
+                from bcli.errors import RegistryError
+
+                raise RegistryError(
+                    f"Unbound action '{entity_set_name}' cannot be routed: "
+                    f"'disable_standard_api = true' blocks the standard v2.0 "
+                    f"fallback, and unbound actions are not registry entries. "
+                    f"Pass --publisher/--group/--version to target a custom "
+                    f"API route."
+                )
+            return build_url(
+                environment=environment,
+                company_id=company_id,
+                entity_set_name=entity_set_name,
+                record_id=None,
             )
 
         # Explicit override takes priority
