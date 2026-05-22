@@ -183,6 +183,7 @@ def _emit_command_summary() -> None:
 # Import and register command groups
 from bcli_cli.commands import (  # noqa: E402
     action_cmd,
+    ask_cmd,
     attach_cmd,
     auth_cmd,
     batch_cmd,
@@ -230,6 +231,7 @@ app.command(
 )(action_cmd.action_command)
 app.command(name="q", help="Run a saved query (no OData required)")(query_cmd.query_command)
 app.command(name="ai-context")(context_cmd.ai_context_command)
+app.command(name="ask", help="Ask an LLM oracle about your recent bcli context")(ask_cmd.ask_command)
 app.command(name="doctor", help="Diagnose your bcli install (self-rescue for team users)")(doctor_cmd.doctor_command)
 app.command(
     name="describe",

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Part 2 (`bcli ask`)
+
+- **`bcli ask "<question>"`** — second-opinion oracle. Bundles the
+  operator's recent failing context (last-error, http-tail,
+  profile, describe excerpt) via :mod:`bcli.context`, ships it to
+  a configured LLM backend, and prints the answer. Opt-in: NullAsker
+  is the default; set `[ask] backend = "claude"` (or `"openai"`) to
+  activate.
+- Built-in backends: `null` (default), `claude` (Anthropic — extras
+  `[ask-claude]`), `openai` (extras `[ask-openai]`). Third-party
+  backends register by import path `module.path:ClassName`. Mirror
+  of the `extract` factory shape exactly.
+- **`--dry-run`** prints the exact redacted bundle that would be
+  sent before any network call. **`--no-context`** suppresses the
+  auto-bundle. **`--attach PATH`** pins a file with redaction +
+  truncation. **`--backend NAME`** is a one-shot override.
+- **`bcli.ask.context_providers` entry-point group (R8)** —
+  downstream packages add domain-specific context (glossaries,
+  schema hints) via a registered callable. Strictly opt-in: a pack
+  may recommend a provider but never auto-enables it; user config
+  in `[ask] context_providers = [...]` is the binding decision.
+- New `AskConfig` section in `bcli.config._model` exposing
+  `backend`, `model`, `api_key_env`, `max_tokens`,
+  `include_describe`, `include_http_tail`, `context_providers`.
+
 ### Added — Part 1 (`bcli pack`)
 
 - **`bcli pack`** command group: `list`, `info`, `install`,
