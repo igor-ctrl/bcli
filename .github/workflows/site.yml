@@ -1,0 +1,49 @@
+name: bcli-site build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "bcli-site/**"
+      - ".github/workflows/site.yml"
+  pull_request:
+    paths:
+      - "bcli-site/**"
+      - ".github/workflows/site.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bcli-site
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Build
+        run: pnpm build
+
+      # TODO: enable Vercel deploy once VERCEL_TOKEN, VERCEL_PROJECT_ID,
+      # and VERCEL_ORG_ID are added to repo secrets. Secrets are used
+      # via env: blocks (never interpolated directly into run:) per
+      # GitHub's command-injection guidance.
+      #
+      # - name: Deploy to Vercel
+      #   if: github.ref == 'refs/heads/main'
+      #   env:
+      #     VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      #     VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      #     VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      #   run: |
+      #     npx vercel --token="$VERCEL_TOKEN" --prod --yes

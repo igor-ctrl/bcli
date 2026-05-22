@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Part 3 (`bcli-site/` landing page v0)
+
+- **`bcli-site/`** — Astro + Tailwind landing page scaffold for
+  bcli.sh. Single page (v0): hero, install instructions, three
+  example commands, features grid, GitHub link.
+- Stack: Astro 4 + Tailwind 3 + TypeScript 5 (`extends:
+  astro/tsconfigs/strict`).
+- Copy reflects what's actually shipped: packs, ask, MCP server,
+  describe. Does NOT oversell the deferred `bcli agent` mode (R9).
+- `.github/workflows/site.yml` builds the site on changes under
+  `bcli-site/**`; Vercel deploy stub is wired but commented out
+  until `VERCEL_TOKEN` etc. are added to repo secrets.
+- `bcli-site/node_modules`, `dist`, `.astro`, and lockfiles are
+  gitignored.
+
 ### Added — Part 2 (`bcli ask`)
 
 - **`bcli ask "<question>"`** — second-opinion oracle. Bundles the
