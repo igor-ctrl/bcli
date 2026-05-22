@@ -195,6 +195,7 @@ from bcli_cli.commands import (  # noqa: E402
     endpoint_cmd,
     env_cmd,
     get_cmd,
+    pack_cmd,
     patch_cmd,
     post_cmd,
     query_cmd,
@@ -218,6 +219,7 @@ app.add_typer(attach_cmd.app, name="attach", help="Document-attachment workflows
 # ``skill_cmd`` module aliases ``skill_init_cmd.app`` so ``@app.command("install")``
 # attaches to the same group without a duplicate ``add_typer`` call.
 app.add_typer(skill_init_cmd.app, name="skill", help="Generate a per-user bcli skill bundle (AIP Phase 7)")
+app.add_typer(pack_cmd.app, name="pack", help="Install reusable query/batch/fragment packs")
 app.command(name="get")(get_cmd.get_command)
 app.command(name="post")(post_cmd.post_command)
 app.command(name="patch")(patch_cmd.patch_command)
