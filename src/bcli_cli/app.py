@@ -158,6 +158,7 @@ def _emit_command_summary() -> None:
 
 # Import and register command groups
 from bcli_cli.commands import (  # noqa: E402
+    action_cmd,
     attach_cmd,
     auth_cmd,
     batch_cmd,
@@ -197,6 +198,10 @@ app.command(name="get")(get_cmd.get_command)
 app.command(name="post")(post_cmd.post_command)
 app.command(name="patch")(patch_cmd.patch_command)
 app.command(name="delete")(delete_cmd.delete_command)
+app.command(
+    name="action",
+    help="Invoke an OData v4 bound action on a record",
+)(action_cmd.action_command)
 app.command(name="q", help="Run a saved query (no OData required)")(query_cmd.query_command)
 app.command(name="ai-context")(context_cmd.ai_context_command)
 app.command(name="doctor", help="Diagnose your bcli install (self-rescue for team users)")(doctor_cmd.doctor_command)
