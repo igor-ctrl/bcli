@@ -61,6 +61,7 @@ def build_bundle(
     attachments: tuple[Attachment, ...] | None = None,
     raw_attachments: tuple[tuple[str, str], ...] = (),
     last_error: LastErrorRecord | None = None,
+    skip_last_error: bool = False,
     recent_http: tuple[HttpEvent, ...] | None = None,
     config_dir: Path | None = None,
 ) -> ContextBundle:
@@ -74,6 +75,12 @@ def build_bundle(
     content)`` — they're redacted + truncated and added to
     ``attachments``. Pre-built :class:`Attachment` instances passed via
     ``attachments`` skip the scan (assumed already post-redaction).
+
+    ``skip_last_error=True`` disables the implicit "read
+    ``last-error.json`` from disk when no record was passed" — used by
+    ``bcli ask --no-context`` to genuinely strip recent failures from
+    the bundle. The caller passing ``last_error=somerecord`` is
+    unaffected.
     """
     policy = policy or BundlePolicy()
     budget = budget or TokenBudget()
@@ -92,9 +99,10 @@ def build_bundle(
             included_bytes=len(question.encode("utf-8")),
         ))
 
-    # Last error — second priority. Caller-provided OR read from disk.
+    # Last error — second priority. Caller-provided OR read from disk
+    # unless skip_last_error is set (the --no-context contract).
     le = last_error
-    if le is None:
+    if le is None and not skip_last_error:
         le = read_last_error(config_dir=config_dir)
     if le is not None:
         # Redact bc_message + url if not already done (the persisted

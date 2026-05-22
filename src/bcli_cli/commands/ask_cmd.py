@@ -37,6 +37,7 @@ from bcli.context import (
     ProfileSnapshot,
     TokenBudget,
     build_bundle,
+    read_last_error,
 )
 from bcli_cli._state import state
 
@@ -98,17 +99,27 @@ def ask_command(
                 f"[yellow]Could not read attachment {path}: {exc}[/yellow]"
             )
 
+    # Resolve last-error explicitly so --no-context truly suppresses
+    # it (bundle's default behaviour reads from disk when None).
+    # --include-debug picks the traceback sidecar over the redacted
+    # primary; the operator opted in to seeing it.
+    le = None
+    if not no_context and include_debug:
+        le = read_last_error(debug=True)
+    # recent_http honours --no-context via policy.include_http_tail
+    # = False above; passing the empty tuple here makes the
+    # suppression unambiguous (no implicit disk read).
+    recent_http: tuple = () if no_context else None
+
     bundle = build_bundle(
         question=question,
         profile=profile_snapshot,
         policy=bundle_policy,
         budget=TokenBudget(max_tokens=max_tokens or 16_000),
         raw_attachments=tuple(raw_attachments),
-        # last_error / recent_http read from disk through default
-        # config_dir; no_context is implemented by neutering the
-        # policy include flags above and starting fresh.
-        last_error=None if no_context else None,
-        recent_http=None if no_context else None,
+        last_error=le,
+        skip_last_error=no_context,
+        recent_http=recent_http,
     )
 
     # Run any opted-in context providers (R8). These never auto-enable —
@@ -138,6 +149,9 @@ def ask_command(
                     raw_attachments=tuple(raw_attachments) + (
                         ("context-providers.md", rendered),
                     ),
+                    last_error=le,
+                    skip_last_error=no_context,
+                    recent_http=recent_http,
                 )
         except Exception as exc:  # noqa: BLE001
             logger.debug("context providers failed: %s", exc, exc_info=True)

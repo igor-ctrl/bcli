@@ -60,6 +60,83 @@ def test_dry_run_does_not_call_backend(monkeypatch, tmp_path: Path) -> None:
     assert result.exit_code == 0
 
 
+def test_no_context_suppresses_existing_last_error(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Regression: --no-context must NOT leak the previous failure to
+    the model. The bundler reads last-error.json from disk by default;
+    --no-context has to suppress that read explicitly."""
+    from bcli.context import capture_last_error
+    from bcli.errors import ValidationError
+
+    # Pre-seed a redacted last-error file at the location the bundle
+    # layer will read from.
+    home = tmp_path
+    monkeypatch.setenv("HOME", str(home))
+    config_dir = home / ".config" / "bcli"
+    config_dir.mkdir(parents=True)
+    capture_last_error(
+        exc=ValidationError(
+            "bad filter",
+            status_code=400,
+            bc_message="UNIQUE_PHRASE_FROM_LAST_ERROR",
+        ),
+        command="get vendors",
+        profile="prod",
+        config_dir=config_dir,
+    )
+
+    # 1. Without --no-context the bundle must include the last error.
+    from bcli_cli.app import app
+    runner = CliRunner()
+    res_default = runner.invoke(app, ["ask", "--dry-run", "what?"])
+    assert res_default.exit_code == 0
+    assert "UNIQUE_PHRASE_FROM_LAST_ERROR" in res_default.output
+
+    # 2. With --no-context the same bundle must NOT include it.
+    res_nocontext = runner.invoke(
+        app, ["ask", "--dry-run", "--no-context", "what?"]
+    )
+    assert res_nocontext.exit_code == 0
+    assert "UNIQUE_PHRASE_FROM_LAST_ERROR" not in res_nocontext.output
+
+
+def test_include_debug_reads_traceback_sidecar(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """--include-debug must pull the traceback sidecar into the bundle."""
+    from bcli.context import capture_last_error
+    from bcli.errors import ValidationError
+
+    home = tmp_path
+    monkeypatch.setenv("HOME", str(home))
+    config_dir = home / ".config" / "bcli"
+    config_dir.mkdir(parents=True)
+    try:
+        raise ValidationError("oops", status_code=400)
+    except ValidationError as e:
+        capture_last_error(
+            exc=e,
+            command="x",
+            profile="p",
+            debug=True,
+            config_dir=config_dir,
+        )
+
+    from bcli_cli.app import app
+    runner = CliRunner()
+    # Without --include-debug: no traceback in render even though sidecar exists.
+    res_off = runner.invoke(app, ["ask", "--dry-run", "what?"])
+    assert "Traceback" not in res_off.output
+
+    # With --include-debug + matching policy include_debug flag: traceback present.
+    res_on = runner.invoke(
+        app, ["ask", "--dry-run", "--include-debug", "what?"]
+    )
+    assert res_on.exit_code == 0
+    assert "Traceback" in res_on.output
+
+
 def test_dry_run_redacts_attachment_secrets(monkeypatch, tmp_path: Path) -> None:
     attachment = tmp_path / "creds.json"
     attachment.write_text(

@@ -179,8 +179,23 @@ $ bcli ask --dry-run --no-context "test"        # redacted bundle, no network
 
 ## Out of scope / STUCK
 
-No STUCK files were written — every Part landed within scope. Two
-follow-up items the next session should pick up:
+No STUCK files were written — every Part landed within scope. One
+late finding from the advisor reconcile pass landed two bug fixes
++ regression tests before "done":
+
+- **`bcli ask --no-context` was leaking last-error** because
+  `build_bundle` reads `last-error.json` from disk when no record
+  is passed. Added `skip_last_error=True` parameter to the builder
+  and threaded it through the CLI. Regression test
+  `test_no_context_suppresses_existing_last_error` writes a real
+  last-error file, then asserts the phrase appears in the default
+  bundle but NOT in the `--no-context` bundle.
+- **`bcli ask --include-debug` was wired but inert.** The CLI now
+  reads `last-error-debug.json` (mode 0600 sidecar) when the flag
+  is set. Regression test `test_include_debug_reads_traceback_sidecar`
+  asserts "Traceback" absent by default + present with the flag.
+
+Two follow-up items the next session should pick up:
 
 1. **`bcli describe` excerpt wiring in `bcli ask`.** The `ask`
    command's `--no-context` flag is honoured, but the *default*
@@ -194,6 +209,26 @@ follow-up items the next session should pick up:
    re-walk of the AGENTS.md/CLAUDE.md content to verify the rest of
    the block hasn't been re-edited. Plan reference: R2 lists this
    as the `--force` opt-in path; UX wiring is deferred.
+
+## Wheel build smoke-test
+
+`python -m build --wheel` builds cleanly. Verified that the
+hatch `force-include` mapping ships both built-in packs:
+
+```
+$ unzip -l dist/bc_cli-0.4.0-py3-none-any.whl | grep _builtin
+bcli/packs/_builtin/cronus-demo/pack.yaml
+bcli/packs/_builtin/cronus-demo/batches/month-end-cronus.yaml
+bcli/packs/_builtin/cronus-demo/fragments/...
+bcli/packs/_builtin/starter-generic/pack.yaml
+bcli/packs/_builtin/starter-generic/batches/...
+bcli/packs/_builtin/starter-generic/fragments/...
+bcli/packs/_builtin/starter-generic/queries/...
+```
+
+`builtin_packs_dir()` looks at both the repo-root `packs/` (editable
+install) and the wheel-shipped `bcli/packs/_builtin/`, so `bcli pack
+list` works for users installed via `pip install bc-cli`.
 
 ## Recommended follow-up
 
