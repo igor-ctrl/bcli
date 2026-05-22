@@ -91,6 +91,30 @@ def _root_callback(
     state.quiet = quiet or resolved_format in ("json", "csv", "ndjson", "raw")
 
     _bootstrap_telemetry()
+    _bootstrap_context_tail()
+
+
+def _bootstrap_context_tail() -> None:
+    """Enable the ``bcli.http`` rolling tail when ``[context] tail = true``.
+
+    Off by default — opt-in via config. Wrapped in try/except so a
+    misconfigured ``[context]`` section never blocks the CLI.
+    """
+    try:
+        cfg = state._config
+        # Avoid forcing a config load just for this; if no profile
+        # has been touched yet, leave the tail alone.
+        if cfg is None:
+            return
+        ctx_cfg = getattr(cfg, "context", None)
+        if ctx_cfg is None or not getattr(ctx_cfg, "tail", False):
+            return
+        from bcli.context import enable_http_tail
+        enable_http_tail()
+    except Exception:  # noqa: BLE001
+        logging.getLogger("bcli.context").debug(
+            "context tail bootstrap failed", exc_info=True
+        )
 
 
 def _bootstrap_telemetry() -> None:
@@ -288,6 +312,26 @@ def main() -> None:
                 available = list(state._config.profiles.keys())
         except Exception:  # noqa: BLE001
             available = None
+
+        # Capture last-error for the context layer (Part 0 / R6). No
+        # tracebacks unless --debug was active; even then the debug
+        # sidecar lands in last-error-debug.json (mode 0600).
+        try:
+            from bcli.context import capture_last_error
+            capture_last_error(
+                exc=exc,
+                command=_invocation_command,
+                profile=state.profile_name or "",
+                environment=state.env_override or "",
+                company=state.company_override or "",
+                debug=bool(state.debug),
+            )
+        except Exception:  # noqa: BLE001
+            # Context capture must never block the user's error
+            # message. Already in the error path — keep going.
+            logging.getLogger("bcli.context").debug(
+                "last-error capture failed", exc_info=True
+            )
 
         msg = format_error_for_cli(
             exc, active_profile=active_profile, available_profiles=available,

@@ -242,6 +242,33 @@ class ExtractConfig(BaseModel):
     model_config = {"extra": "allow", "protected_namespaces": ()}
 
 
+class ContextConfig(BaseModel):
+    """LLM-context layer settings — drives :mod:`bcli.context`.
+
+    The context layer feeds future LLM-driven features (``bcli ask``,
+    ``bcli agent``) with a typed, redacted bundle of last-error + recent
+    HTTP + profile + describe excerpt. All knobs default to the most
+    private setting; users opt in per knob.
+
+    * ``tail`` — when ``True`` a rotating NDJSON handler attaches to the
+      ``bcli.http`` logger so the most recent ~200 requests land on disk
+      for ``bcli ask`` to read.
+    * ``redact_company_ids`` — when ``True`` the bundler scrubs GUID-
+      shaped substrings (BC company ids, record systemIds) before
+      shipping context to a model. Useful when the operator wants the
+      help but not the identifiers.
+    * ``attachment_max_bytes`` — per-attachment byte cap applied
+      *after* redaction. Default 256 KiB matches the conservative side
+      of LLM context cost vs information density.
+    """
+
+    tail: bool = False
+    redact_company_ids: bool = False
+    attachment_max_bytes: int = Field(default=256 * 1024, ge=1024)
+
+    model_config = {"extra": "allow"}
+
+
 class BCConfig(BaseModel):
     """Top-level configuration."""
 
@@ -250,6 +277,7 @@ class BCConfig(BaseModel):
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     audit: AuditConfig = Field(default_factory=AuditConfig)
     extract: ExtractConfig = Field(default_factory=ExtractConfig)
+    context: ContextConfig = Field(default_factory=ContextConfig)
 
     model_config = {"extra": "allow"}
 
