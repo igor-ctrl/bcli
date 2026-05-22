@@ -1,0 +1,11 @@
+queries:
+  vendor-by-no:
+    description: Look up a vendor by its BC vendor number (no field)
+    endpoint: vendors
+    params:
+      no:
+        required: true
+        type: string
+    filter: "no eq '${{ params.no }}'"
+    select: "no,displayName,email,blocked,balance,currencyCode"
+    top: 1

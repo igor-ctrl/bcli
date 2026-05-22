@@ -1,0 +1,14 @@
+queries:
+  inventory-on-hand:
+    description: Items currently in stock, ordered by inventory descending
+    endpoint: items
+    params:
+      limit:
+        default: 100
+        type: integer
+        min: 1
+        max: 5000
+    filter: "inventory gt 0 and blocked eq false"
+    select: "number,displayName,inventory,unitCost,unitPrice"
+    orderby: "inventory desc"
+    top: "${{ params.limit }}"

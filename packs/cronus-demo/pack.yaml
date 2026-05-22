@@ -1,0 +1,23 @@
+name: cronus-demo
+version: 0.1.0
+description: >-
+  Demo workflows for Microsoft's CRONUS sample tenant. Showcases
+  multi-step batches, step chaining, and parameter substitution.
+  Assumes the active profile points at a sandbox with CRONUS loaded
+  (Microsoft's default demo dataset).
+target_profile: cronus
+
+contents:
+  agent_fragments:
+    - name: cronus-orientation.md
+      targets: [agents]
+      description: How to identify a CRONUS-loaded tenant and which entities matter
+    - name: month-end-walkthrough.md
+      targets: [agents]
+      description: Walking an agent through the month-end batch
+
+  queries:
+    - cronus-sample.yaml
+
+  batches:
+    - month-end-cronus.yaml

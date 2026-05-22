@@ -1,0 +1,64 @@
+name: "CRONUS Month-End Customer Review"
+# Demo workflow against Microsoft's built-in CRONUS demo company.
+# Showcases three workflow features in one file:
+#   1. Named parameters with --set / --params
+#   2. Step-to-step chaining via ${{ steps.<name>.<field> }}
+#      (list results are indexed with integers: steps.<name>.0.<field>)
+#   3. Result capture via -o / -f
+#
+# Preview (no API calls, prints resolved requests):
+#   bcli batch run examples/month-end-cronus.yaml \
+#     --set customer_name=Adatum --set month=2026-03 --dry-run
+#
+# Execute and save a JSON result bundle:
+#   bcli batch run examples/month-end-cronus.yaml \
+#     --set customer_name=Adatum --set month=2026-03 -o review.json
+#
+# Execute and pretty-print each step's data inline:
+#   bcli batch run examples/month-end-cronus.yaml \
+#     --set customer_name=Adatum --set month=2026-03 -f table
+#
+# Try different CRONUS customers: Adatum, Trey, Fabrikam, Relecloud, School
+#
+# Prerequisites:
+#   - Active profile points at a BC Sandbox environment with CRONUS loaded
+#   - Default company (or --company flag) set to the CRONUS company id
+#     (run `bcli env list-companies` to find it)
+
+params:
+  customer_name:
+    description: "Display-name fragment of a CRONUS customer (e.g. Adatum, Trey, Fabrikam)"
+    required: true
+  month:
+    description: "Month in YYYY-MM format (e.g. 2026-03)"
+    required: true
+
+steps:
+  # 1. Resolve the customer by name fragment. Selecting id + number so both are
+  #    available to downstream steps via step-chaining references.
+  - name: find_customer
+    action: get
+    endpoint: customers
+    params:
+      filter: "contains(displayName, '${{ params.customer_name }}')"
+      select: "id,number,displayName,email,balance"
+      top: 1
+
+  # 2. Sales invoices for the target month — chains the resolved customer number.
+  #    Note the integer list-index syntax (.0) for GET results.
+  - name: invoices
+    action: get
+    endpoint: salesInvoices
+    params:
+      filter: "customerNumber eq '${{ steps.find_customer.0.number }}' and invoiceDate ge ${{ params.month }}-01"
+      select: "number,invoiceDate,totalAmountIncludingTax,status"
+      orderby: "invoiceDate desc"
+      top: 50
+
+  # 3. Aged-AR snapshot — standard v2.0 entity, uses the GUID id from step 1.
+  - name: aging
+    action: get
+    endpoint: agedAccountsReceivables
+    params:
+      filter: "customerId eq ${{ steps.find_customer.0.id }}"
+      select: "name,currencyCode,balanceDue,currentAmount,period1Amount,period2Amount,period3Amount"

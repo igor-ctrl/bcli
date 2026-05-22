@@ -1,0 +1,11 @@
+queries:
+  customer-by-no:
+    description: Look up a customer by its BC customer number (no field)
+    endpoint: customers
+    params:
+      no:
+        required: true
+        type: string
+    filter: "number eq '${{ params.no }}'"
+    select: "number,displayName,email,blocked,balanceDue,currencyCode"
+    top: 1
