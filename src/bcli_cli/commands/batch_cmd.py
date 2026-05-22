@@ -353,15 +353,25 @@ def run_batch(
         # update; the BaseException branch below derives a truthful
         # state from the (empty) step table when the gate fires.
         mutating_actions = {"post", "patch", "delete"}
+
+        def _step_action(step: dict) -> str:
+            """Mirror the alias logic from ``_execute_batch`` so the
+            disable_writes gate doesn't miss a step that uses
+            ``method: POST`` instead of ``action: post``."""
+            raw = step.get("action")
+            if raw is None and "method" in step:
+                m = step.get("method")
+                raw = m.lower() if isinstance(m, str) else None
+            return (raw or "get").lower()
+
         mutating_steps = [
-            step for step in steps
-            if (step.get("action") or "get").lower() in mutating_actions
+            step for step in steps if _step_action(step) in mutating_actions
         ]
         if mutating_steps:
             from bcli_cli._safety import confirm_write_or_exit
 
             preview = ", ".join(
-                f"{(step.get('action') or 'get').upper()} {step.get('endpoint', '?')}"
+                f"{_step_action(step).upper()} {step.get('endpoint', '?')}"
                 for step in mutating_steps[:3]
             )
             if len(mutating_steps) > 3:
@@ -488,7 +498,11 @@ def _print_dry_run(steps: list[dict], context: Any | None) -> None:
                 # Step references can't resolve at dry-run time — show raw
                 step_to_show = step
 
-        action = (step_to_show.get("action") or "get").upper()
+        action_raw = step_to_show.get("action")
+        if action_raw is None and "method" in step_to_show:
+            method_raw = step_to_show.get("method")
+            action_raw = method_raw.lower() if isinstance(method_raw, str) else None
+        action = (action_raw or "get").upper()
         endpoint = step_to_show.get("endpoint", "?")
         name = step_to_show.get("name", "")
         data = step_to_show.get("data")
@@ -554,7 +568,18 @@ async def _execute_batch(
                         )
                     continue
 
-            action = (step.get("action") or "get").lower()
+            # Accept the ``method:`` alias for ``action:``. Authors who
+            # copy-paste OData examples (especially bound-action
+            # invocations) reach for ``method`` — silently treating that
+            # as a missing ``action`` and downgrading to GET would let a
+            # mutating POST step land as a GET round-trip. See
+            # ``bcli.workflow._models.StepDef`` for the equivalent
+            # normalisation at schema-validation time.
+            action_raw = step.get("action")
+            if action_raw is None and "method" in step:
+                method_raw = step.get("method")
+                action_raw = method_raw.lower() if isinstance(method_raw, str) else None
+            action = (action_raw or "get").lower()
             endpoint = step.get("endpoint", "")
             step_name = step.get("name") or endpoint
             data = step.get("data")
