@@ -18,9 +18,10 @@ Spec-conformance notes:
   ``--namespace`` flag overrides it for non-BC tenants. The registry
   validator itself is namespace-agnostic — see
   ``bcli.client._async._parse_bound_action``.
-* ``--data`` and ``--no-data`` are mutually exclusive; one of the two
-  is required, to force a deliberate decision (a silent default to ``{}``
-  would mask a forgotten parameter on a real action).
+* ``--data`` defaults to an empty body when omitted (matching
+  ``bcli post`` semantics). ``--no-data`` is retained as an explicit
+  no-op alias for callers who want to spell the intent out; passing
+  both ``--data`` and ``--no-data`` is still an error.
 """
 
 from __future__ import annotations
@@ -66,7 +67,8 @@ def action_command(
     no_data: bool = typer.Option(
         False,
         "--no-data",
-        help="Send an empty body. Mutually exclusive with --data.",
+        help="Explicitly send an empty body. Same as omitting --data; "
+             "kept for callers who want to spell the intent out.",
     ),
     namespace: Optional[str] = typer.Option(
         None,
@@ -102,32 +104,21 @@ def action_command(
 
     \b
     Examples:
-        bcli action examples 42 archive --no-data
+        bcli action examples 42 archive
         bcli action items "'ALFKI'" doSomething --data '{"flag": true}'
         bcli action widgets 7 cancel --namespace Custom.Ns --data @payload.json
     """
     validate_flags(result_out, result_fd)
 
-    # ``--data`` and ``--no-data`` are mutually exclusive; one of the
-    # two is required. A silent default of ``{}`` would mask a forgotten
-    # parameter, so we force the caller to make the choice explicit.
+    # ``--data`` and ``--no-data`` may not both be set. Either alone, or
+    # neither (defaults to ``{}``), is fine — matches ``bcli post``.
     if data is not None and no_data:
         raise typer.BadParameter(
             "--data and --no-data are mutually exclusive. "
-            "Pass one or the other.",
-        )
-    if data is None and not no_data:
-        raise typer.BadParameter(
-            "Pass --data <json> for a body, or --no-data to send an empty "
-            "body. Refusing to default silently — actions usually take "
-            "parameters.",
+            "Pass one or the other (or neither — empty body is the default).",
         )
 
-    body: dict
-    if no_data:
-        body = {}
-    else:
-        body = _parse_data(data)  # type: ignore[arg-type]
+    body: dict = {} if data is None else _parse_data(data)
 
     ns = namespace or DEFAULT_NAMESPACE
     # Compose the synthetic bound-action string. The registry validator

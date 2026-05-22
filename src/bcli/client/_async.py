@@ -540,18 +540,37 @@ class AsyncBCClient:
             return f"{parent_url}({key})/{qualified}"
 
         # Service-root unbound action: ``Namespace.action`` with no
-        # parent entity. v0.1 rejects these explicitly so the user gets
-        # a clear "not yet supported" message instead of being routed
-        # through ``build_url`` (which expects an entity set).
+        # parent entity. Resolves to ``companies(<cid>)/<Namespace>.<action>``
+        # under the chosen API route. Registry lookup is skipped (unbound
+        # actions aren't entity sets and can't be registered), but the
+        # ``disable_standard_api`` security gate still applies when no
+        # explicit publisher/group/version override is supplied.
         if _is_unbound_action(entity_set_name):
-            from bcli.errors import RegistryError
+            if publisher and group and version:
+                return build_url(
+                    environment=environment,
+                    company_id=company_id,
+                    entity_set_name=entity_set_name,
+                    record_id=None,
+                    publisher=publisher,
+                    group=group,
+                    version=version,
+                )
+            if self._profile.disable_standard_api:
+                from bcli.errors import RegistryError
 
-            raise RegistryError(
-                f"Unbound action '{entity_set_name}' is not yet supported. "
-                f"This release of bcli only handles *bound* actions of the "
-                f"form '<entitySet>(<key>)/<Namespace>.<action>'. "
-                f"If you need to invoke an unbound action at the service "
-                f"root, please file a feature request."
+                raise RegistryError(
+                    f"Unbound action '{entity_set_name}' cannot be routed: "
+                    f"'disable_standard_api = true' blocks the standard v2.0 "
+                    f"fallback, and unbound actions are not registry entries. "
+                    f"Pass --publisher/--group/--version to target a custom "
+                    f"API route."
+                )
+            return build_url(
+                environment=environment,
+                company_id=company_id,
+                entity_set_name=entity_set_name,
+                record_id=None,
             )
 
         # Explicit override takes priority
