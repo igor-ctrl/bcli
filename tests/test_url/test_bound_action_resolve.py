@@ -158,17 +158,47 @@ class TestRegistryGateOnBoundActions:
         assert url.endswith("/widgets(7)/Custom.Ns.archive")
 
 
-class TestUnboundActionAtServiceRootRejected:
-    """An unbound action (``/Microsoft.NAV.refreshAll``) lives at the
-    service root and has no parent entity set. The v0.1 implementation
-    refuses these explicitly so the user gets a clear "not yet
-    supported" error instead of a confusing parent-entity lookup
-    failure. See PR docstring — out of scope for this iteration."""
+class TestUnboundActionAtServiceRoot:
+    """An unbound action (``Namespace.action`` with no parent entity)
+    resolves to ``companies(<cid>)/<Namespace>.<action>`` under the
+    chosen API route. Unbound actions aren't entity sets and cannot be
+    registered — the ``disable_standard_api`` security gate therefore
+    still applies when no explicit publisher/group/version override is
+    supplied, mirroring the protection on standard-v2.0 entity sets."""
 
-    def test_unbound_action_at_service_root_rejected(self):
-        client = _make_client()
+    def test_unbound_action_resolves_via_standard_route(self):
+        client = _make_client(disable_standard=False)
+        url = client._resolve_url("Microsoft.NAV.refreshAll")
+        assert url.endswith(
+            "/companies(company-1)/Microsoft.NAV.refreshAll"
+        ), url
+        assert "/api/v2.0/" in url
+
+    def test_unbound_action_resolves_via_custom_route_override(self):
+        """Explicit publisher/group/version routes the unbound action
+        under the matching custom API path."""
+        client = _make_client(disable_standard=True)
+        url = client._resolve_url(
+            "Custom.Ns.refreshAll",
+            publisher="acme", group="custom", version="v1.0",
+        )
+        assert "/api/acme/custom/v1.0/" in url
+        assert url.endswith("/companies(company-1)/Custom.Ns.refreshAll")
+
+    def test_unbound_action_blocked_when_disable_standard_api(self):
+        """A locked-down profile without an explicit custom-route
+        override must refuse the unbound action — there's nowhere to
+        route it that doesn't fall through to the suppressed standard
+        v2.0 surface."""
+        client = _make_client(disable_standard=True)
         with pytest.raises(RegistryError) as exc:
             client._resolve_url("Microsoft.NAV.refreshAll")
-        assert "unbound" in str(exc.value).lower() or "not yet supported" in str(
-            exc.value
-        ).lower()
+        assert "disable_standard_api" in str(exc.value)
+        assert "publisher" in str(exc.value).lower()
+
+    def test_unbound_action_namespace_agnostic(self):
+        """A non-Microsoft namespace must also route, not be rejected
+        for ``not yet supported``."""
+        client = _make_client(disable_standard=False)
+        url = client._resolve_url("Custom.Ns.doStuff")
+        assert url.endswith("/companies(company-1)/Custom.Ns.doStuff")

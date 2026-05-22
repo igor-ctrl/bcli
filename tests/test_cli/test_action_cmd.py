@@ -8,8 +8,10 @@ same client.post path. The verb takes care of:
 * default namespace ``Microsoft.NAV`` (the BC convention; the registry
   validator itself remains namespace-agnostic).
 * ``--namespace`` override for non-BC tenants.
-* ``--data`` (JSON literal or @file) versus ``--no-data`` (empty body),
-  which are mutually exclusive.
+* ``--data`` (JSON literal or @file) for a body, or no flag at all for
+  an empty body (matching ``bcli post``). ``--no-data`` is retained as
+  an explicit no-op alias; ``--data`` and ``--no-data`` may not both be
+  supplied.
 * honouring ``--profile``/``--company``/``--publisher``/``--group``/
   ``--version`` overrides via the standard CLI plumbing.
 """
@@ -139,21 +141,23 @@ class TestDataHandling:
         body_arg = fake_client.post.await_args.args[1]
         assert body_arg == {"loaded": "from-file"}
 
-    def test_no_data_sends_empty_body(self, cli_state, fake_client):
+    def test_no_data_flag_sends_empty_body(self, cli_state, fake_client):
+        """Explicit --no-data sends an empty body."""
         _run(data=None, no_data=True)
+        body_arg = fake_client.post.await_args.args[1]
+        assert body_arg == {}
+
+    def test_neither_flag_defaults_to_empty_body(self, cli_state, fake_client):
+        """Omitting both flags is equivalent to --no-data — matches
+        ``bcli post`` semantics so AI agents calling
+        ``bcli action examples 42 archive`` don't get a BadParameter."""
+        _run(data=None, no_data=False)
         body_arg = fake_client.post.await_args.args[1]
         assert body_arg == {}
 
     def test_data_and_no_data_mutually_exclusive(self, cli_state, fake_client):
         with pytest.raises(typer.BadParameter):
             _run(data='{"x": 1}', no_data=True)
-
-    def test_neither_data_nor_no_data_is_an_error(self, cli_state, fake_client):
-        """The verb must force the user to make a deliberate choice
-        between sending a body or none — silently defaulting to ``{}``
-        could mask a forgotten parameter on a real action."""
-        with pytest.raises(typer.BadParameter):
-            _run(data=None, no_data=False)
 
 
 class TestProfileOverrides:
