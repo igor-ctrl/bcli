@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from bcli.ask import collect_extra_context, discover_providers
+from bcli.ask import collect_extra_context
 from bcli.context import LastErrorRecord, ProfileSnapshot
 
 

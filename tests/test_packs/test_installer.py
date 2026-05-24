@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 import yaml
@@ -18,7 +17,6 @@ from bcli.packs import (
 from bcli.packs._installer import (
     batches_dir,
     fragments_dir,
-    plan_install,
     queries_path,
     registries_path,
 )
@@ -33,7 +31,7 @@ def test_install_writes_all_artefacts(make_pack, config_dir, install_target) -> 
         presets={"myEntity": {"entity_set_name": "myEntity", "supports": ["GET"]}},
     )
     pack = load_pack(src)
-    plan = install_pack(
+    install_pack(
         pack,
         profile="prod",
         target=install_target,
