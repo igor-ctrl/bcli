@@ -1,0 +1,7 @@
+# pnpm 11+ config — the legacy `pnpm.*` key in package.json was removed.
+# onlyBuiltDependencies allows install-time build scripts for the listed
+# packages; required because pnpm refuses unknown build scripts by default.
+# Both entries are first-party Astro dependencies needed at build time.
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
