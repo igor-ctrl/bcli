@@ -1,0 +1,31 @@
+name: starter-generic
+version: 0.1.0
+description: >-
+  Day-1 onboarding pack for any Business Central tenant. Standard
+  v2.0 endpoints only — no custom registry, no tenant-specific
+  assumptions. Install, run `bcli skill install`, and you have
+  six working saved queries plus operational guidance fragments.
+
+contents:
+  agent_fragments:
+    - name: endpoint-discovery.md
+      targets: [agents]
+      description: How an agent should drive bcli to discover endpoints
+    - name: filter-syntax-cheatsheet.md
+      targets: [agents]
+      description: OData $filter syntax with concrete examples
+    - name: common-errors.md
+      targets: [agents]
+      description: How to interpret common HTTP errors from BC
+
+  queries:
+    - vendor-by-no.yaml
+    - customer-by-no.yaml
+    - open-pos.yaml
+    - ar-aging-buckets.yaml
+    - recent-posted-invoices.yaml
+    - inventory-on-hand.yaml
+
+  batches:
+    - weekly-ar-snapshot.yaml
+    - month-end-readonly-audit.yaml

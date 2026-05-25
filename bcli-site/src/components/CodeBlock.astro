@@ -1,0 +1,14 @@
+---
+interface Props {
+  caption?: string;
+  lang?: string;
+}
+const { caption, lang = "bash" } = Astro.props;
+---
+
+<figure class="my-6">
+  {caption && (
+    <figcaption class="text-sm text-muted mb-2">{caption}</figcaption>
+  )}
+  <pre class="rounded-lg bg-black/40 border border-white/10 p-4 text-sm leading-relaxed overflow-x-auto"><code data-lang={lang}><slot /></code></pre>
+</figure>

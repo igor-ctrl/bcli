@@ -1,0 +1,14 @@
+queries:
+  open-pos:
+    description: List open purchase orders, newest first
+    endpoint: purchaseOrders
+    params:
+      limit:
+        default: 50
+        type: integer
+        min: 1
+        max: 1000
+    filter: "status ne 'Released' and status ne 'Cancelled'"
+    select: "number,orderDate,vendorNumber,vendorName,status,totalAmountIncludingTax,currencyCode"
+    orderby: "orderDate desc"
+    top: "${{ params.limit }}"

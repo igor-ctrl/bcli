@@ -71,6 +71,16 @@ extract-openai = [
     "openai>=1.50",
     "pypdf>=4.0",
 ]
+ask = [
+    "bc-cli[ask-claude]",
+    "bc-cli[ask-openai]",
+]
+ask-claude = [
+    "anthropic>=0.40",
+]
+ask-openai = [
+    "openai>=1.50",
+]
 mcp = [
     "mcp>=1.0",
 ]
@@ -83,6 +93,7 @@ dev = [
     "bc-cli[etl]",
     "bc-cli[mcp]",
     "bc-cli[extract]",
+    "bc-cli[ask]",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-httpx>=0.30",
@@ -91,6 +102,23 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bcli", "src/bcli_cli", "src/bcli_mcp"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"packs" = "bcli/packs/_builtin"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/",
+    "packs/",
+    "tests/",
+    "examples/",
+    "docs/",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "CHANGELOG.md",
+    "pyproject.toml",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

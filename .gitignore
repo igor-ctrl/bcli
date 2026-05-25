@@ -36,3 +36,11 @@ bcapi_cli_prd.md
 
 # Codex CLI session metadata — local-only, not part of the repo
 .context/
+
+# bcli-site (Astro) — generated files
+bcli-site/node_modules/
+bcli-site/dist/
+bcli-site/.astro/
+bcli-site/pnpm-lock.yaml
+bcli-site/package-lock.json
+bcli-site/yarn.lock

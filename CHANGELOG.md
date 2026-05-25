@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Part 3 (`bcli-site/` landing page v0)
+
+- **`bcli-site/`** — Astro + Tailwind landing page scaffold for
+  bcli.sh. Single page (v0): hero, install instructions, three
+  example commands, features grid, GitHub link.
+- Stack: Astro 4 + Tailwind 3 + TypeScript 5 (`extends:
+  astro/tsconfigs/strict`).
+- Copy reflects what's actually shipped: packs, ask, MCP server,
+  describe. Does NOT oversell the deferred `bcli agent` mode (R9).
+- `.github/workflows/site.yml` builds the site on changes under
+  `bcli-site/**`; Vercel deploy stub is wired but commented out
+  until `VERCEL_TOKEN` etc. are added to repo secrets.
+- `bcli-site/node_modules`, `dist`, `.astro`, and lockfiles are
+  gitignored.
+
+### Added — Part 2 (`bcli ask`)
+
+- **`bcli ask "<question>"`** — second-opinion oracle. Bundles the
+  operator's recent failing context (last-error, http-tail,
+  profile, describe excerpt) via :mod:`bcli.context`, ships it to
+  a configured LLM backend, and prints the answer. Opt-in: NullAsker
+  is the default; set `[ask] backend = "claude"` (or `"openai"`) to
+  activate.
+- Built-in backends: `null` (default), `claude` (Anthropic — extras
+  `[ask-claude]`), `openai` (extras `[ask-openai]`). Third-party
+  backends register by import path `module.path:ClassName`. Mirror
+  of the `extract` factory shape exactly.
+- **`--dry-run`** prints the exact redacted bundle that would be
+  sent before any network call. **`--no-context`** suppresses the
+  auto-bundle. **`--attach PATH`** pins a file with redaction +
+  truncation. **`--backend NAME`** is a one-shot override.
+- **`bcli.ask.context_providers` entry-point group (R8)** —
+  downstream packages add domain-specific context (glossaries,
+  schema hints) via a registered callable. Strictly opt-in: a pack
+  may recommend a provider but never auto-enables it; user config
+  in `[ask] context_providers = [...]` is the binding decision.
+- New `AskConfig` section in `bcli.config._model` exposing
+  `backend`, `model`, `api_key_env`, `max_tokens`,
+  `include_describe`, `include_http_tail`, `context_providers`.
+
+### Added — Part 1 (`bcli pack`)
+
+- **`bcli pack`** command group: `list`, `info`, `install`,
+  `uninstall`. Discovers packs from three sources: built-in
+  (``packs/`` in the repo), entry-point group ``bcli.packs``, and
+  ``--path <dir>`` for local development.
+- **Pack manifest format** (``pack.yaml``) with `agent_fragments`,
+  `queries`, `batches`, `registry_presets`, and
+  `recommended_context_providers`. Each fragment declares
+  `targets:` (`agents` and/or `claude`); default `[agents]` (R3).
+- **Install ledger** at
+  ``~/.config/bcli/packs/<profile>/<pack>.json`` recording every
+  artefact written, with per-entry `rendered_hash` and `owner` so
+  uninstall is provenance-driven (R2).
+- **Conflict detection** on registry presets (R7): a second pack
+  cannot silently overwrite an endpoint owned by another pack —
+  ``--replace-owned --accept-conflicts`` is the two-flag escape
+  hatch.
+- **Idempotent re-install**: marker blocks in AGENTS.md / CLAUDE.md
+  are replaced in place via ID + content_hash, never duplicated.
+- **Two built-in packs**: `starter-generic` (6 queries, 2 batches,
+  3 fragments — uses only standard v2.0 endpoints) and
+  `cronus-demo` (Microsoft CRONUS demo workflow).
+
+### Added — Part 0 (context infrastructure for LLM features)
+
+- **`bcli.context` package** — shared, model-bound context layer that
+  future LLM-driven features consume (`bcli ask`, future `bcli agent`).
+  Standalone in this release; no CLI consumers yet.
+- **Typed `ContextBundle` dataclass** with `to_dict()` / `to_prompt_text()`
+  renderers. Frozen, JSON-serialisable, token-budgeted with source
+  attribution and an explicit `RedactionRecord` audit trail (R4).
+- **Three-layer redaction** (`bcli.context._redact`) — composes the
+  existing `bcli/audit/_redact.py` key-based stripper, the
+  `bcli/telemetry/events.py` token-pattern regex, and a new URL
+  query-param / GUID / attachment scrubber (R5). Every redaction is
+  logged with a stable `rule_id` so regressions are catchable in CI.
+- **Last-error capture** — central `BCLIError` handler now drops a
+  redacted snapshot to `~/.config/bcli/last-error.json`. **No
+  tracebacks by default**; `--debug` invocations also write a
+  `last-error-debug.json` sidecar at mode 0600 (R6).
+- **`bcli.http` rolling tail** — opt-in NDJSON tail at
+  `~/.config/bcli/http-tail.ndjson` enabled by `[context] tail = true`.
+  Size-bounded via `RotatingFileHandler`; URLs are query-stripped on
+  read so the bundle stays safe.
+- **`ContextConfig`** — new `[context]` config section with `tail`,
+  `redact_company_ids`, `attachment_max_bytes` knobs.
+
 ## [0.4.0] — 2026-05-18 — Agent Interface Profile v0.1
 
 The Agent Interface Profile (AIP) v0.1 lands: a small kernel of CLI

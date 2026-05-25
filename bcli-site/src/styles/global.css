@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    background: theme(colors.ink);
+    color: theme(colors.mist);
+  }
+  body {
+    @apply font-sans antialiased;
+  }
+  code,
+  pre {
+    @apply font-mono;
+  }
+}
+
+@layer components {
+  .container-narrow {
+    @apply mx-auto max-w-3xl px-6;
+  }
+  .container-wide {
+    @apply mx-auto max-w-5xl px-6;
+  }
+}
