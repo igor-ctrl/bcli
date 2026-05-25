@@ -242,6 +242,68 @@ class ExtractConfig(BaseModel):
     model_config = {"extra": "allow", "protected_namespaces": ()}
 
 
+class AskConfig(BaseModel):
+    """Settings for ``bcli ask`` — the oracle / second-opinion command.
+
+    Mirrors the pluggable shape of :class:`ExtractConfig`. Built-in
+    backends:
+
+    * ``"null"``   — no backend; ``bcli ask`` errors with guidance.
+    * ``"claude"`` — Anthropic Claude (requires ``[ask-claude]`` and
+                     ``ANTHROPIC_API_KEY``).
+    * ``"openai"`` — OpenAI Responses API (requires ``[ask-openai]``
+                     and ``OPENAI_API_KEY``).
+
+    Third-party backends:
+      * ``"my_pkg.module:MyAsker"`` — any importable class
+        implementing :class:`bcli.ask.AskBackend`.
+
+    ``context_providers`` lists the entry-point names registered under
+    ``bcli.ask.context_providers`` the user opted into. Pack
+    recommendations surface as hints during ``bcli pack install`` but
+    are never auto-enabled — this list is the binding decision (R8).
+    """
+
+    backend: str = "null"
+    model: str = ""
+    api_key_env: str = ""
+    max_tokens: int = Field(default=1024, ge=128, le=32768)
+    include_describe: bool = True
+    include_http_tail: bool = True
+    context_providers: list[str] = Field(default_factory=list)
+    base_url: str | None = None
+    organization: str | None = None
+
+    model_config = {"extra": "allow", "protected_namespaces": ()}
+
+
+class ContextConfig(BaseModel):
+    """LLM-context layer settings — drives :mod:`bcli.context`.
+
+    The context layer feeds future LLM-driven features (``bcli ask``,
+    ``bcli agent``) with a typed, redacted bundle of last-error + recent
+    HTTP + profile + describe excerpt. All knobs default to the most
+    private setting; users opt in per knob.
+
+    * ``tail`` — when ``True`` a rotating NDJSON handler attaches to the
+      ``bcli.http`` logger so the most recent ~200 requests land on disk
+      for ``bcli ask`` to read.
+    * ``redact_company_ids`` — when ``True`` the bundler scrubs GUID-
+      shaped substrings (BC company ids, record systemIds) before
+      shipping context to a model. Useful when the operator wants the
+      help but not the identifiers.
+    * ``attachment_max_bytes`` — per-attachment byte cap applied
+      *after* redaction. Default 256 KiB matches the conservative side
+      of LLM context cost vs information density.
+    """
+
+    tail: bool = False
+    redact_company_ids: bool = False
+    attachment_max_bytes: int = Field(default=256 * 1024, ge=1024)
+
+    model_config = {"extra": "allow"}
+
+
 class BCConfig(BaseModel):
     """Top-level configuration."""
 
@@ -250,6 +312,8 @@ class BCConfig(BaseModel):
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     audit: AuditConfig = Field(default_factory=AuditConfig)
     extract: ExtractConfig = Field(default_factory=ExtractConfig)
+    context: ContextConfig = Field(default_factory=ContextConfig)
+    ask: AskConfig = Field(default_factory=AskConfig)
 
     model_config = {"extra": "allow"}
 

@@ -91,6 +91,30 @@ def _root_callback(
     state.quiet = quiet or resolved_format in ("json", "csv", "ndjson", "raw")
 
     _bootstrap_telemetry()
+    _bootstrap_context_tail()
+
+
+def _bootstrap_context_tail() -> None:
+    """Enable the ``bcli.http`` rolling tail when ``[context] tail = true``.
+
+    Off by default — opt-in via config. Wrapped in try/except so a
+    misconfigured ``[context]`` section never blocks the CLI.
+    """
+    try:
+        cfg = state._config
+        # Avoid forcing a config load just for this; if no profile
+        # has been touched yet, leave the tail alone.
+        if cfg is None:
+            return
+        ctx_cfg = getattr(cfg, "context", None)
+        if ctx_cfg is None or not getattr(ctx_cfg, "tail", False):
+            return
+        from bcli.context import enable_http_tail
+        enable_http_tail()
+    except Exception:  # noqa: BLE001
+        logging.getLogger("bcli.context").debug(
+            "context tail bootstrap failed", exc_info=True
+        )
 
 
 def _bootstrap_telemetry() -> None:
@@ -159,6 +183,7 @@ def _emit_command_summary() -> None:
 # Import and register command groups
 from bcli_cli.commands import (  # noqa: E402
     action_cmd,
+    ask_cmd,
     attach_cmd,
     auth_cmd,
     batch_cmd,
@@ -171,6 +196,7 @@ from bcli_cli.commands import (  # noqa: E402
     endpoint_cmd,
     env_cmd,
     get_cmd,
+    pack_cmd,
     patch_cmd,
     post_cmd,
     query_cmd,
@@ -194,6 +220,7 @@ app.add_typer(attach_cmd.app, name="attach", help="Document-attachment workflows
 # ``skill_cmd`` module aliases ``skill_init_cmd.app`` so ``@app.command("install")``
 # attaches to the same group without a duplicate ``add_typer`` call.
 app.add_typer(skill_init_cmd.app, name="skill", help="Generate a per-user bcli skill bundle (AIP Phase 7)")
+app.add_typer(pack_cmd.app, name="pack", help="Install reusable query/batch/fragment packs")
 app.command(name="get")(get_cmd.get_command)
 app.command(name="post")(post_cmd.post_command)
 app.command(name="patch")(patch_cmd.patch_command)
@@ -204,6 +231,7 @@ app.command(
 )(action_cmd.action_command)
 app.command(name="q", help="Run a saved query (no OData required)")(query_cmd.query_command)
 app.command(name="ai-context")(context_cmd.ai_context_command)
+app.command(name="ask", help="Ask an LLM oracle about your recent bcli context")(ask_cmd.ask_command)
 app.command(name="doctor", help="Diagnose your bcli install (self-rescue for team users)")(doctor_cmd.doctor_command)
 app.command(
     name="describe",
@@ -288,6 +316,26 @@ def main() -> None:
                 available = list(state._config.profiles.keys())
         except Exception:  # noqa: BLE001
             available = None
+
+        # Capture last-error for the context layer (Part 0 / R6). No
+        # tracebacks unless --debug was active; even then the debug
+        # sidecar lands in last-error-debug.json (mode 0600).
+        try:
+            from bcli.context import capture_last_error
+            capture_last_error(
+                exc=exc,
+                command=_invocation_command,
+                profile=state.profile_name or "",
+                environment=state.env_override or "",
+                company=state.company_override or "",
+                debug=bool(state.debug),
+            )
+        except Exception:  # noqa: BLE001
+            # Context capture must never block the user's error
+            # message. Already in the error path — keep going.
+            logging.getLogger("bcli.context").debug(
+                "last-error capture failed", exc_info=True
+            )
 
         msg = format_error_for_cli(
             exc, active_profile=active_profile, available_profiles=available,

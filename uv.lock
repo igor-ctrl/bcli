@@ -335,6 +335,16 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+ask = [
+    { name = "anthropic" },
+    { name = "openai" },
+]
+ask-claude = [
+    { name = "anthropic" },
+]
+ask-openai = [
+    { name = "openai" },
+]
 dev = [
     { name = "anthropic" },
     { name = "dlt", extra = ["filesystem", "parquet", "s3"] },
@@ -376,8 +386,12 @@ telemetry = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", marker = "extra == 'ask-claude'", specifier = ">=0.40" },
     { name = "anthropic", marker = "extra == 'extract-claude'", specifier = ">=0.40" },
     { name = "azure-monitor-opentelemetry", marker = "extra == 'telemetry'", specifier = ">=1.6" },
+    { name = "bc-cli", extras = ["ask"], marker = "extra == 'dev'" },
+    { name = "bc-cli", extras = ["ask-claude"], marker = "extra == 'ask'" },
+    { name = "bc-cli", extras = ["ask-openai"], marker = "extra == 'ask'" },
     { name = "bc-cli", extras = ["etl"], marker = "extra == 'dev'" },
     { name = "bc-cli", extras = ["etl"], marker = "extra == 'polaris'" },
     { name = "bc-cli", extras = ["extract"], marker = "extra == 'dev'" },
@@ -389,6 +403,7 @@ requires-dist = [
     { name = "keyring", specifier = ">=25.0" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0" },
     { name = "msal", specifier = ">=1.28" },
+    { name = "openai", marker = "extra == 'ask-openai'", specifier = ">=1.50" },
     { name = "openai", marker = "extra == 'extract-openai'", specifier = ">=1.50" },
     { name = "pyarrow", marker = "extra == 'polaris'", specifier = ">=16.0" },
     { name = "pydantic", specifier = ">=2.0" },
@@ -404,7 +419,7 @@ requires-dist = [
     { name = "tomlkit", specifier = ">=0.13" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["cli", "etl", "telemetry", "extract", "extract-claude", "extract-openai", "mcp", "polaris", "dev"]
+provides-extras = ["cli", "etl", "telemetry", "extract", "extract-claude", "extract-openai", "ask", "ask-claude", "ask-openai", "mcp", "polaris", "dev"]
 
 [[package]]
 name = "botocore"

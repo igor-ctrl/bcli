@@ -1,0 +1,8 @@
+TODO: hand-crafted Open Graph card.
+
+Replace this file with `og.png` (1200x630, < 1MB). Steipete-style
+treatment: bcli logotype on dark background, one-line tagline
+("Business Central from the terminal"), small "v0.4.0" build tag.
+
+For v0 a placeholder is acceptable; for v1+ commission a designer
+or use an Astro card generator like `astro-og-image`.

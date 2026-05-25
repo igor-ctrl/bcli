@@ -1,0 +1,118 @@
+---
+import Hero from "../components/Hero.astro";
+import CodeBlock from "../components/CodeBlock.astro";
+import "../styles/global.css";
+
+const ogImage = "/og.png";
+const title = "bcli — Business Central from the terminal";
+const description =
+  "Discovery-first CLI and SDK for Microsoft Dynamics 365 Business Central. Reusable packs, second-opinion oracle, MCP server.";
+---
+
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://bcli.sh/" />
+  </head>
+  <body class="bg-ink text-mist">
+    <main>
+      <Hero />
+
+      <section id="install" class="container-wide pb-16">
+        <h2 class="text-3xl font-semibold">Install</h2>
+        <p class="mt-3 text-muted">
+          Python 3.11+. The PyPI distribution name is{" "}
+          <code class="bg-white/10 rounded px-1.5 py-0.5">bc-cli</code> (the{" "}
+          <code class="bg-white/10 rounded px-1.5 py-0.5">bcli</code> name is
+          squatted); the CLI binary is still <code>bcli</code>.
+        </p>
+        <CodeBlock caption="Pip">
+pip install bc-cli
+        </CodeBlock>
+        <CodeBlock caption="uv (recommended)">
+uv tool install bc-cli
+        </CodeBlock>
+      </section>
+
+      <section class="container-wide pb-16">
+        <h2 class="text-3xl font-semibold">Try it</h2>
+        <p class="mt-3 text-muted">
+          Three commands that map onto what bcli does best — pack install,
+          saved-query run, oracle reflex.
+        </p>
+
+        <CodeBlock caption="Install the day-1 starter pack (6 queries, 2 batches, 3 agent fragments)">
+bcli pack install starter-generic
+        </CodeBlock>
+
+        <CodeBlock caption="Run a saved query — no OData required">
+bcli q vendor-by-no no=V00010
+        </CodeBlock>
+
+        <CodeBlock caption="Ask the oracle why the last request failed">
+bcli ask "why is this 400?"
+        </CodeBlock>
+      </section>
+
+      <section class="container-wide pb-16">
+        <h2 class="text-3xl font-semibold">What's shipped today</h2>
+        <ul class="mt-5 grid md:grid-cols-2 gap-4 text-muted">
+          <li class="rounded-lg border border-white/10 p-5">
+            <h3 class="text-mist font-semibold">Packs</h3>
+            <p class="mt-2 text-sm leading-relaxed">
+              Reusable bundles of saved queries, batch templates, and AGENTS.md
+              fragments. Ledger-driven install / uninstall, per-fragment
+              <code class="bg-white/10 rounded px-1">targets</code> for
+              AGENTS.md vs CLAUDE.md, conflict detection on registry presets.
+            </p>
+          </li>
+          <li class="rounded-lg border border-white/10 p-5">
+            <h3 class="text-mist font-semibold">Ask oracle</h3>
+            <p class="mt-2 text-sm leading-relaxed">
+              <code class="bg-white/10 rounded px-1">bcli ask</code> bundles
+              the last error, http tail, profile, and describe excerpt — all
+              redacted by three-layer policy — and ships it to a configured
+              LLM. One shot, one answer.
+            </p>
+          </li>
+          <li class="rounded-lg border border-white/10 p-5">
+            <h3 class="text-mist font-semibold">MCP server</h3>
+            <p class="mt-2 text-sm leading-relaxed">
+              <code class="bg-white/10 rounded px-1">bcli-mcp</code> exposes
+              the full <code class="bg-white/10 rounded px-1">bcli describe</code>{" "}
+              surface as MCP tools so Claude.ai, Codex, and other agent
+              runtimes can drive bcli deterministically.
+            </p>
+          </li>
+          <li class="rounded-lg border border-white/10 p-5">
+            <h3 class="text-mist font-semibold">Discovery-first</h3>
+            <p class="mt-2 text-sm leading-relaxed">
+              <code class="bg-white/10 rounded px-1">endpoint search</code>,
+              <code class="bg-white/10 rounded px-1">endpoint fields</code>,
+              <code class="bg-white/10 rounded px-1">describe</code> — every
+              answer is one command away, no guessing.
+            </p>
+          </li>
+        </ul>
+      </section>
+
+      <footer class="container-wide pb-12 text-sm text-muted">
+        <p>
+          bcli is open source under the Apache 2.0 license.{" "}
+          <a class="underline hover:text-mist" href="https://github.com/igor-ctrl/bcli">
+            github.com/igor-ctrl/bcli
+          </a>
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>

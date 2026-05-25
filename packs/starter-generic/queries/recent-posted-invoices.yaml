@@ -1,0 +1,18 @@
+queries:
+  recent-posted-invoices:
+    description: Recently-posted sales invoices, newest first
+    endpoint: salesInvoices
+    params:
+      days:
+        default: 30
+        type: integer
+        min: 1
+        max: 365
+      cutoff:
+        required: true
+        type: string
+        description: ISO date — set on the command line, e.g. cutoff=2026-04-01
+    filter: "status eq 'Open' and postingDate ge ${{ params.cutoff }}"
+    select: "number,postingDate,customerNumber,customerName,totalAmountIncludingTax,currencyCode,status"
+    orderby: "postingDate desc"
+    top: 100

@@ -1,0 +1,39 @@
+name: "Month-end read-only audit"
+# Sanity-check report run at month close. Pulls the three artefacts a
+# financial reviewer typically asks for first: open POs, AR aging,
+# unposted journal lines.
+#
+#   bcli batch run month-end-readonly-audit.yaml \
+#     --set month_start=2026-04-01 --set month_end=2026-04-30 -o month-end.json
+
+params:
+  month_start:
+    description: "First day of the month in ISO format (e.g. 2026-04-01)"
+    required: true
+  month_end:
+    description: "Last day of the month in ISO format (e.g. 2026-04-30)"
+    required: true
+
+steps:
+  - name: open_pos
+    action: get
+    endpoint: purchaseOrders
+    filter: "orderDate ge ${{ params.month_start }} and orderDate le ${{ params.month_end }}"
+    select: "number,orderDate,vendorNumber,vendorName,status,totalAmountIncludingTax"
+    orderby: "orderDate asc"
+    top: 500
+
+  - name: aged_ar
+    action: get
+    endpoint: agedAccountsReceivables
+    select: "customerNumber,name,balanceDue,currentAmount,period1Amount,period2Amount,period3Amount"
+    orderby: "balanceDue desc"
+    top: 100
+
+  - name: pending_journals
+    action: get
+    endpoint: journalLines
+    filter: "postingDate ge ${{ params.month_start }} and postingDate le ${{ params.month_end }}"
+    select: "lineNumber,postingDate,accountNumber,amount,description"
+    orderby: "postingDate asc"
+    top: 1000

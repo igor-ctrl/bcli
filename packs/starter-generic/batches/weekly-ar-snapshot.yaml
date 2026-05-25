@@ -1,0 +1,35 @@
+name: "Weekly AR snapshot (read-only)"
+# Read-only multi-step report. Captures aged AR, recent posted
+# invoices, and top customers by outstanding balance in a single
+# review-friendly artefact. Safe to run on any profile.
+#
+#   bcli batch run weekly-ar-snapshot.yaml -o weekly.json
+
+params:
+  cutoff:
+    description: "ISO date — pull invoices posted on/after this date"
+    required: true
+
+steps:
+  - name: aged_ar
+    action: get
+    endpoint: agedAccountsReceivables
+    select: "customerNumber,name,balanceDue,currentAmount,period1Amount,period2Amount,period3Amount"
+    orderby: "balanceDue desc"
+    top: 50
+
+  - name: recent_invoices
+    action: get
+    endpoint: salesInvoices
+    filter: "postingDate ge ${{ params.cutoff }}"
+    select: "number,postingDate,customerNumber,customerName,totalAmountIncludingTax,status"
+    orderby: "postingDate desc"
+    top: 100
+
+  - name: top_customers
+    action: get
+    endpoint: customers
+    filter: "balanceDue gt 0"
+    select: "number,displayName,balanceDue,paymentTermsId"
+    orderby: "balanceDue desc"
+    top: 25
