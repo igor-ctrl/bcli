@@ -2,7 +2,12 @@
 
 Stampers are post-processing functions applied to each page of records
 before dlt ingests them. They add metadata columns (sync timestamps,
-source identifiers, soft-delete flags) for downstream compatibility.
+source identifiers, etc.) for downstream compatibility.
+
+This package ships only vendor-neutral stampers. Vendor-specific audit
+conventions live in downstream packages and register through the
+``bcli.etl.stampers`` entry-point group — see
+:mod:`bcli.etl._stamper_factory`.
 
 This module is part of the generic layer and must not import from bcli.*.
 """
@@ -15,33 +20,8 @@ from typing import Any, Callable
 Stamper = Callable[[list[dict[str, Any]]], list[dict[str, Any]]]
 
 
-def fivetran_stamper() -> Stamper:
-    """Add Fivetran-compatible audit columns to every record.
-
-    Adds:
-    - ``_fivetran_synced``: ISO-8601 UTC timestamp of when the record was synced.
-    - ``_fivetran_deleted``: always ``False`` (soft-delete flag; BC doesn't
-      expose deletions, so downstream models should filter on this anyway).
-
-    Use this when migrating from or coexisting with Fivetran. Downstream
-    dbt models that reference these columns keep working unchanged.
-    """
-
-    def _stamp(page: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        synced_at = datetime.now(timezone.utc).isoformat()
-        return [
-            {**record, "_fivetran_synced": synced_at, "_fivetran_deleted": False}
-            for record in page
-        ]
-
-    return _stamp
-
-
 def audit_stamper(source_name: str) -> Stamper:
-    """Add a generic audit trail (`_synced_at`, `_source`) to every record.
-
-    Use this for new pipelines not tied to Fivetran conventions.
-    """
+    """Add a generic audit trail (`_synced_at`, `_source`) to every record."""
 
     def _stamp(page: list[dict[str, Any]]) -> list[dict[str, Any]]:
         synced_at = datetime.now(timezone.utc).isoformat()

@@ -189,7 +189,7 @@ def business_central(
         multi_company: If ``True``, iterate through every company returned by
             ``/companies`` and extract each entity per company. Adds a
             ``company_id`` column to every record.
-        stampers: Optional post-processing hooks (e.g. ``fivetran_stamper()``).
+        stampers: Optional post-processing hooks (e.g. ``audit_stamper()``).
             Defaults to an empty list.
         full_refresh: If ``True``, ignore the incremental cursor.
     """
