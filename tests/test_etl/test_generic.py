@@ -167,8 +167,9 @@ class TestBusinessCentralSource:
 class TestGenericHasNoBcliCoupling:
     """The generic layer must be importable with only bcli.etl modules loaded.
 
-    If any of _generic.py, _client.py, _auth.py, _stampers.py imports from
-    bcli.registry, bcli.client, bcli.config, or bcli.auth, this test fails.
+    If any of _generic.py, _client.py, _auth.py, _stampers.py,
+    _stamper_factory.py imports from bcli.registry, bcli.client,
+    bcli.config, or bcli.auth, this test fails.
     """
 
     def test_generic_does_not_import_bcli_sdk(self):
@@ -181,7 +182,7 @@ class TestGenericHasNoBcliCoupling:
         ).parent
         forbidden_prefixes = ("bcli.registry", "bcli.client", "bcli.config", "bcli.auth", "bcli.errors")
 
-        for module_name in ("_generic.py", "_client.py", "_auth.py", "_stampers.py"):
+        for module_name in ("_generic.py", "_client.py", "_auth.py", "_stampers.py", "_stamper_factory.py"):
             path = etl_dir / module_name
             tree = ast.parse(path.read_text())
             for node in ast.walk(tree):

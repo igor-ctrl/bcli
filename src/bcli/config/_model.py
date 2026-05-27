@@ -304,6 +304,27 @@ class ContextConfig(BaseModel):
     model_config = {"extra": "allow"}
 
 
+class EtlConfig(BaseModel):
+    """Settings for ``bcli etl`` — the dlt-based extract pipeline.
+
+    ``stampers`` lists entry-point names registered under the
+    ``bcli.etl.stampers`` group that should post-process every page of
+    records before dlt ingests them (sync timestamps, soft-delete flags,
+    vendor-specific audit columns, …). Applied in the order given.
+
+    The package ships no audit-column stampers; the list is empty by
+    default so output stays a clean record shape. A downstream package
+    registers a stamper under the ``bcli.etl.stampers`` group and the
+    operator opts in by name, e.g. ``stampers = ["audit"]``. Unknown
+    names are skipped with a warning — see
+    :mod:`bcli.etl._stamper_factory`.
+    """
+
+    stampers: list[str] = Field(default_factory=list)
+
+    model_config = {"extra": "allow"}
+
+
 class BCConfig(BaseModel):
     """Top-level configuration."""
 
@@ -314,6 +335,7 @@ class BCConfig(BaseModel):
     extract: ExtractConfig = Field(default_factory=ExtractConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)
     ask: AskConfig = Field(default_factory=AskConfig)
+    etl: EtlConfig = Field(default_factory=EtlConfig)
 
     model_config = {"extra": "allow"}
 
