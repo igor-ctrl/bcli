@@ -12,35 +12,7 @@ from bcli.etl._stampers import (
     apply_stampers,
     audit_stamper,
     company_id_stamper,
-    fivetran_stamper,
 )
-
-
-class TestFivetranStamper:
-    def test_adds_both_fields(self):
-        stamp = fivetran_stamper()
-        out = stamp([{"id": "1", "name": "Acme"}, {"id": "2", "name": "Globex"}])
-        for record in out:
-            assert "_fivetran_synced" in record
-            assert record["_fivetran_deleted"] is False
-
-    def test_preserves_existing_fields(self):
-        stamp = fivetran_stamper()
-        out = stamp([{"id": "1", "name": "Acme"}])
-        assert out[0]["id"] == "1"
-        assert out[0]["name"] == "Acme"
-
-    def test_does_not_mutate_input(self):
-        stamp = fivetran_stamper()
-        src = [{"id": "1"}]
-        stamp(src)
-        assert "_fivetran_synced" not in src[0]
-
-    def test_synced_is_iso_timestamp(self):
-        stamp = fivetran_stamper()
-        out = stamp([{"id": "1"}])
-        # Parseable as ISO timestamp
-        datetime.fromisoformat(out[0]["_fivetran_synced"])
 
 
 class TestAuditStamper:
@@ -49,6 +21,17 @@ class TestAuditStamper:
         out = stamp([{"id": "1"}])
         assert "_synced_at" in out[0]
         assert out[0]["_source"] == "test-source"
+
+    def test_synced_at_is_iso_timestamp(self):
+        stamp = audit_stamper("test-source")
+        out = stamp([{"id": "1"}])
+        datetime.fromisoformat(out[0]["_synced_at"])
+
+    def test_does_not_mutate_input(self):
+        stamp = audit_stamper("test-source")
+        src = [{"id": "1"}]
+        stamp(src)
+        assert "_synced_at" not in src[0]
 
 
 class TestCompanyIdStamper:

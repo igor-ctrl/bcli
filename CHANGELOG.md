@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-25
+
+### Changed — ETL stampers are now pluggable (BREAKING)
+
+- **`bcli etl sync` no longer injects audit/metadata columns by default.**
+  Output is a clean record shape; any extra columns are opt-in.
+- **New `bcli.etl.stampers` entry-point group.** A plugin exposes a zero-arg
+  callable returning a `Stamper` (`Callable[[list[dict]], list[dict]]` — a
+  per-page row transform). The operator opts in by name via the new
+  `[etl] stampers = ["..."]` config, or per-run with `bcli etl sync
+  --stamper NAME` (repeatable). Unknown names are skipped with a warning;
+  one broken plugin never aborts a sync. Mirrors the dispatch shape of
+  the `bcli.telemetry` / `bcli.ask` factories.
+- **New `EtlConfig` (`[etl]` config section)** with a `stampers: list[str]`
+  field, wired into `BCConfig`.
+- **`bcli_profile()` drops its built-in audit-column flag** in favour of
+  the generic `stampers=[...]` argument (entry-point names) / `[etl]
+  stampers` config. The generic `audit_stamper` / `company_id_stamper`
+  helpers remain. Migration: if you relied on the previous default audit
+  columns, install a package that registers the matching stamper plugin
+  and add its name to `[etl] stampers`.
+
 ## [0.5.0] - 2026-05-25
 
 ### Added — Part 3 (`bcli-site/` landing page v0)

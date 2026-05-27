@@ -68,6 +68,7 @@ def sync(
     full_refresh: bool = typer.Option(False, "--full-refresh", help="Ignore cursor, reload everything"),
     include_standard: bool = typer.Option(False, "--include-standard", help="Also sync standard v2.0 entities"),
     file_format: str = typer.Option("jsonl", "--file-format", help="Filesystem loader file format: jsonl or parquet"),
+    stamper: Optional[list[str]] = typer.Option(None, "--stamper", help="ETL stamper plugin name to apply (repeatable). Overrides the [etl] stampers config. Plugins register under the bcli.etl.stampers entry-point group."),
     polaris_uri: Optional[str] = typer.Option(None, "--polaris-uri", envvar="BCLI_POLARIS_URI", help="Polaris REST catalog URI. Enables post-sync Iceberg registration."),
     polaris_warehouse: Optional[str] = typer.Option(None, "--polaris-warehouse", envvar="BCLI_POLARIS_WAREHOUSE", help="Polaris catalog (warehouse) name"),
     polaris_credential: Optional[str] = typer.Option(None, "--polaris-credential", envvar="BCLI_POLARIS_CREDENTIAL", help="Polaris OAuth credential in 'client_id:client_secret' form"),
@@ -76,7 +77,10 @@ def sync(
     """Extract Business Central data and load to a destination via dlt.
 
     By default syncs all custom API endpoints from the registry for the active
-    profile. Standard v2.0 entities are skipped (typically handled by Fivetran).
+    profile; pass --include-standard to also sync standard v2.0 entities.
+    Output is vendor-neutral by default — audit columns (sync timestamp,
+    soft-delete flags) are opt-in via ETL stamper plugins (--stamper NAME or
+    the [etl] stampers config).
 
     \b
     Examples:
@@ -130,6 +134,7 @@ def sync(
             entities=entity_list,
             full_refresh=full_refresh,
             include_standard=include_standard,
+            stampers=list(stamper) if stamper else None,
         )
 
         if destination == "filesystem":
