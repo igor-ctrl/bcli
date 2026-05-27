@@ -65,9 +65,11 @@ def test_install_writes_all_artefacts(make_pack, config_dir, install_target) -> 
     rpath = registries_path("prod", override=config_dir)
     assert rpath.is_file()
     reg = json.loads(rpath.read_text())
-    assert "myEntity" in reg["endpoints"]
-    assert reg["endpoints"]["myEntity"]["source_pack"] == "demo"
-    assert reg["endpoints"]["myEntity"]["pack_version"] == "0.1.0"
+    assert isinstance(reg["endpoints"], list)
+    by_name = {e["entity_set_name"]: e for e in reg["endpoints"]}
+    assert "myEntity" in by_name
+    assert by_name["myEntity"]["source_pack"] == "demo"
+    assert by_name["myEntity"]["pack_version"] == "0.1.0"
 
     # Ledger persisted.
     ledger = read_ledger("demo", "prod", config_dir=config_dir)
@@ -75,6 +77,38 @@ def test_install_writes_all_artefacts(make_pack, config_dir, install_target) -> 
     assert ledger.pack_name == "demo"
     assert len(ledger.paths) >= 4  # fragment file + block + query + batch + preset
     assert any(p.kind == "agents_block" for p in ledger.paths)
+
+
+def test_installed_preset_is_loadable_by_runtime_registry(
+    make_pack, config_dir, install_target
+) -> None:
+    """Regression: the installer must write the `endpoints` array shape the
+    runtime registry loader reads, so a pack-installed preset actually
+    resolves at query time (not just round-trips through the installer)."""
+    from bcli.registry._registry import EndpointRegistry
+
+    src = make_pack(
+        "demo",
+        presets={"myEntity": {
+            "entity_set_name": "myEntity",
+            "supports": ["GET"],
+            "api_publisher": "acme",
+            "api_group": "ops",
+            "api_version": "v1.0",
+        }},
+    )
+    install_pack(
+        load_pack(src), profile="prod", target=install_target, dry_run=False,
+        config_override=config_dir,
+    )
+    rpath = registries_path("prod", override=config_dir)
+
+    reg = EndpointRegistry(disable_standard=True)
+    count = reg.load_custom_from_file(rpath)
+
+    assert count == 1
+    meta = reg.resolve("myEntity")
+    assert meta.entity_set_name == "myEntity"
 
 
 def test_fragment_targets_route_blocks(make_pack, config_dir, install_target) -> None:
@@ -165,7 +199,8 @@ def test_conflict_blocks_second_pack(make_pack, config_dir, install_target) -> N
         config_override=config_dir,
     )
     reg = json.loads(registries_path("prod", override=config_dir).read_text())
-    assert reg["endpoints"]["shared"]["source_pack"] == "beta"
+    by_name = {e["entity_set_name"]: e for e in reg["endpoints"]}
+    assert by_name["shared"]["source_pack"] == "beta"
 
 
 def test_uninstall_removes_artefacts(make_pack, config_dir, install_target) -> None:
@@ -199,7 +234,8 @@ def test_uninstall_removes_artefacts(make_pack, config_dir, install_target) -> N
     assert "bcli-pack:demo:a.md START" not in agents
     # Preset removed.
     reg = json.loads(registries_path("prod", override=config_dir).read_text())
-    assert "epX" not in (reg.get("endpoints") or {})
+    names = {e.get("entity_set_name") for e in (reg.get("endpoints") or [])}
+    assert "epX" not in names
     # Ledger gone.
     assert read_ledger("demo", "prod", config_dir=config_dir) is None
     # No catastrophic warnings on a clean install/uninstall.

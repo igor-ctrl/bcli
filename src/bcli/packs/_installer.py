@@ -492,13 +492,31 @@ def execute_install(
                 raise InstallError(
                     f"existing {rpath} is not valid JSON: {e}"
                 ) from e
-        endpoints = existing_reg.get("endpoints") or {}
-        if not isinstance(endpoints, dict):
+        # The runtime registry loader (`bcli.registry._registry`) reads
+        # `endpoints` as a JSON array of entry objects, each keyed by its
+        # `entity_set_name`. Write that shape — not a name→body map — so
+        # pack-installed presets are actually resolvable at query time.
+        endpoints = existing_reg.get("endpoints") or []
+        if not isinstance(endpoints, list):
             raise InstallError(
-                f"{rpath}: 'endpoints' must be an object"
+                f"{rpath}: 'endpoints' must be a JSON array"
             )
+        index_by_name: dict[str, int] = {}
+        for i, entry in enumerate(endpoints):
+            if isinstance(entry, dict):
+                key = entry.get("entity_set_name")
+                if key:
+                    index_by_name[key] = i
         for preset in plan.preset_writes:
-            endpoints[preset.name] = preset.body
+            body = dict(preset.body)
+            body.setdefault("entity_set_name", preset.name)
+            key = body["entity_set_name"]
+            existing_idx = index_by_name.get(key)
+            if existing_idx is not None:
+                endpoints[existing_idx] = body
+            else:
+                index_by_name[key] = len(endpoints)
+                endpoints.append(body)
             registry_entries.append(LedgerRegistryEntry(
                 name=preset.name,
                 rendered_hash=preset.rendered_hash,
@@ -674,10 +692,13 @@ def uninstall_pack(
                 raw = json.loads(rpath.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 raw = {}
-            endpoints = raw.get("endpoints") or {}
-            for _, name in preset_keys:
-                if name in endpoints:
-                    del endpoints[name]
+            endpoints = raw.get("endpoints") or []
+            if isinstance(endpoints, list):
+                remove = {name for _, name in preset_keys}
+                endpoints = [
+                    e for e in endpoints
+                    if not (isinstance(e, dict) and e.get("entity_set_name") in remove)
+                ]
             raw["endpoints"] = endpoints
             _atomic_write(rpath, json.dumps(raw, indent=2))
 

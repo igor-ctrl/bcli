@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-05-25
+
+### Fixed
+
+- **`bcli pack install` now writes registry presets in the array shape the
+  runtime registry loader reads.** The installer previously stored
+  `registries/<profile>.json` `endpoints` as a name→body object, but
+  `EndpointRegistry` iterates `endpoints` as a JSON array — so pack-installed
+  presets never resolved at query time (and merging into an existing
+  array-shaped registry raised `InstallError`). Install and uninstall now
+  read/merge/filter the array by each entry's `entity_set_name`. Added a
+  regression test that loads an installed preset through the real registry
+  loader and resolves it.
+
 ## [0.6.0] - 2026-05-25
 
 ### Changed — ETL stampers are now pluggable (BREAKING)
