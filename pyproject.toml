@@ -95,7 +95,9 @@ agent-claude-code = [
     "claude-agent-sdk>=0.2",
 ]
 agent-codex = [
-    "openai-codex",
+    # openai-codex is in beta (0.1.x); allow prereleases so the pin
+    # resolves. It pulls in its own openai-codex-cli-bin runtime.
+    "openai-codex>=0.1.0b3",
 ]
 agent = [
     "bc-cli[agent-local]",
@@ -137,6 +139,15 @@ include = [
     "CHANGELOG.md",
     "pyproject.toml",
 ]
+
+[tool.uv]
+# The optional [agent-codex] extra depends on openai-codex, which is
+# beta-only and pulls a pinned prerelease runtime
+# (openai-codex-cli-bin==0.137.0a4). Enabling prereleases lets the
+# universal lock resolve that extra. Every other dependency has a stable
+# release satisfying its constraint, so uv still pins stable versions for
+# them — the lockfile records exact versions regardless.
+prerelease = "allow"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
