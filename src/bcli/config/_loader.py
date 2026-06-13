@@ -188,3 +188,26 @@ def save_config(config: BCConfig) -> Path:
 
     CONFIG_FILE.write_text(tomlkit.dumps(doc))
     return CONFIG_FILE
+
+
+def update_config_section(section: str, values: dict) -> Path:
+    """Surgically update one section of the global config file.
+
+    Unlike :func:`save_config` (which rebuilds the whole document from a
+    :class:`BCConfig` and would drop sections it doesn't model into TOML,
+    e.g. ``[agent]`` / ``[ask]``), this loads the existing file with
+    tomlkit — preserving comments and unrelated sections — and only
+    sets the given keys. Used by the agent setup wizard and the
+    subscription-consent flow.
+    """
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    if CONFIG_FILE.exists():
+        doc = tomlkit.parse(CONFIG_FILE.read_text())
+    else:
+        doc = tomlkit.document()
+    if section not in doc:
+        doc[section] = tomlkit.table()
+    for key, value in values.items():
+        doc[section][key] = value
+    CONFIG_FILE.write_text(tomlkit.dumps(doc))
+    return CONFIG_FILE
