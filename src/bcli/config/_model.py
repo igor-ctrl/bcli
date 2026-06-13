@@ -277,6 +277,50 @@ class AskConfig(BaseModel):
     model_config = {"extra": "allow", "protected_namespaces": ()}
 
 
+class AgentConfig(BaseModel):
+    """Settings for ``bcli`` agent mode — the interactive chat REPL.
+
+    Mirrors the pluggable shape of :class:`AskConfig`. Built-in
+    backends:
+
+    * ``"null"``        — no backend; the REPL errors with setup guidance.
+    * ``"pydantic-ai"`` — BYOK in-process loop (requires ``[agent-local]``).
+                          ``model`` takes ``provider:model`` strings —
+                          ``anthropic:claude-sonnet-4-5``, ``openai:gpt-5``,
+                          or any OpenAI-compatible server via ``base_url``
+                          (Ollama, vLLM, …).
+    * ``"claude-code"`` — drive the user's installed Claude Code via the
+                          Agent SDK (requires ``[agent-claude-code]``).
+    * ``"codex"``       — drive the user's installed Codex CLI (requires
+                          ``[agent-codex]``).
+
+    Third-party backends:
+      * ``"my_pkg.module:MyBackend"`` — any importable class implementing
+        :class:`bcli.agent.AgentSessionBackend` with a ``from_config``
+        classmethod.
+
+    ``subscription_authorized`` is the persisted consent flag for riding
+    a Claude / ChatGPT subscription instead of an API key. It is only
+    written by the explicit consent flow (literal ``yes``) and is never
+    set by default — see ``docs/agent.md``. API-key auth never consults it.
+
+    ``plan_mode_default`` — ``"auto"`` turns plan mode on when the
+    resolved environment is production; ``"on"`` / ``"off"`` force it.
+    """
+
+    backend: str = "null"
+    model: str = ""               # backend-specific default applied at from_config
+    api_key_env: str = ""         # backend-specific default applied at from_config
+    base_url: str = ""            # Ollama / OpenAI-compatible endpoint
+    max_steps: int = Field(default=20, ge=1, le=100)
+    memory: bool = True           # load per-profile BC.md into the system prompt
+    plan_mode_default: str = "auto"  # auto | on | off
+    subscription_authorized: bool = False
+    subscription_authorized_at: str = ""
+
+    model_config = {"extra": "allow", "protected_namespaces": ()}
+
+
 class ContextConfig(BaseModel):
     """LLM-context layer settings — drives :mod:`bcli.context`.
 
@@ -335,6 +379,7 @@ class BCConfig(BaseModel):
     extract: ExtractConfig = Field(default_factory=ExtractConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)
     ask: AskConfig = Field(default_factory=AskConfig)
+    agent: AgentConfig = Field(default_factory=AgentConfig)
     etl: EtlConfig = Field(default_factory=EtlConfig)
 
     model_config = {"extra": "allow"}
