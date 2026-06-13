@@ -50,7 +50,10 @@ app = typer.Typer(
         "  --profile <name> alone is enough — environment, company, and\n"
         "  client_id resolve from the profile. Pass -e only to [italic]override[/italic]."
     ),
-    no_args_is_help=True,
+    # Bare ``bcli`` on a TTY launches the agent chat REPL (handled in the
+    # root callback below); on a non-TTY it must still print help, so we
+    # turn off Typer's built-in no-args-is-help and branch ourselves.
+    no_args_is_help=False,
     rich_markup_mode="rich",
 )
 
@@ -61,8 +64,9 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def _root_callback(
+    ctx: typer.Context,
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Connection profile name"),
     env: Optional[str] = typer.Option(None, "--env", "-e", help="Override environment name"),
     company: Optional[str] = typer.Option(None, "--company", "-c", help="Override company ID"),
@@ -92,6 +96,37 @@ def _root_callback(
 
     _bootstrap_telemetry()
     _bootstrap_context_tail()
+
+    # Bare ``bcli`` (no subcommand). On an interactive TTY this launches
+    # the agent chat REPL; otherwise (piped/scripted) print help and exit
+    # so existing non-interactive callers are unaffected.
+    if ctx.invoked_subcommand is None:
+        _launch_bare_repl_or_help(ctx, profile)
+
+
+def _stdio_is_tty() -> bool:
+    """True only when both stdin and stdout are real terminals.
+
+    The REPL needs a TTY on both ends; a pipe on either side (``echo |
+    bcli``, ``bcli | cat``, agents capturing output) means we fall back
+    to help so nothing hangs waiting on a Textual app that can't draw.
+    """
+    try:
+        return sys.stdin.isatty() and sys.stdout.isatty()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _launch_bare_repl_or_help(ctx: typer.Context, profile: Optional[str]) -> None:
+    """Bare-``bcli`` dispatch: TTY → chat REPL, non-TTY → help."""
+    if not _stdio_is_tty():
+        typer.echo(ctx.get_help())
+        raise typer.Exit()
+    # Lazy import: Textual + the agent engine never load for subcommands.
+    from bcli_cli.repl import launch_repl
+
+    code = launch_repl(profile=profile)
+    raise typer.Exit(code=code or 0)
 
 
 def _bootstrap_context_tail() -> None:

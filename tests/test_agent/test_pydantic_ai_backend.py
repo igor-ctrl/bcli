@@ -29,8 +29,11 @@ async def _drive(backend, runtime, msg: str):
 
 
 async def test_text_only_turn_streams_and_completes() -> None:
+    # call_tools=[] → the model answers directly without invoking any tool
+    # (so no handler shells out to a real `bcli batch` subprocess).
     backend = PydanticAIBackend(
-        model=TestModel(custom_output_text="42 vendors"), max_steps=5,
+        model=TestModel(call_tools=[], custom_output_text="42 vendors"),
+        max_steps=5,
     )
     runtime = make_runtime()
     events = await _drive(backend, runtime, "how many vendors?")
