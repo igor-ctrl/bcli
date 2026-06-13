@@ -406,3 +406,42 @@ bcli etl sync --destination filesystem
 bcli etl sync --entities customers,vendors --destination duckdb
 bcli etl sync --full-refresh --destination iceberg
 ```
+
+---
+
+## agent (optional — requires `bc-cli[agent]`)
+
+Interactive chat REPL where an LLM drives bcli's verbs as tools. Bare `bcli` on
+a TTY launches the chat; non-TTY prints help. See [Agent Mode](agent.md).
+
+### bcli (bare, on a TTY)
+
+```bash
+bcli                 # launch the chat REPL (or the first-run setup wizard)
+bcli --profile finance
+```
+
+### agent run
+
+Headless one-shot turn — stream the answer to stdout, tool activity to stderr.
+
+```bash
+bcli agent run "<prompt>" [options]
+```
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--backend <name>` | | One-shot backend override (`pydantic-ai` / `claude-code` / `codex` / `module:Class`) |
+| `--model <name>` | | One-shot model override (e.g. `anthropic:claude-sonnet-4-5`) |
+| `--plan` | | Force plan mode on (writes become `draft_batch`) |
+| `--no-plan` | | Force plan mode off |
+| `--yes` | `-y` | Auto-approve gated writes (scripted use; be careful) |
+
+### agent init
+
+Re-run the setup wizard — pick a backend, store the API key in the OS keychain,
+write the `[agent]` config section.
+
+```bash
+bcli agent init
+```
