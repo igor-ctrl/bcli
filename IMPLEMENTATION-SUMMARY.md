@@ -1,247 +1,173 @@
-# Implementation summary — Parts 0-3 (pack / ask / site plan)
+# Implementation Summary — `bcli` agent mode (Part 4 of the roadmap)
 
-Worktree: `/Users/igor/Projects/2_Areas/D_Internal_CLI_Tooling/bcli/.claude/worktrees/agent-a5724d8b39c9ef6d9`
-Branch: `worktree-agent-a5724d8b39c9ef6d9`
-Plan: `/Users/igor/.claude/plans/how-would-the-bcli-zippy-lantern.md`
+Branch: `feat/agent-mode`. Implements the approved plan
+(`~/.claude/plans/i-attempted-to-create-swift-melody.md`): a Claude Code /
+Codex-style interactive agent where an LLM drives bcli's own verbs as tools,
+with three backends, a Textual TUI, a first-run wizard, a consent gate,
+plan-mode write safety, and per-profile `BC.md` memory.
 
-Total commits on this branch: **11** (one per logical sub-unit).
+This continued an interrupted run that had committed a Part-1 skeleton
+(`4a71910`) with no tests, extras, or CLI wiring. The skeleton imported cleanly
+and matched the plan; it was built on (one real bug fixed) rather than rewritten.
 
-## Part 0 — `bcli.context` infrastructure (R1, R4, R5, R6)
+## What was built, per part
 
-Status: **shipped, green** — 40 tests pass, ruff clean.
+### Part 1 — engine + tools + pydantic-ai backend (`3f88923`)
 
-Files:
-- `src/bcli/context/__init__.py` — public surface
-- `src/bcli/context/_protocol.py` — pre-existing skeleton, refined
-  with `to_prompt_text()` Markdown renderer (no other changes —
-  protocol was already R4-aligned)
-- `src/bcli/context/_redact.py` — three-layer redaction composing
-  `bcli/audit/_redact.py` (keys) + `bcli/telemetry/events.py` regex
-  (patterns) + new URL/GUID/attachment scrub. Five stable
-  `rule_id` constants.
-- `src/bcli/context/_last_error.py` — captures `BCLIError` exits
-  to `~/.config/bcli/last-error.json`. No tracebacks by default;
-  `--debug` runs also produce `last-error-debug.json` at mode 0600.
-- `src/bcli/context/_http_tail.py` — `RotatingFileHandler` on the
-  `bcli.http` logger; opt-in via `[context] tail = true`.
-- `src/bcli/context/_bundle.py` — `build_bundle()` pure function;
-  token-budgeted priority truncation (question > last_error >
-  profile > http > describe > attachments).
-- `src/bcli/config/_model.py` — `ContextConfig` added.
-- `src/bcli_cli/app.py` — central error handler now calls
-  `capture_last_error`; root callback bootstraps the http-tail
-  handler when configured.
+- **Reviewed + corrected the WIP skeleton.** Fixed a latent bug:
+  `backends/_pydantic_ai.py` imported `AgentRunResultEvent` from
+  `pydantic_ai.messages` (it lives on the top-level `pydantic_ai`); the WIP would
+  have `ImportError`ed on the first turn. Verified the corrected backend
+  end-to-end against `TestModel`.
+- **Engine** (already in the skeleton, validated): `AgentSessionBackend` protocol
+  + frozen `AgentEvent` (`_protocol.py`); factory with `NullAgentBackend` fallback
+  + one-shot warning (`_factory.py`, mirror of `bcli.ask._factory`); `AgentRuntime`
+  with the write-safety approval seam (`_runtime.py`); `ToolRegistry` (read/write
+  tiers, plan-mode `draft_batch` swap, `from_describe` rebuild, `bcli_mcp` parity)
+  + curated overlay (`tools/_definitions.py`, `_registry.py`); in-process handlers
+  with the safety gate enforced inside them (`tools/_impl.py`); three projections
+  (`tools/_projections.py`); system-prompt assembly (`_prompt.py`); `BC.md` loader
+  (`memory/_bc_md.py`); auth detection (`_auth_detect.py`).
+- **Config**: `AgentConfig` wired into `BCConfig` (`config/_model.py`);
+  `update_config_section()` for surgical tomlkit writes (`config/_loader.py`).
+- **CLI**: wired `bcli agent run` (headless one-shot, streams answer to stdout /
+  tool activity to stderr) + `bcli agent init` into `app.py`.
+- **pyproject extras**: `agent-local` (`pydantic-ai-slim[anthropic,openai]>=1.107,<2`),
+  `agent-claude-code`, `agent-codex`, `agent` meta-extra (+ `textual>=8.2`);
+  added to `dev`.
+- **repl package**: `repl/__init__.py` (lazy `launch_repl`) + console setup wizard
+  (`repl/_wizard.py`).
+- **Tests** — `tests/test_agent/` (factory dispatch, registry/parity, safety
+  matrix, read handlers, pydantic-ai event stream via `TestModel`, wizard logic,
+  consent gate, headless run + plan-mode resolution).
 
-Tests: 40 in `tests/test_context/` covering dataclass round-trip,
-3-layer redaction (adversarial nested JSON, URL-encoded tokens,
-base64 JWTs), audit-trail completeness, last-error capture w/o
-tracebacks, http-tail rotation + size cap, bundle composition
-with all sources, no-context path.
+### Part 2 — Textual chat REPL (`05f0bba`)
 
-Commits:
-- `f3f448f feat(context): bcli.context — typed ContextBundle + 3-layer redaction`
-- `fa0ebcb feat(context): wire last-error capture + http-tail bootstrap into CLI`
-- `2eb26a3 test(context): cover dataclass round-trip, 3-layer redaction, audit trail`
-- `e3b1714 docs(changelog): note Part 0 (bcli.context infrastructure)`
+- **Bare-`bcli` entry**: `app.py` `no_args_is_help=False` +
+  `invoke_without_command=True` callback; branch on `ctx.invoked_subcommand is
+  None` — dual-TTY → lazy-import REPL, non-TTY → help (regression-tested so
+  scripted/piped callers are unaffected). Agent stack never imported for
+  subcommands.
+- **`repl/_app.py`** — `ChatApp` (Textual): scrolling transcript, streaming
+  `MarkdownStream`, `ToolCallPanel` cards, `StatusBar`, modal approval dialog;
+  turns run in an exclusive worker consuming `AgentEvent`s; long-lived
+  `AsyncBCClient` + `AgentRuntime`; first-run wizard via `run_repl`.
+- **`repl/_widgets.py`** — `StatusBar` / `ToolCallPanel` / `ApprovalScreen`
+  (y/n + buttons; resolves the runtime gate future).
+- **`repl/_commands.py`** — pure slash parser (`/model /profile /company /plan
+  /yes /context /clear /help /exit` + aliases).
+- **`repl/_plan_mode.py`** — drafted batch YAML → temp file → gated
+  `bcli batch run` (dry-run then real), same path `bcli extract` uses.
+- **Tests** — `tests/test_repl/` (bare-entry regression, slash parsing, plan-mode
+  argv + round-trip, wizard config-write, Textual `App.run_test()` pilots feeding
+  canned `AgentEvent` streams for text / tool / approval).
+- Also fixed a test side-effect: pinned the text-only pydantic-ai test to
+  `call_tools=[]` so it no longer shells out to a real `bcli batch` subprocess
+  (that was polluting `test_context`'s last-error read under full-suite ordering).
 
-## Part 1 — `bcli pack` (R2, R3, R7, R8)
+### Part 3 — Claude Code backend (`8a57726`)
 
-Status: **shipped, green** — 19 tests pass, ruff clean. Both
-built-in packs install end-to-end against a tmp config dir.
+- **`backends/_claude_sdk.py`** — `ClaudeCodeBackend` over `ClaudeSDKClient`.
+  bcli verbs become an in-process SDK MCP server from the SAME `_impl.py`
+  handlers; `allowed_tools` restricted to `mcp__bcli__*` (built-in coding tools
+  never allowed); `can_use_tool` coarse fence on top of the per-handler write
+  gate. Handles the documented Python quirk: streaming `AsyncIterable` prompt +
+  dummy `PreToolUse` hook returning `{"continue_": True}` so `can_use_tool`
+  fires. Translates `AssistantMessage` / `TextBlock` / `ToolUseBlock` /
+  `ToolResultBlock` / `ResultMessage` → `AgentEvent`s.
+- Consent flow (`repl/_consent.py`, present since the skeleton) covers
+  claude-code subscription auth — literal `yes`, persisted; API keys never
+  prompt.
+- **Tests** — fake `claude_agent_sdk` injected into `sys.modules` (package not
+  installed): factory build, event translation, `can_use_tool` fence, dummy
+  hook, bcli-only `allowed_tools`.
 
-Files:
-- `src/bcli/packs/_protocol.py` — frozen dataclasses (Pack,
-  PackManifest, PackContents, AgentFragment, PackQuery, PackBatch,
-  PackRegistryPreset). `targets: [agents] | [claude] | [agents, claude]`
-  per fragment (R3 default `[agents]`).
-- `src/bcli/packs/_loader.py` — manifest + content loader with
-  schema validation.
-- `src/bcli/packs/_registry.py` — discovery: built-in (`packs/`)
-  + entry-point group `bcli.packs` + local path. Wheel-install
-  fallback via `bcli/packs/_builtin/`.
-- `src/bcli/packs/_ledger.py` — JSON ledger at
-  `~/.config/bcli/packs/<profile>/<pack>.json` (R2). Frozen
-  dataclasses; atomic write.
-- `src/bcli/packs/_installer.py` — `plan_install` + `execute_install`
-  + `uninstall_pack`. Marker blocks with content_hash; idempotent
-  re-install; provenance-injected registry presets; conflict
-  detection refuses unless `--replace-owned --accept-conflicts` (R7).
-- `src/bcli_cli/commands/pack_cmd.py` — `bcli pack list / info /
-  install / uninstall`. Dry-run; per-install confirm; pack
-  recommendations surfaced as hints, never auto-enabled (R8).
-- `packs/starter-generic/` — 6 queries, 2 batches, 3 fragments;
-  standard v2.0 endpoints only.
-- `packs/cronus-demo/` — Microsoft CRONUS month-end demo (lifted
-  from `examples/`).
-- `pyproject.toml` — `[tool.hatch.build.targets.wheel.force-include]`
-  maps `packs/` → `bcli/packs/_builtin` so the wheel ships the
-  built-ins.
+### Part 4 — Codex backend (`3680517`)
 
-Tests: 19 in `tests/test_packs/` covering manifest validation,
-fragment-targets routing (agents vs claude vs both), install
-round-trips, idempotency, conflict detection, uninstall,
-discovery, broken-pack tolerance, and end-to-end install of both
-built-in packs.
+- **`backends/_codex.py`** — `CodexBackend` over the `openai-codex` SDK.
+  Codex is an MCP client → `to_mcp_config()` registers the existing `bcli-mcp`
+  server (no new tool code; the write gate runs one layer down in the bcli
+  subprocess + codex `approval_mode`). `base_instructions` carries bcli's prompt;
+  approval escalates to `on_request` under production/plan mode. Notifications
+  mapped best-effort to `AgentEvent`s; final answer from `TurnResult`.
+- **`[tool.uv] prerelease = "allow"`** so the universal lock resolves the beta's
+  pinned prerelease runtime (`openai-codex-cli-bin`); core deps stay stable.
+- **Tests** — fake `openai_codex` injected into `sys.modules`: `to_mcp_config`,
+  factory build, notification mapping + final answer, `thread_start` config +
+  instructions, production approval escalation.
 
-Smoke-test (manually run):
-- `bcli pack list` shows both built-in packs.
-- `bcli pack info starter-generic` shows manifest + content
-  counts + "not installed on profile X".
-- `bcli pack install starter-generic --dry-run --target /tmp/X`
-  prints the full plan (3 fragments + 3 marker blocks + 6 queries
-  + 2 batches) without touching disk.
+### Docs
 
-Commits:
-- `e3eb1eb feat(packs): bcli.packs SDK — Pack/Manifest/Ledger + installer (R2, R3, R7, R8)`
-- `c61627b feat(packs): bcli pack list / info / install / uninstall CLI`
-- `a6a8c46 feat(packs): ship starter-generic + cronus-demo built-in packs`
-- `ebc0544 test(packs): 19 tests + pyproject pack wheel layout + changelog`
+`docs/agent.md` (end-to-end guide), `agent` section in
+`docs/command-reference.md`, README docs-table entry, and the Agent Mode
+architecture section in the (untracked, local) `CLAUDE.md`.
 
-## Part 2 — `bcli ask`
-
-Status: **shipped, green** — 16 tests pass, ruff clean. CLI
-smoke-test (`bcli ask --dry-run --no-context "test"`) prints the
-redacted bundle without making a network call.
-
-Files:
-- `src/bcli/ask/_protocol.py` — `AskBackend` Protocol + NullAsker
-  (mirror of `bcli/extract/_protocol.py`).
-- `src/bcli/ask/_factory.py` — `get_asker` dispatch with
-  `_BUILTIN_BACKENDS` + `module:Class` fallback + Null fallback
-  with one-shot warning (mirror of `bcli/extract/_factory.py`).
-- `src/bcli/ask/_claude.py` — Anthropic backend
-  (`messages.create`, bundle as Markdown user-turn).
-- `src/bcli/ask/_openai.py` — OpenAI Responses API backend.
-- `src/bcli/ask/_providers.py` — `bcli.ask.context_providers`
-  entry-point group (R8). Opt-in via `[ask] context_providers`.
-- `src/bcli_cli/commands/ask_cmd.py` — `bcli ask "<q>"` with
-  `--no-context`, `--attach`, `--backend`, `--dry-run`,
-  `--include-bodies`, `--include-debug`, `--max-tokens`.
-- `src/bcli/config/_model.py` — `AskConfig` added.
-- `pyproject.toml` — new extras `[ask-claude]`, `[ask-openai]`,
-  meta-extra `[ask]`; `[dev]` also pulls in `[ask]`.
-
-Tests: 16 in `tests/test_ask/` covering factory dispatch (all
-fallback paths), `--dry-run` rendering + attachment redaction +
-no-network guarantee, and the R8 context-provider entry-point
-group (opt-in execution, failure isolation).
-
-Commit:
-- `30e7545 feat(ask): bcli ask oracle — Claude/OpenAI backends + dry-run + R8 providers`
-
-## Part 3 — `bcli-site/` v0
-
-Status: **shipped** — files only; JSON/YAML parses cleanly. No
-`pnpm install` was run (no guaranteed network in this sandbox).
-
-Files:
-- `bcli-site/package.json`, `astro.config.mjs`, `tsconfig.json`,
-  `tailwind.config.mjs` — Astro 4 + Tailwind 3 stack.
-- `bcli-site/src/pages/index.astro` — single page: hero +
-  install + 3 example commands (pack install, saved query, ask)
-  + features grid + footer with GitHub link.
-- `bcli-site/src/components/Hero.astro`, `CodeBlock.astro`,
-  `styles/global.css`.
-- `bcli-site/public/og.png.placeholder` — TODO note for a
-  hand-crafted OG card.
-- `bcli-site/README.md` — pnpm dev / pnpm build instructions +
-  Vercel deploy note.
-- `.github/workflows/site.yml` — Astro build on changes under
-  `bcli-site/**`. Vercel deploy step is wired but commented out
-  until secrets exist; secrets use `env:` blocks per GitHub's
-  injection guidance.
-- `.gitignore` — adds `bcli-site/node_modules`, `dist`, `.astro`,
-  and lockfiles.
-
-Content compliance with R9: describes shipped features (packs,
-ask, MCP server, describe / discovery-first). Does NOT mention
-the deferred `bcli agent` mode anywhere on the page.
-
-Commit:
-- `44a13f9 feat(site): bcli-site v0 — Astro + Tailwind landing scaffold`
-
-## Final validation snapshot
+## Commit list (on `feat/agent-mode`, local only — not pushed)
 
 ```
-$ .venv/bin/python -m pytest tests/test_context tests/test_packs tests/test_ask -v
-75 passed in 0.36s
-
-$ .venv/bin/python -m pytest tests/
-906 passed, 5 skipped (full suite — no regressions)
-
-$ .venv/bin/python -m ruff check src/
-All checks passed!
-
-$ bcli pack list           # shows both built-in packs
-$ bcli pack install starter-generic --dry-run   # 3 fragments + 6 queries + 2 batches
-$ bcli ask --dry-run --no-context "test"        # redacted bundle, no network
+<docs> docs(agent): agent mode guide, command reference, README, summary
+3680517 feat(agent): Part 4 — Codex backend (openai-codex SDK)
+8a57726 feat(agent): Part 3 — Claude Code backend (claude-agent-sdk)
+05f0bba feat(agent): Part 2 — Textual chat REPL, bare-bcli entry, plan mode
+3f88923 feat(agent): complete Part 1 — engine, tools, pydantic-ai backend, headless run
+4a71910 wip(agent): Part 1 engine skeleton  (pre-existing checkpoint)
 ```
 
-## Out of scope / STUCK
+## Test results
 
-No STUCK files were written — every Part landed within scope. One
-late finding from the advisor reconcile pass landed two bug fixes
-+ regression tests before "done":
+- `tests/test_agent/`: **61 passed** (factory, registry/parity, safety matrix,
+  read handlers, pydantic-ai stream, wizard, consent, headless run, claude-code
+  backend, codex backend).
+- `tests/test_repl/`: **22 passed** (bare-entry, slash commands, plan mode,
+  wizard write, Textual pilots).
+- **Full suite: 1030 passed, 5 skipped** (`uv run pytest tests/`).
+- `uv run ruff check src/`: **clean**.
 
-- **`bcli ask --no-context` was leaking last-error** because
-  `build_bundle` reads `last-error.json` from disk when no record
-  is passed. Added `skip_last_error=True` parameter to the builder
-  and threaded it through the CLI. Regression test
-  `test_no_context_suppresses_existing_last_error` writes a real
-  last-error file, then asserts the phrase appears in the default
-  bundle but NOT in the `--no-context` bundle.
-- **`bcli ask --include-debug` was wired but inert.** The CLI now
-  reads `last-error-debug.json` (mode 0600 sidecar) when the flag
-  is set. Regression test `test_include_debug_reads_traceback_sidecar`
-  asserts "Traceback" absent by default + present with the flag.
+No network in any test: pydantic-ai uses `TestModel`; the claude-agent-sdk and
+openai-codex packages (not installed) are faked in `sys.modules`.
 
-Two follow-up items the next session should pick up:
+## Deviations from the plan (and why)
 
-1. **`bcli describe` excerpt wiring in `bcli ask`.** The `ask`
-   command's `--no-context` flag is honoured, but the *default*
-   path does not yet subprocess `bcli describe` into the bundle.
-   Wiring is straightforward (`subprocess.run(["bcli", "describe",
-   "--format", "json"], …)`), gated on `cfg.include_describe`. Left
-   as a TODO so the first PR stays focused on the LLM-call surface.
+1. **Codex SDK shape.** The plan assumed `import codex` driving `codex
+   app-server` over JSON-RPC (`thread/turn/item` events). The actually-published
+   package is `openai-codex` (import `openai_codex`, beta `0.1.0b3`), exposing a
+   higher-level `AsyncCodex().thread_start(...) -> thread.turn(input) ->
+   AsyncTurnHandle.stream()` + `TurnResult`. I inspected the live PyPI metadata
+   and the GitHub `sdk/python/docs/api-reference.md` and targeted the real API.
+   Notification → `AgentEvent` mapping is intentionally defensive (attribute
+   probing, not isinstance on concrete beta types) since the item/notification
+   shape is not yet 1.0-stable; the final answer always arrives via `TurnResult`
+   regardless.
+2. **`[tool.uv] prerelease = "allow"`** added so the universal lockfile can
+   resolve `[agent-codex]` (its runtime `openai-codex-cli-bin` is a pinned
+   prerelease). Every other dependency still pins a stable release.
+3. **Setup wizard is rich-prompt based, not Textual screens.** It must work
+   identically from `bcli agent init` in a bare terminal and from the REPL's
+   first-run path; a plain-prompt flow with pure, unit-testable decision logic
+   (`detect_backends`, `build_agent_section`) was the simpler, more testable
+   choice. The chat itself is full Textual as specified.
+4. **`pydantic-ai` backend test** uses `TestModel(call_tools=[...])` rather than a
+   `FunctionModel` script — `run_stream_events` requires a `stream_function` for
+   `FunctionModel`, whereas `TestModel` streams deterministically and lets us
+   pick exactly which tool is called.
 
-2. **Idempotent pack uninstall on missing-marker** — the installer
-   tolerates a missing marker block (warns) but does not force a
-   re-walk of the AGENTS.md/CLAUDE.md content to verify the rest of
-   the block hasn't been re-edited. Plan reference: R2 lists this
-   as the `--force` opt-in path; UX wiring is deferred.
+## Manual follow-ups (live smoke tests — need real keys / installed CLIs)
 
-## Wheel build smoke-test
+These are NOT in the automated suite (no network / no installed `claude` /
+`codex` binaries in CI). From the plan's Verification section:
 
-`python -m build --wheel` builds cleanly. Verified that the
-hatch `force-include` mapping ships both built-in packs:
-
-```
-$ unzip -l dist/bc_cli-0.4.0-py3-none-any.whl | grep _builtin
-bcli/packs/_builtin/cronus-demo/pack.yaml
-bcli/packs/_builtin/cronus-demo/batches/month-end-cronus.yaml
-bcli/packs/_builtin/cronus-demo/fragments/...
-bcli/packs/_builtin/starter-generic/pack.yaml
-bcli/packs/_builtin/starter-generic/batches/...
-bcli/packs/_builtin/starter-generic/fragments/...
-bcli/packs/_builtin/starter-generic/queries/...
-```
-
-`builtin_packs_dir()` looks at both the repo-root `packs/` (editable
-install) and the wheel-shipped `bcli/packs/_builtin/`, so `bcli pack
-list` works for users installed via `pip install bc-cli`.
-
-## Recommended follow-up
-
-**Beautech companion plan — see Part 1B in
-`/Users/igor/.claude/plans/how-would-the-bcli-zippy-lantern.md`**.
-
-The OSS plan above ships mechanism + two generic packs. The
-companion plan turns `bcli-beautech-bootstrap`'s existing assets
-(`finance.queries.yaml`, `technical.queries.yaml`,
-`workflows/*.batch.yaml`, etc.) into three downstream packs
-(`beautech-finance`, `beautech-technical`,
-`beautech-customer-360`) registering via the
-`bcli.packs` entry-point group, plus a Beautech `bcli.ask
-context_provider` for the aviation glossary. Touches only the
-private bootstrap repo; the OSS pack/ask machinery is the
-extension surface it consumes.
+1. `bcli` on a TTY with no `[agent]` config → wizard; configure Ollama (no key)
+   → chat opens.
+2. BYOK: `[agent] backend=pydantic-ai model=anthropic:claude-sonnet-4-5` → ask
+   "how many vendors does LLC have?" → watch the tool panel run `get vendors`,
+   streamed answer.
+3. Write safety: a `disable_writes=true` sandbox profile → ask the agent to
+   create a vendor → approval dialog / plan-mode draft; decline → refusal.
+4. Claude Code: a machine with `claude` installed and no `ANTHROPIC_API_KEY` →
+   wizard offers it, consent text shown, literal `yes` required, chat works on
+   subscription credit. (Requires `pip install "bc-cli[agent-claude-code]"`.)
+5. Codex: `codex` installed → backend registers `bcli-mcp`, tool calls
+   round-trip, approval policy surfaces writes. (Requires
+   `pip install "bc-cli[agent-codex]"`; verify the live notification shape maps
+   cleanly — `_notification_to_event` is defensive but unverified against a real
+   stream.)
