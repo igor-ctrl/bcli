@@ -190,8 +190,8 @@ class PydanticAIBackend:
                 task.result()  # surface unexpected crashes in tests
 
     async def _run_turn(self, user_msg: str, queue: asyncio.Queue[Any]) -> None:
+        from pydantic_ai import AgentRunResultEvent
         from pydantic_ai.messages import (
-            AgentRunResultEvent,
             FunctionToolCallEvent,
             FunctionToolResultEvent,
             PartDeltaEvent,
