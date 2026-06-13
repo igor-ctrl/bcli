@@ -84,6 +84,23 @@ ask-openai = [
 mcp = [
     "mcp>=1.0",
 ]
+# Agent mode (the interactive chat REPL + headless `bcli agent run`).
+# Three backends, each behind its own extra; `agent` is the meta-extra
+# that installs the BYOK loop + the Textual TUI. The harness-owned
+# backends (claude-code / codex) are additive opt-ins.
+agent-local = [
+    "pydantic-ai-slim[anthropic,openai]>=1.107,<2",
+]
+agent-claude-code = [
+    "claude-agent-sdk>=0.2",
+]
+agent-codex = [
+    "openai-codex",
+]
+agent = [
+    "bc-cli[agent-local]",
+    "textual>=8.2",
+]
 polaris = [
     "bc-cli[etl]",
     "pyarrow>=16.0",
@@ -94,6 +111,7 @@ dev = [
     "bc-cli[mcp]",
     "bc-cli[extract]",
     "bc-cli[ask]",
+    "bc-cli[agent]",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-httpx>=0.30",
