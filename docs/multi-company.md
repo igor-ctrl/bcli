@@ -11,7 +11,7 @@ bcli company list
 Output:
 ```
   #  Alias  Company Name              Company ID
-  1  LLC    Contoso Ltd    REDACTED-b400-...  ◄ default
+  1  LLC    Contoso Ltd    22222222-2222-...  ◄ default
   2  Corp   Northwind Traders             a1b2c3d4-e5f6-...
 ```
 
@@ -20,7 +20,7 @@ Output:
 Give companies short, memorable names:
 
 ```bash
-bcli company alias LLC REDACTED-COMPANY-ID --name "Contoso Ltd"
+bcli company alias LLC 22222222-2222-2222-2222-222222222222 --name "Contoso Ltd"
 bcli company alias Corp a1b2c3d4-e5f6-7890-abcd-ef1234567890 --name "Northwind Traders"
 ```
 
@@ -79,7 +79,7 @@ The `_company` column makes it easy to group, filter, or pivot by entity in down
 bcli company use LLC
 
 # By GUID
-bcli company use REDACTED-COMPANY-ID
+bcli company use 22222222-2222-2222-2222-222222222222
 ```
 
 ## Config Format
@@ -88,7 +88,7 @@ Aliases are stored in the profile section of `~/.config/bcli/config.toml`:
 
 ```toml
 [profiles.production.companies.LLC]
-id = "REDACTED-COMPANY-ID"
+id = "22222222-2222-2222-2222-222222222222"
 name = "Contoso Ltd"
 
 [profiles.production.companies.Corp]

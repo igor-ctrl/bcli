@@ -22,7 +22,7 @@ class BCProfile(BaseModel):
     company_id: str | None = None
     company_name: str | None = None
 
-    # Company aliases: {"US": {"id": "REDACTED-...", "name": "Contoso Ltd"}, ...}
+    # Company aliases: {"US": {"id": "22222222-...", "name": "Contoso Ltd"}, ...}
     companies: dict[str, CompanyAlias] = Field(default_factory=dict)
 
     # Auth

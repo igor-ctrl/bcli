@@ -12,17 +12,17 @@ page_size = 100
 timeout = 60
 
 [profiles.production]
-tenant_id = "REDACTED-TENANT-ID"
+tenant_id = "11111111-1111-1111-1111-111111111111"
 environment = "Production"
-company_id = "REDACTED-COMPANY-ID"
+company_id = "22222222-2222-2222-2222-222222222222"
 company_name = "CRONUS USA, Inc."
 auth_method = "browser"
-client_id = "48074c7f-5706-40d8-aa7d-7be7b33e2df7"
+client_id = "33333333-3333-3333-3333-333333333333"
 
 [profiles.automation]
-tenant_id = "REDACTED-TENANT-ID"
+tenant_id = "11111111-1111-1111-1111-111111111111"
 environment = "Production"
-company_id = "REDACTED-COMPANY-ID"
+company_id = "22222222-2222-2222-2222-222222222222"
 auth_method = "client_credentials"
 client_id = "9a12d8e3-1111-2222-3333-7be7b33e2df7"
 client_secret_env = "BCLI_SECRET"

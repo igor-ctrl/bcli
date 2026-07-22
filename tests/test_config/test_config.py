@@ -274,7 +274,7 @@ def test_resolve_company_alias_case_insensitive():
 
 def test_resolve_company_guid_passthrough():
     p = _profile_with_companies()
-    guid = "REDACTED-1234-5678-abcd-000000000000"
+    guid = "22222222-1234-5678-abcd-000000000000"
     cid, name = p.resolve_company(guid)
     assert cid == guid
     assert name is None
