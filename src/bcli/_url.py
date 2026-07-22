@@ -5,6 +5,31 @@ from __future__ import annotations
 from bcli.config._defaults import BC_BASE_URL, BC_STANDARD_API_PATH
 
 
+def _validate_route_segment(name: str, value: str) -> None:
+    """Validate a custom-API route segment for path-traversal attacks.
+
+    Raises ValueError if the segment is empty, contains path separators,
+    or contains path-traversal sequences (. or ..).
+    """
+    if not value or not value.strip():
+        raise ValueError(f"Invalid custom-API route segment {name!r}: must not be empty.")
+
+    # Reject segments containing path separators or path traversal
+    if "/" in value or "\\" in value:
+        raise ValueError(
+            f"Invalid custom-API route segment {name!r} = {value!r}: must not contain '/' or '\\'."
+        )
+
+    # Reject . and .. segments, or any segment containing them as a complete part
+    parts = value.split("/")  # Already checked above, but defense in depth
+    for part in parts:
+        if part in (".", ".."):
+            raise ValueError(
+                f"Invalid custom-API route segment {name!r} = {value!r}: "
+                f"must not contain '.' or '..' path-traversal sequences."
+            )
+
+
 def build_url(
     *,
     environment: str,
@@ -25,6 +50,9 @@ def build_url(
         https://api.businesscentral.dynamics.com/v2.0/{env}/api/{pub}/{grp}/{ver}/companies({id})/{entity}
     """
     if publisher and group and version:
+        _validate_route_segment("publisher", publisher)
+        _validate_route_segment("group", group)
+        _validate_route_segment("version", version)
         api_path = f"api/{publisher}/{group}/{version}"
     else:
         api_path = BC_STANDARD_API_PATH
@@ -59,6 +87,9 @@ def build_metadata_url(
 ) -> str:
     """Build URL for OData $metadata endpoint."""
     if publisher and group and version:
+        _validate_route_segment("publisher", publisher)
+        _validate_route_segment("group", group)
+        _validate_route_segment("version", version)
         api_path = f"api/{publisher}/{group}/{version}"
     else:
         api_path = BC_STANDARD_API_PATH
