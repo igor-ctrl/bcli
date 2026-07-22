@@ -564,7 +564,7 @@ class AsyncBCClient:
                     f"'disable_standard_api = true' blocks the standard v2.0 "
                     f"fallback, and unbound actions are not registry entries. "
                     f"Pass --publisher/--group/--version to target a custom "
-                    f"API route."
+                    f"API route (this does NOT reach Microsoft's standard v2.0 entities)."
                 )
             return build_url(
                 environment=environment,
@@ -627,7 +627,8 @@ class AsyncBCClient:
                 f"Try 'bcli endpoint search <pattern>' to find similar names, "
                 f"'bcli endpoint list -f json' for the full machine-readable "
                 f"list, 'bcli registry import' to add a new one, "
-                f"or pass --publisher/--group/--version to override."
+                f"or pass --publisher/--group/--version to target a custom API route"
+                f" (this does NOT reach Microsoft's standard v2.0 entities)."
             )
 
         # Standard v2.0 or unknown (try standard route)

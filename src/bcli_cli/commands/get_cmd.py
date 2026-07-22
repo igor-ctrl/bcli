@@ -27,9 +27,9 @@ def get_command(
     count: bool = typer.Option(False, "--count", help="Include total record count"),
     all_pages: bool = typer.Option(False, "--all", help="Follow pagination to get all records"),
     format: Optional[str] = typer.Option(None, "--format", "-f", help="Output format: table, json, csv, ndjson, raw"),
-    publisher: Optional[str] = typer.Option(None, "--publisher", hidden=True, help="Custom API publisher override (escape hatch — registry resolves this automatically)"),
-    group: Optional[str] = typer.Option(None, "--group", hidden=True, help="Custom API group override (escape hatch — registry resolves this automatically)"),
-    version: Optional[str] = typer.Option(None, "--version", hidden=True, help="Custom API version override (escape hatch — registry resolves this automatically)"),
+    publisher: Optional[str] = typer.Option(None, "--publisher", help="Custom API publisher override (escape hatch — registry resolves this automatically)"),
+    group: Optional[str] = typer.Option(None, "--group", help="Custom API group override (escape hatch — registry resolves this automatically)"),
+    version: Optional[str] = typer.Option(None, "--version", help="Custom API version override (escape hatch — registry resolves this automatically)"),
 ) -> None:
     """GET records from a Business Central entity.
 

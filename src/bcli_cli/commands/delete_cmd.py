@@ -21,9 +21,9 @@ def delete_command(
     record_id: str = typer.Argument(help="Record ID to delete"),
     etag: str = typer.Option("*", "--etag", help="ETag for optimistic concurrency"),
     format: Optional[str] = typer.Option(None, "--format", "-f", help="Output format (unused, for flag consistency)"),
-    publisher: Optional[str] = typer.Option(None, "--publisher", hidden=True),
-    group: Optional[str] = typer.Option(None, "--group", hidden=True),
-    version: Optional[str] = typer.Option(None, "--version", hidden=True),
+    publisher: Optional[str] = typer.Option(None, "--publisher", help="Custom API publisher override (escape hatch — registry resolves this automatically)"),
+    group: Optional[str] = typer.Option(None, "--group", help="Custom API group override (escape hatch — registry resolves this automatically)"),
+    version: Optional[str] = typer.Option(None, "--version", help="Custom API version override (escape hatch — registry resolves this automatically)"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip the read-only-profile warning prompt"),
     result_out: Optional[Path] = typer.Option(
         None,

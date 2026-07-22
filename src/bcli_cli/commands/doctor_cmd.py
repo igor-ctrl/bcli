@@ -23,6 +23,7 @@ from bcli.config._defaults import (
     TOKEN_CACHE_FILE,
 )
 from bcli.diagnostics import CheckContext, CheckStatus, run_all_checks
+from bcli_cli._state import state
 
 console = Console()
 err = Console(stderr=True)
@@ -51,7 +52,7 @@ def doctor_command(
       bcli doctor --profile finance
       bcli doctor --json | jq '.checks[] | select(.status=="fail")'
     """
-    ctx = _build_context(profile_override=profile, skip_network=skip_network)
+    ctx = _build_context(profile_override=(profile or state.profile_name), skip_network=skip_network)
     results = run_all_checks(ctx)
 
     if output_json:

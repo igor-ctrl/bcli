@@ -93,7 +93,8 @@ class EndpointRegistry:
             raise RegistryError(
                 f"Endpoint '{entity_set_name}' not found in any registry.{hint}"
                 " Run 'bcli registry import' to add custom APIs,"
-                " or use --publisher/--group/--version for ad-hoc access."
+                " or pass --publisher/--group/--version to target a custom API route"
+                " (this does NOT reach Microsoft's standard v2.0 entities)."
             )
         return result
 
