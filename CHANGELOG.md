@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-07-22
+
+### Fixed
+
+- `bcli doctor` now honors the global `--profile`/`-p` flag. Previously
+  `bcli --profile <name> doctor` was ignored and the report always reflected
+  the default profile; `doctor` now falls back to the global profile when its
+  own `--profile` isn't passed.
+- The `--publisher`/`--group`/`--version` route-override options on
+  `get`/`post`/`patch`/`delete` are no longer hidden from `--help`, so the hint
+  printed by the "endpoint not found" error is actually discoverable.
+- Registry-miss error messages no longer imply the route override can reach
+  Microsoft's standard v2.0 entities — it targets custom
+  `api/{publisher}/{group}/{version}` routes only.
+
+### Security
+
+- `build_url` / `build_metadata_url` now validate the custom-API route segments
+  (`publisher`/`group`/`version`), rejecting empty/whitespace values and any
+  segment containing `.`, `..`, `/`, or `\`. This closes a path-traversal
+  (e.g. `--version ..`) that could otherwise normalize back to the standard
+  `/api/v2.0/` route and defeat `disable_standard_api`.
+
 ## [0.6.1] - 2026-05-25
 
 ### Fixed
