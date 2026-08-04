@@ -28,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Automatic retry no longer repeats non-idempotent requests. The transport
+  retried 429/503/504 and network errors for every method, so a lost response to
+  a POST/PATCH/DELETE that the server had already applied would duplicate a
+  create or re-run a bound action. Some bound actions in this API take no
+  arguments and mutate on every call, so a repeat is never harmless. Retries now
+  require either a read-only method or an explicit `Idempotency-Key`; otherwise
+  the error surfaces so the caller can decide. **This is a behaviour change**: a
+  transient 503 on a write that previously succeeded after a silent retry will
+  now raise. Pass `idempotency_key=` to opt back in.
+
 - The sdist no longer sweeps in nested checkouts. `[tool.hatch.build.targets.sdist]`
   listed patterns like `docs/` and `src/` without a leading slash, so they matched at
   any depth — and `.claude/worktrees/agent-*/` holds full copies of the repo. The

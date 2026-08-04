@@ -41,6 +41,13 @@ _ERROR_MAP: dict[int, type[BCLIError]] = {
 # Retryable status codes
 _RETRYABLE = {429, 503, 504}
 
+#: Methods that can be repeated without applying an effect twice. Deliberately
+#: excludes DELETE and PUT: both are idempotent by HTTP semantics, but a repeat
+#: here surfaces as a 404 or overwrites a concurrent change, and neither is what
+#: an automatic retry should decide on the caller's behalf. Pass an
+#: ``idempotency_key`` to opt a mutation back into retrying.
+_IDEMPOTENT_METHODS = frozenset({"GET", "HEAD"})
+
 DEFAULT_TIMEOUT = 60
 DEFAULT_MAX_RETRIES = 3
 INITIAL_BACKOFF = 1.0  # seconds
@@ -144,6 +151,21 @@ class BCTransport:
         backoff = INITIAL_BACKOFF
         t0 = time.monotonic()
 
+        # Repeating a request is only safe when it cannot apply an effect twice.
+        # A read can always be repeated. A POST / PATCH / DELETE cannot: the
+        # server may already have applied it when the response was lost, so a
+        # retry duplicates a create or re-runs a business action. Some bound
+        # actions in this API take no arguments and mutate on every invocation,
+        # so there is no such thing as a harmless repeat — one 503 from a gateway
+        # could recalculate twice with nothing in the log to say so.
+        #
+        # An Idempotency-Key re-enables retry, because that is what lets a
+        # gateway (or a future server-side implementation) collapse the
+        # duplicate. Without one, the error surfaces instead: a visible
+        # transient failure the caller can retry deliberately beats an invisible
+        # double-write.
+        retry_safe = method.upper() in _IDEMPOTENT_METHODS or idempotency_key is not None
+
         for attempt in range(self._max_retries + 1):
             try:
                 auth_headers = await self._inject_auth()
@@ -194,8 +216,8 @@ class BCTransport:
                 bc_message, correlation_id = _parse_bc_error(response)
                 status = response.status_code
 
-                # Retry on retryable errors
-                if status in _RETRYABLE and attempt < self._max_retries:
+                # Retry on retryable errors — but only if repeating is safe.
+                if status in _RETRYABLE and attempt < self._max_retries and retry_safe:
                     retry_after = _get_retry_after(response)
                     wait = retry_after if retry_after else backoff
                     logger.warning(
@@ -238,7 +260,10 @@ class BCTransport:
                 httpx.RemoteProtocolError,
             ) as e:
                 last_error = e
-                if attempt < self._max_retries:
+                # The most dangerous case for a mutation: the request may have
+                # reached the server and been applied before the connection
+                # dropped, so there is no way to know a retry is safe.
+                if attempt < self._max_retries and retry_safe:
                     logger.warning(
                         "Network error on %s %s: %s, retrying in %.1fs",
                         method, url, e, backoff,
