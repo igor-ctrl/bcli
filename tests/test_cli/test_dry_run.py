@@ -225,3 +225,110 @@ class TestExitBehaviour:
         with pytest.raises(typer.Exit) as excinfo:
             render_dry_run("DELETE", "items", record_id="x")
         assert excinfo.value.exit_code == 0
+
+
+@pytest.fixture
+def real_resolver_state():
+    """Like ``configured_state`` but WITHOUT stubbing ``make_async_client``.
+
+    ``configured_state``'s ``_StubClient._resolve_url`` ignores ``record_id``
+    entirely and always returns a URL, which is fine for testing the renderer's
+    output shape — but it means the existing dry-run suite never exercises real
+    URL resolution. That is exactly why an empty ``record_id`` could render a
+    clean preview: nothing here ever built a real URL. These tests use the real
+    resolver.
+    """
+    cfg = BCConfig(
+        defaults=BCDefaults(profile="dev"),
+        profiles={
+            "dev": BCProfile(
+                tenant_id="t1",
+                environment="Sandbox",
+                company_id="c-123",
+                disable_writes=False,
+            ),
+        },
+    )
+    state._config = cfg
+    state._registry = None
+    state.profile_name = None
+    state.format = "table"
+    yield
+    state._config = None
+    state._registry = None
+    state.format = "table"
+
+
+class TestDryRunMustNotSucceedWhereTheRealRunFails:
+    """A preview that reports success for input the real request refuses is worse
+    than no preview: ``--dry-run`` exists so an agent can decide whether to
+    proceed, and its documented consumers parse the JSON envelope.
+
+    ``try_resolve_url`` deliberately never raises, so a resolution failure
+    records ``resolved_url: null`` and the preview continues. That is right for
+    an incidental failure (registry miss, no company id) but wrong for invalid
+    *input*, because the real command validates the same value and exits 1. An
+    empty ``record_id`` used to render a clean DELETE preview and exit 0 while
+    ``bcli delete <entity> ""`` exited 1.
+    """
+
+    @pytest.mark.parametrize("empty", ["", "   "])
+    def test_empty_record_id_fails_the_preview(self, real_resolver_state, empty):
+        state.format = "json"
+        with pytest.raises(typer.Exit) as excinfo:
+            render_dry_run("DELETE", "items", record_id=empty)
+        assert excinfo.value.exit_code == 1
+
+    def test_traversing_record_id_fails_the_preview(self, real_resolver_state):
+        state.format = "json"
+        with pytest.raises(typer.Exit) as excinfo:
+            render_dry_run("DELETE", "items", record_id="1)/../../glEntries('X'")
+        assert excinfo.value.exit_code == 1
+
+    def test_the_failure_is_reported_not_traced(self, real_resolver_state, capsys):
+        """The dry-run branch sits above each command's own try/except, so a raw
+        raise would surface as a traceback rather than the ``Error:`` line the
+        real run prints."""
+        state.format = "json"
+        with pytest.raises(typer.Exit):
+            render_dry_run("DELETE", "items", record_id="")
+        assert "must not be empty" in capsys.readouterr().err
+
+    def test_none_record_id_still_previews_cleanly(self, real_resolver_state):
+        """A collection-targeted write is a real thing; don't break it."""
+        state.format = "json"
+        with pytest.raises(typer.Exit) as excinfo:
+            render_dry_run("POST", "items", body={"x": 1}, record_id=None)
+        assert excinfo.value.exit_code == 0
+
+    def test_a_valid_key_still_previews_cleanly(self, real_resolver_state):
+        state.format = "json"
+        with pytest.raises(typer.Exit) as excinfo:
+            render_dry_run("DELETE", "items", record_id="'V00010'")
+        assert excinfo.value.exit_code == 0
+
+
+class TestTryResolveUrlStrictMode:
+    def test_strict_re_raises_input_validation(self, real_resolver_state):
+        from bcli_cli._url_resolve import try_resolve_url
+
+        with pytest.raises(ValueError, match="must not be empty"):
+            try_resolve_url("items", record_id="", strict=True)
+
+    def test_non_strict_still_swallows_input_validation(self, real_resolver_state):
+        """The audit path must never break a command that already ran."""
+        from bcli_cli._url_resolve import try_resolve_url
+
+        assert try_resolve_url("items", record_id="") is None
+
+    def test_strict_still_swallows_incidental_failures(self, real_resolver_state):
+        """A registry miss is not the caller's input being wrong, so even strict
+        mode returns None — both the preview and audit paths want that. This
+        profile has disable_standard_api unset, so an unknown entity falls
+        through to the standard route and resolves; force the registry gate on
+        to get a genuine incidental failure."""
+        from bcli_cli._url_resolve import try_resolve_url
+
+        state.profile.disable_standard_api = True
+        state._registry = None
+        assert try_resolve_url("definitelyNotAnEndpoint", record_id="x", strict=True) is None

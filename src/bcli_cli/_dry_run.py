@@ -57,14 +57,29 @@ def render_dry_run(
     profile = state.profile
     profile_name = state.active_profile_name
 
-    resolved_url = try_resolve_url(
-        endpoint,
-        record_id=record_id,
-        publisher=publisher,
-        group=group,
-        version=version,
-        force_standard=force_standard,
-    )
+    # strict=True: a preview must not report success for a request the real
+    # command would refuse. An unresolvable endpoint still previews with a null
+    # URL (that is the documented behaviour); invalid input is fatal, so
+    # `--dry-run` fails exactly where the real run fails.
+    #
+    # Presented here rather than propagated, for two reasons: the dry-run branch
+    # in each write command sits above that command's own try/except, so a raw
+    # raise surfaces as a traceback instead of the `Error: ...` line the real run
+    # prints; and doing it in one place keeps post/patch/delete/attach/batch
+    # consistent without five edits.
+    try:
+        resolved_url = try_resolve_url(
+            endpoint,
+            record_id=record_id,
+            publisher=publisher,
+            group=group,
+            version=version,
+            force_standard=force_standard,
+            strict=True,
+        )
+    except ValueError as exc:
+        _console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1) from exc
 
     payload: dict[str, Any] = {
         "dry_run": True,
