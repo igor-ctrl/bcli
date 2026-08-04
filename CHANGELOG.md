@@ -28,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The sdist no longer sweeps in nested checkouts. `[tool.hatch.build.targets.sdist]`
+  listed patterns like `docs/` and `src/` without a leading slash, so they matched at
+  any depth — and `.claude/worktrees/agent-*/` holds full copies of the repo. The
+  0.7.0 sdist picked up 1350 extra files that way (2 MiB instead of 434 KiB),
+  including older copies of `docs/configuration.md` and `docs/multi-company.md` from
+  before example identifiers were replaced with placeholders. The wheel was never
+  affected, since it builds from `packages`, and `git ls-files` was clean — only
+  inspecting the built artifact showed it. Patterns are now anchored to the project
+  root.
+
 - `build_url` now validates `entity_set_name` and `record_id` as single URL path
   components, rejecting raw `/`, `\`, `?`, `#` and the `.`/`..` segments. Both
   values are spliced directly into the request path, so a record key containing

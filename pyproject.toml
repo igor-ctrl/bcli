@@ -108,17 +108,25 @@ packages = ["src/bcli", "src/bcli_cli", "src/bcli_mcp"]
 "packs" = "bcli/packs/_builtin"
 
 [tool.hatch.build.targets.sdist]
+# Leading slashes anchor these to the project root. Without them the patterns
+# match at any depth, so a nested checkout — .claude/worktrees/agent-*/ holds
+# full copies of the repo — had its own docs/, src/ and tests/ swept into the
+# sdist: 1350 extra files, including pre-sanitisation docs still carrying real
+# tenant identifiers. The wheel was unaffected (it builds from `packages`), and
+# `git ls-files` was clean, so only inspecting the built artifact caught it.
+# If you add a pattern here, anchor it, then verify with:
+#   uv build && tar -tzf dist/bc_cli-*.tar.gz | awk -F/ 'NF>1{print $2}' | sort -u
 include = [
-    "src/",
-    "packs/",
-    "tests/",
-    "examples/",
-    "docs/",
-    "README.md",
-    "LICENSE",
-    "NOTICE",
-    "CHANGELOG.md",
-    "pyproject.toml",
+    "/src",
+    "/packs",
+    "/tests",
+    "/examples",
+    "/docs",
+    "/README.md",
+    "/LICENSE",
+    "/NOTICE",
+    "/CHANGELOG.md",
+    "/pyproject.toml",
 ]
 
 [tool.pytest.ini_options]
