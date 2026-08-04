@@ -87,7 +87,13 @@ def build_url(
         https://api.businesscentral.dynamics.com/v2.0/{env}/api/{pub}/{grp}/{ver}/companies({id})/{entity}
     """
     validate_record_key("entity_set_name", entity_set_name)
-    if record_id:
+    # `None` means "address the collection" and is a supported call — `bcli get
+    # <entity>` with no id reads the set. An *empty* key is not the same thing:
+    # it means the caller meant one record and supplied nothing, and silently
+    # dropping it would retarget the request at the whole collection (a DELETE
+    # or PATCH against an entity set rather than a row). Validate anything that
+    # was actually passed, including "".
+    if record_id is not None:
         validate_record_key("record_id", record_id)
 
     if publisher and group and version:
@@ -100,7 +106,7 @@ def build_url(
 
     url = f"{BC_BASE_URL}/{environment}/{api_path}/companies({company_id})/{entity_set_name}"
 
-    if record_id:
+    if record_id is not None:
         url = f"{url}({record_id})"
 
     return url

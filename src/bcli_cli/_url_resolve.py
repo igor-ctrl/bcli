@@ -26,6 +26,7 @@ def try_resolve_url(
     group: str | None = None,
     version: str | None = None,
     force_standard: bool = False,
+    strict: bool = False,
 ) -> str | None:
     """Resolve ``endpoint`` to a full URL using the active profile.
 
@@ -33,6 +34,18 @@ def try_resolve_url(
     ``disable_standard_api``, missing company id, malformed profile,
     etc.). Callers should treat ``None`` as "preview the rest, the user
     will see the gap and correct".
+
+    ``strict=True`` keeps that for *incidental* failures but re-raises invalid
+    **input**. The two are not the same thing, and conflating them made
+    ``--dry-run`` report success for a request the real command refuses: an empty
+    or path-bearing ``record_id`` raises ``ValueError`` in the URL builder, this
+    helper swallowed it to ``None``, and the preview rendered a clean DELETE and
+    exited 0 while the real run exited 1. A preview whose entire job is to
+    predict must not disagree with what it predicts.
+
+    ``BCLIError`` subclasses (``RegistryError``, ``ConfigError``) are the
+    incidental kind and stay swallowed even under ``strict`` — they do not
+    inherit ``ValueError``, which is what makes the split clean.
     """
     try:
         if force_standard:
@@ -53,5 +66,12 @@ def try_resolve_url(
             group=group,
             version=version,
         )
+    except ValueError:
+        # Invalid input, not an incidental resolution failure. The real request
+        # validates the same value and fails, so a strict caller (the dry-run
+        # preview) must fail too rather than reporting a request it cannot make.
+        if strict:
+            raise
+        return None
     except Exception:
         return None

@@ -39,6 +39,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   genuinely part of a key. The same validation applies to the key inside a
   bound-action invocation, whose resolver checks the registry for the parent
   entity set only.
+- `--dry-run` no longer reports success for a request the real command refuses.
+  `try_resolve_url` never raises by design, so an invalid `record_id` was
+  swallowed to `resolved_url: null` and the preview still rendered and exited 0
+  while the real run exited 1 — the opposite of what a preview is for, and its
+  documented consumers are agents parsing that envelope to decide whether to
+  proceed. It now takes `strict=True` from the dry-run path, which re-raises
+  invalid *input* while still swallowing *incidental* resolution failures (a
+  registry miss keeps previewing with a null URL, as documented). `BCLIError`
+  subclasses don't inherit `ValueError`, which is what makes that split clean.
+  The failure is presented as the same `Error:` line the real run prints, not a
+  traceback.
+- An **empty** `record_id` is now an error instead of silently addressing the
+  collection. `None` still means "operate on the entity set" (`bcli get
+  <entity>` with no id is a collection read), but `""` previously took the same
+  path — so a caller that meant one record and supplied nothing got a request
+  against the whole set. `delete` and `patch` take `record_id` as a required
+  positional, so `bcli delete <entity> ""` composed a DELETE against the entity
+  set rather than a row.
 - `test_no_context_policy_path` no longer asserts against the developer's real
   `~/.config/bcli`, so it passes on a machine that has recorded a bcli error
   rather than only on a clean CI home.
