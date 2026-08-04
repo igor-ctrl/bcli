@@ -90,6 +90,35 @@ class TestRecordIdStillAcceptsRealKeys:
         assert url.endswith("engineOverviews")
 
 
+class TestEmptyRecordIdIsNotTheSameAsNone:
+    """``None`` means "operate on the collection" and is legitimate — ``bcli get
+    <entity>`` with no id is a collection read. An *empty* key is different: it
+    means the caller meant to address one record and supplied nothing.
+
+    The first version of this validation guarded with ``if record_id:``, so a
+    falsy key skipped validation *and* skipped appending the key — silently
+    turning a single-record operation into a collection one. ``delete`` and
+    ``patch`` take ``record_id`` as a required positional with no default, so
+    ``bcli delete engineOverviews ""`` composed a DELETE against the whole
+    entity set. Whether BC would honour that is not the point; the client must
+    not build it.
+    """
+
+    @pytest.mark.parametrize("empty", ["", "   ", "\t", "\n"])
+    def test_empty_record_id_is_rejected(self, empty: str):
+        with pytest.raises(ValueError, match="must not be empty"):
+            _build(entity_set_name="engineOverviews", record_id=empty)
+
+    def test_empty_record_id_does_not_silently_become_a_collection_url(self):
+        with pytest.raises(ValueError):
+            _build(entity_set_name="engineOverviews", record_id="")
+
+    def test_none_still_means_collection(self):
+        url = _build(entity_set_name="engineOverviews", record_id=None)
+        assert url.endswith("engineOverviews")
+        assert "(" not in url.rsplit("/", 1)[-1]
+
+
 class TestEntitySetNameIsValidatedToo:
     @pytest.mark.parametrize("bad", ["a/b", "..", ".", "a\\b"])
     def test_rejects_path_syntax(self, bad: str):
