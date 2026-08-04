@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-04
+
+### Added
+
+- `StaticTokenAuth` and a new `auth=` parameter on `AsyncBCClient`, for embedders
+  that already hold a Business Central access token. Pass a token string or a
+  callable — a callable is re-invoked per request, so a long-running process
+  picks up a refreshed token instead of pinning one that expires. Injected auth
+  bypasses the profile's `auth_method` entirely, which is what lets a `browser`
+  profile work somewhere that has no browser and no loopback listener to bind.
+- `bcli.queries`, a reusable saved-query module extracted from the CLI: catalog
+  loading, parameter validation against each parameter's declared
+  type/pattern/min/max/enum, and `${{ params.X }}` resolution with OData
+  escaping. `QueryCatalogError`, `QueryError` and `QueryParamError` are exported
+  from the package root. `bcli q` is now a consumer of this module; its output,
+  errors and exit codes are unchanged.
+- Python 3.14 in the supported-versions classifiers. `requires-python` stays at
+  `>=3.11`.
+
+### Fixed
+
+- `build_url` now validates `entity_set_name` and `record_id` as single URL path
+  components, rejecting raw `/`, `\`, `?`, `#` and the `.`/`..` segments. Both
+  values are spliced directly into the request path, so a record key containing
+  a path separator could compose a URL addressing a different entity than the
+  one the endpoint registry was consulted about — the registry lookup and the
+  `disable_standard_api` gate both key on the entity-set name alone. Keys that
+  legitimately contain quotes, commas, equals signs, hyphens or parentheses
+  inside a quoted string are unaffected; percent-encode a separator that is
+  genuinely part of a key. The same validation applies to the key inside a
+  bound-action invocation, whose resolver checks the registry for the parent
+  entity set only.
+- `test_no_context_policy_path` no longer asserts against the developer's real
+  `~/.config/bcli`, so it passes on a machine that has recorded a bcli error
+  rather than only on a clean CI home.
+
 ## [0.6.2] - 2026-07-22
 
 ### Fixed

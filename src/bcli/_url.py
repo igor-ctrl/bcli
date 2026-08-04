@@ -30,6 +30,43 @@ def _validate_route_segment(name: str, value: str) -> None:
             )
 
 
+#: Characters that let a value escape the URL component it is spliced into.
+#: A record key legitimately contains quotes, commas, equals signs, hyphens and
+#: even parentheses inside a quoted string (``'ACME (US)'``) — none of which can
+#: start a new path segment. These four can.
+_URL_STRUCTURE_CHARS = ("/", "\\", "?", "#")
+
+
+def validate_record_key(name: str, value: str) -> None:
+    """Validate an OData key or entity-set name as a single URL path component.
+
+    ``entity_set_name`` and ``record_id`` are spliced straight into the path, and
+    a key is caller-influenced anywhere one is accepted from outside. A raw ``/``
+    starts a new path segment, so ``foo(1)/../../bar('X'`` composes a URL that
+    addresses ``bar`` while every earlier check only ever saw ``foo`` — including
+    the endpoint-registry lookup and the ``disable_standard_api`` gate, both of
+    which key on the entity-set name alone.
+
+    Raises ValueError on empty input, raw path/query delimiters, and the
+    ``.``/``..`` traversal segments.
+    """
+    if not value or not value.strip():
+        raise ValueError(f"Invalid {name}: must not be empty.")
+
+    for char in _URL_STRUCTURE_CHARS:
+        if char in value:
+            raise ValueError(
+                f"Invalid {name} {value!r}: must not contain {char!r}. A key is a "
+                f"single URL path component — percent-encode the character if it "
+                f"is genuinely part of the key."
+            )
+
+    if value.strip() in (".", ".."):
+        raise ValueError(
+            f"Invalid {name} {value!r}: '.' and '..' are path-traversal segments."
+        )
+
+
 def build_url(
     *,
     environment: str,
@@ -49,6 +86,10 @@ def build_url(
     Custom API:
         https://api.businesscentral.dynamics.com/v2.0/{env}/api/{pub}/{grp}/{ver}/companies({id})/{entity}
     """
+    validate_record_key("entity_set_name", entity_set_name)
+    if record_id:
+        validate_record_key("record_id", record_id)
+
     if publisher and group and version:
         _validate_route_segment("publisher", publisher)
         _validate_route_segment("group", group)

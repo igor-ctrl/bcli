@@ -1,6 +1,7 @@
 """bcli — Python SDK for Microsoft Dynamics 365 Business Central APIs."""
 
 from bcli._version import __version__
+from bcli.auth._static import StaticTokenAuth
 from bcli.client import AsyncBCClient, BCClient
 from bcli.client._safety import DomainRule, SafeContext
 from bcli.config import BCConfig, load_config
@@ -19,6 +20,7 @@ from bcli.errors import (
     WorkflowError,
 )
 from bcli.odata import Query
+from bcli.queries import QueryCatalogError, QueryError, QueryParamError
 from bcli.registry import EndpointRegistry
 
 __all__ = [
@@ -35,10 +37,14 @@ __all__ = [
     "ForbiddenError",
     "NotFoundError",
     "Query",
+    "QueryCatalogError",
+    "QueryError",
+    "QueryParamError",
     "RegistryError",
     "SafeContext",
     "SafetyError",
     "ServerError",
+    "StaticTokenAuth",
     "ThrottledError",
     "ValidationError",
     "WorkflowError",
