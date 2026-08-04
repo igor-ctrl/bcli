@@ -133,9 +133,15 @@ def test_audit_trail_complete_for_layered_redactions() -> None:
     assert "context:url_query" in rule_ids
 
 
-def test_no_context_policy_path() -> None:
+def test_no_context_policy_path(tmp_path: Path) -> None:
     # Mimic `bcli ask --no-context`: caller suppresses describe + tail
     # via policy and provides nothing else.
+    #
+    # `--no-context` also passes skip_last_error=True (ask_cmd.py), which is what
+    # actually suppresses the implicit read of last-error.json. Without it — and
+    # without isolating config_dir the way the other tests here do — this asserted
+    # against the developer's real ~/.config/bcli and failed on any machine that
+    # had ever recorded a bcli error.
     bundle = build_bundle(
         question="just answer",
         policy=BundlePolicy(
@@ -143,6 +149,8 @@ def test_no_context_policy_path() -> None:
             include_http_tail=False,
             include_bodies=False,
         ),
+        config_dir=tmp_path,
+        skip_last_error=True,
     )
     kinds = {s.kind for s in bundle.sources}
     assert kinds == {"question"}
