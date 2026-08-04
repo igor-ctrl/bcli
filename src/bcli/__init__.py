@@ -20,6 +20,7 @@ from bcli.errors import (
     WorkflowError,
 )
 from bcli.odata import Query
+from bcli.queries import QueryCatalogError, QueryError, QueryParamError
 from bcli.registry import EndpointRegistry
 
 __all__ = [
@@ -36,6 +37,9 @@ __all__ = [
     "ForbiddenError",
     "NotFoundError",
     "Query",
+    "QueryCatalogError",
+    "QueryError",
+    "QueryParamError",
     "RegistryError",
     "SafeContext",
     "SafetyError",
