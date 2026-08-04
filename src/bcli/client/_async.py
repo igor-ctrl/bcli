@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from bcli._url import build_companies_url, build_url
+from bcli.auth._base import AuthProvider
 from bcli.auth._credentials import ClientCredentialsAuth
 from bcli.client._safety import SafeContext
 from bcli.client._transport import BCTransport
@@ -99,6 +100,7 @@ class AsyncBCClient:
         company_id: str | None = None,
         # Shared options
         timeout: int | None = None,
+        auth: AuthProvider | None = None,
     ) -> None:
         if tenant_id is not None:
             # Programmatic mode — build a synthetic profile
@@ -125,10 +127,17 @@ class AsyncBCClient:
 
         self._transport: BCTransport | None = None
         self._timeout = timeout or self._config.defaults.timeout
+        self._injected_auth = auth
 
     def _ensure_transport(self) -> BCTransport:
         if self._transport is None:
-            auth = self._build_auth(self._profile, self._programmatic_secret, self._config)
+            # An injected provider wins outright: the caller already holds a token,
+            # so the profile's auth_method is never consulted. That is what lets a
+            # `browser` profile work server-side, where there is no local browser
+            # and no loopback listener to bind.
+            auth = self._injected_auth or self._build_auth(
+                self._profile, self._programmatic_secret, self._config
+            )
             self._transport = BCTransport(auth, timeout=self._timeout)
         return self._transport
 
