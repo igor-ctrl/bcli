@@ -28,6 +28,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Automatic retry no longer repeats non-idempotent requests. The transport
+  retried 429/503/504 and network errors for every method, so a lost response to
+  a POST/PATCH/DELETE that the server had already applied would duplicate a
+  create or re-run a bound action. Some bound actions in this API take no
+  arguments and mutate on every call, so a repeat is never harmless. Retries now
+  require either a read-only method or an explicit `Idempotency-Key`; otherwise
+  the error surfaces so the caller can decide. **This is a behaviour change**: a
+  transient 503 on a write that previously succeeded after a silent retry will
+  now raise. Pass `idempotency_key=` to opt back in.
+
+- The sdist no longer sweeps in nested checkouts. `[tool.hatch.build.targets.sdist]`
+  listed patterns like `docs/` and `src/` without a leading slash, so they matched at
+  any depth — and `.claude/worktrees/agent-*/` holds full copies of the repo. The
+  0.7.0 sdist picked up 1350 extra files that way (2 MiB instead of 434 KiB),
+  including older copies of `docs/configuration.md` and `docs/multi-company.md` from
+  before example identifiers were replaced with placeholders. The wheel was never
+  affected, since it builds from `packages`, and `git ls-files` was clean — only
+  inspecting the built artifact showed it. Patterns are now anchored to the project
+  root.
+
 - `build_url` now validates `entity_set_name` and `record_id` as single URL path
   components, rejecting raw `/`, `\`, `?`, `#` and the `.`/`..` segments. Both
   values are spliced directly into the request path, so a record key containing
