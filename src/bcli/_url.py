@@ -181,7 +181,10 @@ def is_bc_origin(url: str) -> bool:
     if not parsed.scheme:
         # Relative URL — caller will resolve it against the BC base URL.
         return True
-    if parsed.scheme not in ("http", "https"):
+    if parsed.scheme != "https":
+        # A bearer token must never ride a cleartext request. BC always serves
+        # https, so an absolute http:// URL is tampering or misconfiguration —
+        # refuse it before the token is attached.
         return False
     host = (parsed.hostname or "").lower()
     if not host:

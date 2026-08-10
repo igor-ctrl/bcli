@@ -259,9 +259,64 @@ bcli get <endpoint> [<record-id>] [options]
 | `--skip <n>` | Records to skip |
 | `--count` | Include total record count |
 | `--all` | Follow pagination for all records |
+| `--out <path>` | Write the record's media stream (raw bytes) to this path instead of printing records. Requires a record id |
+| `--media <field>` | Media property to download (default: auto-discovered from the record's `@odata.mediaReadLink` annotations). Requires `--out` |
+| `--overwrite` | Replace an existing `--out` file (refused by default) |
 | `--publisher <name>` | Custom API publisher override |
 | `--group <name>` | Custom API group override |
 | `--version <name>` | Custom API version override |
+
+Downloading a record's attachment:
+
+```bash
+# Find the record, then stream its media property to a file.
+bcli get incomingDocuments --filter "description eq 'March invoice'" --top 1 -f json
+bcli get incomingDocuments <systemId> --out invoice.pdf
+```
+
+`--out` is single-record mode and cannot be combined with the query-shaping
+flags (`--filter`, `--select`, `--expand`, `--orderby`, `--top`, `--skip`,
+`--count`, `--all`) or an explicit `--format`. The record is fetched through
+normal endpoint resolution, so `disable_standard_api` and the endpoint registry
+apply to a media download exactly as they do to a read. See
+[querying.md](querying.md#downloading-media-streams-pdfs).
+
+---
+
+## action
+
+Invoke an OData v4 bound action on a record: `POST <entitySet>(<key>)/<Namespace>.<action>`.
+
+```bash
+bcli action <endpoint> <record-key> <action-name> [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--data <json>` | JSON body for the action (literal or `@file`). Defaults to an empty body |
+| `--no-data` | Explicitly send an empty body — same as omitting `--data` |
+| `--namespace <ns>` | Action namespace (default: `Microsoft.NAV`) |
+| `--out <path>` | Decode the action's base64 return value and write the raw bytes here |
+| `--overwrite` | Replace an existing `--out` file (refused by default) |
+| `--result-out <path>` | Write the JSON result envelope to this path (atomic) |
+| `--result-fd <n>` | Write the JSON result envelope to this file descriptor |
+| `--idempotency-key <k>` | Opaque token forwarded as the `Idempotency-Key` header |
+| `--yes` | Skip the read-only-profile warning prompt |
+
+```bash
+bcli action examples 42 archive
+bcli action documents 42 renderPdf --out document.pdf
+```
+
+**`--out` and `--result-out` write different things.** `--out` writes the
+action's *decoded payload bytes* — the PDF or export the action returned as
+base64 in its `value` property. `--result-out` writes the *JSON result
+envelope* describing the invocation (status, exit code, correlation id). They
+compose; neither implies the other.
+
+The destination is checked before the POST is sent, so an unwritable path fails
+without invoking the action. An action that returns 204 No Content has no
+payload to write, and `--out` reports that rather than creating an empty file.
 
 ---
 

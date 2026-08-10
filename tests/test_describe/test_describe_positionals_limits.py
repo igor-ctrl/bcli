@@ -100,6 +100,20 @@ class TestRequiredOptions:
         assert "required" not in yes_opt or yes_opt["required"] is False
 
 
+class TestMediaDownloadOptions:
+    def test_get_exposes_out_and_media(self):
+        """``bcli get --out/--media`` must reach the describe-generated MCP tools.
+
+        ``bc_get`` is built from this document, so an option missing here is an
+        option an agent cannot reach — the file lands on the MCP host, which is
+        the user's own machine.
+        """
+        payload = _describe_json()
+        get_cmd = _find(payload, ["get"])
+        names = {o["name"] for o in get_cmd["options"]}
+        assert {"--out", "--media", "--overwrite"} <= names
+
+
 class TestLimits:
     def test_get_top_carries_default_and_max(self):
         """``bcli get --top`` is a safety-sensitive int. We pin the

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import tempfile
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -291,7 +294,7 @@ class BCTransport:
         retry_count: int,
         latency_s: float,
         correlation_id: str | None,
-        context: dict[str, str] | None,
+        context: dict[str, Any] | None,
         *,
         error: str | None = None,
     ) -> None:
@@ -326,6 +329,192 @@ class BCTransport:
         """
         assert_bc_origin(url)
         return await self._request("GET", url)
+
+    async def download(
+        self,
+        url: str,
+        dest: Path,
+        *,
+        params: dict[str, str] | None = None,
+        log_context: dict[str, str] | None = None,
+        overwrite: bool = True,
+    ) -> dict[str, Any]:
+        """Stream a GET response body to ``dest`` and return what was written.
+
+        Read-only by construction: this issues a GET, never parses the body as
+        JSON, and never goes through ``SafeContext`` — there is nothing to gate
+        because nothing changes in BC.
+
+        ``url`` is typically a ``@odata.mediaReadLink`` the *server* put in a
+        response, so it runs through :func:`bcli._url.assert_bc_origin` before
+        the bearer token is attached — same token-leak guard as
+        :meth:`get_absolute`.
+
+        Bytes land in a ``<dest>.<random>.part`` sibling and are moved onto
+        ``dest`` with :func:`os.replace` once the stream completes, so a failed
+        download leaves neither a truncated ``dest`` nor a stray part file.
+        ``dest`` inherits the temp file's ``0600`` mode rather than the umask —
+        a downloaded invoice is the account's data, not the machine's.
+
+        Returns ``{"bytes_written", "content_type", "correlation_id"}``.
+        """
+        assert_bc_origin(url)
+
+        # Deliberately a sibling of ``_request`` rather than a branch inside
+        # it: that method buffers the whole response and calls
+        # ``response.json()`` on success, which is precisely wrong for a media
+        # stream. The retry *policy* is the one documented above ``_request``'s
+        # loop; a GET can always be repeated, so this loop is unconditionally
+        # retry-safe and needs no ``retry_safe`` gate. Only the body handling
+        # differs.
+        backoff = INITIAL_BACKOFF
+        t0 = time.monotonic()
+        last_error: Exception | None = None
+        result: dict[str, Any] | None = None
+
+        # One temp file for all attempts. Each attempt rewinds and truncates it
+        # first: a retry that follows a partially-streamed response would
+        # otherwise append the second body to the first half of the first.
+        tmp = tempfile.NamedTemporaryFile(
+            delete=False, dir=dest.parent, prefix=dest.name + ".", suffix=".part",
+        )
+        tmp_path = Path(tmp.name)
+
+        try:
+            with tmp as f:
+                for attempt in range(self._max_retries + 1):
+                    f.seek(0)
+                    f.truncate()
+                    try:
+                        headers = await self._inject_auth()
+                        # The client default is application/json; a media
+                        # stream is whatever BC says it is.
+                        headers["Accept"] = "*/*"
+
+                        logger.debug("GET %s (stream, attempt %d)", url, attempt + 1)
+
+                        wait: float | None = None
+                        async with self._client.stream(
+                            "GET", url, params=params, headers=headers,
+                        ) as response:
+                            correlation_id = response.headers.get(
+                                "x-ms-correlation-request-id",
+                            )
+
+                            if response.is_success:
+                                written = 0
+                                async for chunk in response.aiter_bytes():
+                                    f.write(chunk)
+                                    written += len(chunk)
+                                context: dict[str, Any] = dict(log_context or {})
+                                context["bytes_written"] = written
+                                self._emit_request_log(
+                                    "GET", url, response.status_code, attempt,
+                                    time.monotonic() - t0, correlation_id, context,
+                                )
+                                result = {
+                                    "bytes_written": written,
+                                    "content_type": response.headers.get("content-type"),
+                                    "correlation_id": correlation_id,
+                                }
+                                break
+
+                            # A streamed response has no body loaded yet, so
+                            # the error payload has to be read before it can
+                            # be parsed.
+                            await response.aread()
+                            bc_message, correlation_id = _parse_bc_error(response)
+                            status = response.status_code
+
+                            if status in _RETRYABLE and attempt < self._max_retries:
+                                retry_after = _get_retry_after(response)
+                                wait = retry_after if retry_after else backoff
+                                logger.warning(
+                                    "Retryable error %d on %s, waiting %.1fs (attempt %d/%d)",
+                                    status, url, wait, attempt + 1, self._max_retries + 1,
+                                )
+                            else:
+                                self._emit_request_log(
+                                    "GET", url, status, attempt,
+                                    time.monotonic() - t0, correlation_id, log_context,
+                                    error=bc_message,
+                                )
+                                error_cls = _ERROR_MAP.get(status, BCLIError)
+                                kwargs: dict[str, Any] = {
+                                    "status_code": status,
+                                    "bc_message": bc_message,
+                                    "correlation_id": correlation_id,
+                                }
+                                if status == 429:
+                                    kwargs["retry_after"] = _get_retry_after(response)
+                                message = (
+                                    f"HTTP {status} {response.reason_phrase}: GET {url}"
+                                )
+                                hint = _hint_for_bc_error(status, bc_message, url)
+                                if hint:
+                                    message = f"{message}\n  Hint: {hint}"
+                                raise error_cls(message, **kwargs)
+
+                        # Sleeping outside the ``async with`` releases the
+                        # connection while we wait.
+                        import asyncio
+                        await asyncio.sleep(wait or backoff)
+                        backoff *= 2
+                        continue
+
+                    except (
+                        httpx.ConnectError,
+                        httpx.ReadTimeout,
+                        httpx.WriteTimeout,
+                        httpx.RemoteProtocolError,
+                        # A stream can also drop mid-body, which surfaces here
+                        # rather than as a timeout.
+                        httpx.ReadError,
+                    ) as e:
+                        last_error = e
+                        if attempt < self._max_retries:
+                            logger.warning(
+                                "Network error on GET %s: %s, retrying in %.1fs",
+                                url, e, backoff,
+                            )
+                            import asyncio
+                            await asyncio.sleep(backoff)
+                            backoff *= 2
+                            continue
+                        self._emit_request_log(
+                            "GET", url, 0, attempt,
+                            time.monotonic() - t0, None, log_context,
+                            error=str(e),
+                        )
+                        raise ServerError(
+                            f"Network error after {self._max_retries + 1} attempts: {e}",
+                        ) from e
+
+            if result is None:
+                raise ServerError(
+                    f"Download failed after {self._max_retries + 1} attempts",
+                ) from last_error
+
+            if overwrite:
+                os.replace(tmp_path, dest)
+            else:
+                # No-replace publication. os.link raises FileExistsError if the
+                # destination appeared after the CLI's pre-flight check — e.g. a
+                # parent directory swapped to a symlink mid-download — so a race
+                # can't silently clobber a file the user never agreed to replace.
+                # The finally below removes the now-linked temp file.
+                try:
+                    os.link(tmp_path, dest)
+                except FileExistsError:
+                    raise FileExistsError(
+                        f"Refusing to overwrite {dest}: it appeared after the "
+                        f"pre-flight check. Re-run with --overwrite to replace it."
+                    ) from None
+            return result
+        finally:
+            # No-op once os.replace has moved it; on the no-replace path this
+            # removes the source of the hardlink. Cleans up every failure path.
+            tmp_path.unlink(missing_ok=True)
 
     async def post(
         self,

@@ -40,8 +40,9 @@ def _assert_bc_origin(url: str) -> None:
     parsed = urlparse(url)
     if not parsed.scheme:
         return  # relative URL, joined to base by httpx
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"Refusing non-HTTP(S) URL with auth: {url!r}")
+    if parsed.scheme != "https":
+        # Bearer tokens never ride cleartext; BC always serves https.
+        raise ValueError(f"Refusing non-HTTPS URL with auth: {url!r}")
     host = (parsed.hostname or "").lower()
     if not host:
         raise ValueError(f"Refusing URL with no host: {url!r}")
