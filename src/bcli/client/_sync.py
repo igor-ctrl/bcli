@@ -92,6 +92,17 @@ class BCClient:
             self._async.upload_attachment(parent_type, parent_id, file_path, **kwargs)
         )
 
+    def get_media(
+        self,
+        entity_set_name: str,
+        record_id: str,
+        dest: str | Path,
+        **kwargs,
+    ) -> dict[str, Any]:
+        return self._run(
+            self._async.get_media(entity_set_name, record_id, dest, **kwargs)
+        )
+
     def list_companies(self) -> list[dict[str, Any]]:
         return self._run(self._async.list_companies())
 

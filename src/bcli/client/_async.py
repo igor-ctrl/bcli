@@ -47,6 +47,13 @@ _UNBOUND_ACTION_RE = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+$"
 )
 
+# BC advertises a streamable media property on a record as an OData annotation
+# keyed ``<propertyName>@odata.mediaReadLink``. The value is an absolute URL to
+# the raw bytes — the only place the download link is published, which is why
+# ``get_media`` reads the record without ``$select`` (a projection drops
+# annotations along with the fields it filters out).
+_MEDIA_READ_LINK_RE = re.compile(r"^(?P<field>.+)@odata\.mediaReadLink$")
+
 
 def _parse_bound_action(entity_set_name: str) -> tuple[str, str, str] | None:
     """Recognise a bound-action invocation in ``entity_set_name``.
@@ -452,6 +459,108 @@ class AsyncBCClient:
             "bytesUploaded": len(raw),
             "contentUploaded": True,
             "record": bc_record or None,
+        }
+
+    async def get_media(
+        self,
+        entity_set_name: str,
+        record_id: str,
+        dest: str | Path,
+        *,
+        media_field: str | None = None,
+        publisher: str | None = None,
+        group: str | None = None,
+        version: str | None = None,
+    ) -> dict[str, Any]:
+        """Download a record's media stream (PDF, image, blob) to ``dest``.
+
+        The download counterpart of :meth:`upload_attachment`, and the one read
+        whose payload never reaches stdout: BC hands back raw bytes, so they go
+        straight to a file.
+
+        Two requests. First the record itself, resolved through the same
+        ``_resolve_url`` every other read uses — so registry routing, an
+        explicit ``publisher``/``group``/``version`` override and the
+        ``disable_standard_api`` lockdown all apply here exactly as they do to
+        ``get``. A media download is not a side door around the profile's
+        endpoint allowlist. Then the media link itself, streamed to disk by
+        :meth:`BCTransport.download` (which re-checks the origin, because that
+        URL came from the response body).
+
+        Field resolution:
+
+        - ``media_field`` names the property explicitly. Its
+          ``@odata.mediaReadLink`` is used when the record carries one;
+          otherwise the conventional ``<record-url>/<field>`` sub-resource is
+          composed, which is what BC pages that omit the annotation still
+          serve.
+        - Otherwise the record's annotations are scanned. Exactly one media
+          property is downloaded; zero or several raise, because guessing
+          would quietly write the wrong stream to the caller's file.
+
+        Returns ``{"path", "bytes_written", "media_field", "content_type",
+        "media_fields_discovered"}``.
+
+        Read-only. Does not go through SafeContext.
+        """
+        transport = self._ensure_transport()
+
+        record_url = self._resolve_url(
+            entity_set_name,
+            record_id=record_id,
+            publisher=publisher,
+            group=group,
+            version=version,
+        )
+
+        # No $select: a projection drops the @odata.mediaReadLink annotations,
+        # which are the only thing this read is after.
+        record = await transport.get(record_url)
+
+        discovered = [
+            m.group("field")
+            for m in (_MEDIA_READ_LINK_RE.match(key) for key in record)
+            if m is not None
+        ]
+
+        if media_field is not None:
+            # The field is spliced into a URL path when the record carries no
+            # annotation for it, so it gets the same single-path-component
+            # validation as a record key.
+            validate_record_key("media_field", media_field)
+            field = media_field
+            link = record.get(f"{media_field}@odata.mediaReadLink")
+            if not isinstance(link, str) or not link:
+                link = f"{record_url}/{media_field}"
+        elif len(discovered) == 1:
+            field = discovered[0]
+            link = record[f"{field}@odata.mediaReadLink"]
+        elif not discovered:
+            raise BCLIError(
+                f"No media stream on {entity_set_name}({record_id}): the record carries "
+                f"no '@odata.mediaReadLink' annotation, so there is nothing to download. "
+                f"Pass --media <field> if you know the property name, and run "
+                f"'bcli endpoint fields {entity_set_name}' to see what this endpoint exposes."
+            )
+        else:
+            candidates = ", ".join(sorted(discovered))
+            raise BCLIError(
+                f"{entity_set_name}({record_id}) exposes {len(discovered)} media "
+                f"properties: {candidates}. Pass --media <field> to pick one — writing "
+                f"whichever came first would be a silent guess."
+            )
+
+        dest_path = Path(dest).expanduser()
+        outcome = await transport.download(
+            link, dest_path, log_context={"endpoint": entity_set_name},
+        )
+
+        return {
+            "path": str(dest_path),
+            "bytes_written": outcome["bytes_written"],
+            "media_field": field,
+            "content_type": outcome["content_type"],
+            "media_fields_discovered": discovered,
         }
 
     async def list_companies(self) -> list[dict[str, Any]]:
