@@ -56,6 +56,9 @@ def test_is_bc_origin_accepts_legitimate_urls(url):
     ("https://attacker.example/v2.0/whatever", "different domain"),
     ("https://localhost:1234/leak", "localhost is not a BC host"),
     ("http://attacker.example/v2.0/whatever", "wrong scheme + wrong host"),
+    # Right host, wrong scheme: a bearer token must never ride cleartext.
+    (f"http://api.businesscentral.dynamics.com/v2.0/Production/api/v2.0/companies({_COMPANY_ID})/customers",
+     "http scheme rejected even for an allowed BC host"),
     # Non-HTTP schemes shouldn't slip through.
     ("file:///etc/passwd", "file scheme rejected"),
     ("javascript:alert(1)", "non-http scheme rejected"),
@@ -66,6 +69,19 @@ def test_is_bc_origin_rejects_malicious_urls(url, reason):
     assert is_bc_origin(url) is False, f"should reject ({reason}): {url}"
     with pytest.raises(ValueError, match="off-origin|no host|non-HTTP"):
         assert_bc_origin(url)
+
+
+def test_https_required_for_bc_host():
+    """The same BC URL is accepted over https and refused over http — a
+    bearer token must never be attached to a cleartext request (#21 review)."""
+    https_url = (
+        f"https://api.businesscentral.dynamics.com/v2.0/Production/api/v2.0/companies({_COMPANY_ID})/customers"
+    )
+    http_url = https_url.replace("https://", "http://", 1)
+    assert is_bc_origin(https_url) is True
+    assert is_bc_origin(http_url) is False
+    with pytest.raises(ValueError, match="off-origin"):
+        assert_bc_origin(http_url)
 
 
 def test_assert_message_includes_rejected_url():
@@ -106,6 +122,8 @@ def test_etl_inline_check_matches_canonical():
         "https://attacker.example/leak",
         "https://evilbusinesscentral.dynamics.com.attacker.example/leak",
         "file:///etc/passwd",
+        # https-only: cleartext to a BC host is still refused.
+        "http://api.businesscentral.dynamics.com/leak",
     ]:
         with pytest.raises(ValueError):
             etl_assert(bad)

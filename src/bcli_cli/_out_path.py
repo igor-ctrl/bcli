@@ -50,17 +50,30 @@ def prepare_out_path(path: Path, *, overwrite: bool) -> Path:
     return dest
 
 
-def atomic_write_bytes(dest: Path, raw: bytes) -> None:
-    """Write ``raw`` to ``dest`` via a temp file + :func:`os.replace`.
+def atomic_write_bytes(dest: Path, raw: bytes, *, overwrite: bool = True) -> None:
+    """Write ``raw`` to ``dest`` via a temp file + atomic publish.
 
     Same discipline as ``BCTransport.download``: a reader never sees a
-    half-written file, and a failed write leaves no part file behind.
+    half-written file, and a failed write leaves no part file behind. When
+    ``overwrite`` is False the publish is no-replace (``os.link``), so a
+    destination that appeared after the caller's pre-flight check — e.g. a
+    parent directory swapped to a symlink — is refused rather than clobbered.
     """
     fd, tmp_name = tempfile.mkstemp(prefix=dest.name + ".", dir=str(dest.parent))
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(raw)
-        os.replace(tmp_name, dest)
+        if overwrite:
+            os.replace(tmp_name, dest)
+        else:
+            try:
+                os.link(tmp_name, dest)
+            except FileExistsError:
+                raise FileExistsError(
+                    f"Refusing to overwrite {dest}: it appeared after the "
+                    f"pre-flight check. Re-run with --overwrite to replace it."
+                ) from None
+            os.unlink(tmp_name)
     except Exception:
         try:
             os.unlink(tmp_name)

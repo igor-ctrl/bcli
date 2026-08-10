@@ -77,6 +77,7 @@ def get_command(
         _run_media_download(
             endpoint, record_id or "", dest, media,
             publisher=publisher, group=group, version=version,
+            overwrite=overwrite,
         )
         return
 
@@ -289,6 +290,7 @@ def _run_media_download(
     publisher: str | None,
     group: str | None,
     version: str | None,
+    overwrite: bool,
 ) -> None:
     """Execute the ``--out`` branch: fetch the record, stream its media to ``dest``."""
     if state.dry_run:
@@ -311,6 +313,7 @@ def _run_media_download(
             _execute_get_media(
                 endpoint, record_id, dest, media_field,
                 publisher=publisher, group=group, version=version,
+                overwrite=overwrite,
             )
         )
         latency_ms = (_time.monotonic() - started) * 1000.0
@@ -351,12 +354,14 @@ async def _execute_get_media(
     publisher: str | None = None,
     group: str | None = None,
     version: str | None = None,
+    overwrite: bool = False,
 ) -> dict:
     async with state.make_async_client() as client:
         return await client.get_media(
             endpoint, record_id, dest,
             media_field=media_field,
             publisher=publisher, group=group, version=version,
+            overwrite=overwrite,
         )
 
 

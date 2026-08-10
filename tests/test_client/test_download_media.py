@@ -220,6 +220,27 @@ class TestFieldResolution:
         assert len(httpx_mock.get_requests()) == 1
         assert not list(tmp_path.iterdir())
 
+    async def test_percent_encoded_field_cannot_smuggle_traversal(
+        self, client, tmp_path, httpx_mock,
+    ):
+        """validate_record_key blocks *raw* separators but accepts percent
+        escapes; a value like '..%2F..%2Fapi%2Fv2.0%2F...users' would otherwise
+        splice a decodable slash into the token-bearing URL for any server that
+        decodes %2F before routing. The field is encoded as one path component,
+        so %2F becomes %252F and no decodable separator survives (#21 review)."""
+        httpx_mock.add_response(json=_record())
+        httpx_mock.add_response(content=PDF_BYTES)
+
+        payload = "..%2F..%2Fapi%2Fv2.0%2Fcompanies(x)%2Fusers"
+        await client.get_media(
+            "incomingDocuments", RECORD_ID, tmp_path / "x.bin", media_field=payload,
+        )
+
+        media_url = str(httpx_mock.get_requests()[1].url)
+        assert "%252F" in media_url          # the payload's % was itself encoded
+        assert "%2F" not in media_url         # so no decodable slash remains
+        assert "/users" not in media_url      # traversal target never resolves
+
 
 class TestOriginGuard:
     async def test_off_origin_media_link_is_refused(self, client, tmp_path, httpx_mock):
@@ -234,6 +255,77 @@ class TestOriginGuard:
         assert len(requests) == 1
         assert all("attacker.example" not in str(r.url) for r in requests)
         assert not list(tmp_path.iterdir())
+
+
+class TestNoReplaceCommit:
+    """#21 review (VULN-0002): the no-overwrite policy is enforced at the commit,
+    not only at pre-flight, so a destination that appears after the check — e.g. a
+    parent directory swapped to a symlink mid-download — is refused, not clobbered.
+    """
+
+    async def test_overwrite_false_refuses_a_destination_present_at_commit(
+        self, client, tmp_path, httpx_mock,
+    ):
+        httpx_mock.add_response(json=_record(**{"content@odata.mediaReadLink": MEDIA_URL}))
+        httpx_mock.add_response(content=PDF_BYTES)
+
+        dest = tmp_path / "victim.pdf"
+        dest.write_bytes(b"original")
+
+        with pytest.raises(FileExistsError, match="pre-flight"):
+            await client.get_media("incomingDocuments", RECORD_ID, dest, overwrite=False)
+
+        assert dest.read_bytes() == b"original"   # never clobbered
+        assert _part_files(tmp_path) == []          # no litter
+
+    async def test_overwrite_true_still_replaces(self, client, tmp_path, httpx_mock):
+        httpx_mock.add_response(json=_record(**{"content@odata.mediaReadLink": MEDIA_URL}))
+        httpx_mock.add_response(content=PDF_BYTES)
+
+        dest = tmp_path / "victim.pdf"
+        dest.write_bytes(b"original")
+
+        await client.get_media("incomingDocuments", RECORD_ID, dest, overwrite=True)
+
+        assert dest.read_bytes() == PDF_BYTES
+
+    async def test_parent_symlink_swap_between_preflight_and_commit_is_refused(
+        self, client, tmp_path, httpx_mock,
+    ):
+        """Reproduces the strix PoC: after the destination is chosen, an attacker
+        renames the output parent and drops a symlink to a directory that holds a
+        same-named victim file. The no-replace commit must refuse."""
+        import tempfile as _tempfile
+        from unittest.mock import patch
+
+        selected = tmp_path / "selected"
+        victim = tmp_path / "victim"
+        selected.mkdir()
+        victim.mkdir()
+        dest = selected / "invoice.pdf"
+        victim_file = victim / "invoice.pdf"
+        victim_file.write_bytes(b"original-victim")
+
+        httpx_mock.add_response(json=_record(**{"content@odata.mediaReadLink": MEDIA_URL}))
+        httpx_mock.add_response(content=PDF_BYTES)
+
+        real_ntf = _tempfile.NamedTemporaryFile
+
+        def swap_then_open(*args, **kwargs):
+            # The parent that passed pre-flight is swapped for a symlink to the
+            # victim directory, right before the temp file is created in it.
+            selected.rename(tmp_path / "selected-orig")
+            selected.symlink_to(victim, target_is_directory=True)
+            return real_ntf(*args, **kwargs)
+
+        with patch(
+            "bcli.client._transport.tempfile.NamedTemporaryFile", swap_then_open,
+        ), pytest.raises(FileExistsError):
+            await client.get_media(
+                "incomingDocuments", RECORD_ID, dest, overwrite=False,
+            )
+
+        assert victim_file.read_bytes() == b"original-victim"  # NOT clobbered
 
 
 class TestRetryAndCleanup:

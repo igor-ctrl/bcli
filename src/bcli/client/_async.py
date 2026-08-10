@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from bcli._url import build_companies_url, build_url, validate_record_key
 from bcli.auth._base import AuthProvider
@@ -471,6 +472,7 @@ class AsyncBCClient:
         publisher: str | None = None,
         group: str | None = None,
         version: str | None = None,
+        overwrite: bool = True,
     ) -> dict[str, Any]:
         """Download a record's media stream (PDF, image, blob) to ``dest``.
 
@@ -531,7 +533,12 @@ class AsyncBCClient:
             field = media_field
             link = record.get(f"{media_field}@odata.mediaReadLink")
             if not isinstance(link, str) or not link:
-                link = f"{record_url}/{media_field}"
+                # Percent-encode the field as a single path component.
+                # validate_record_key blocks *raw* separators but accepts percent
+                # escapes, so '..%2F..%2Fapi%2Fv2.0%2F...' would otherwise splice
+                # encoded traversal into the token-bearing URL for any server that
+                # decodes %2F before routing. quote(safe="") turns %2F into %252F.
+                link = f"{record_url}/{quote(media_field, safe='')}"
         elif len(discovered) == 1:
             field = discovered[0]
             link = record[f"{field}@odata.mediaReadLink"]
@@ -552,7 +559,9 @@ class AsyncBCClient:
 
         dest_path = Path(dest).expanduser()
         outcome = await transport.download(
-            link, dest_path, log_context={"endpoint": entity_set_name},
+            link, dest_path,
+            log_context={"endpoint": entity_set_name},
+            overwrite=overwrite,
         )
 
         return {

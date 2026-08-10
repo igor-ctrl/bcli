@@ -200,7 +200,7 @@ def action_command(
                 # into bytes means the caller didn't get what they asked for,
                 # and the envelope has to say failed. The POST already
                 # happened either way — that's what the envelope records.
-                written = _write_decoded_payload(result, dest)
+                written = _write_decoded_payload(result, dest, overwrite=overwrite)
 
             cap.emit_success()
 
@@ -286,10 +286,10 @@ def _decode_base64_payload(result: dict | str) -> bytes:
         ) from e
 
 
-def _write_decoded_payload(result: dict | str, dest: Path) -> int:
+def _write_decoded_payload(result: dict | str, dest: Path, *, overwrite: bool) -> int:
     """Decode the action's payload onto ``dest`` atomically; return byte count."""
     raw = _decode_base64_payload(result)
-    atomic_write_bytes(dest, raw)
+    atomic_write_bytes(dest, raw, overwrite=overwrite)
     return len(raw)
 
 

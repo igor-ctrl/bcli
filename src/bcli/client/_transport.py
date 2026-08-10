@@ -337,6 +337,7 @@ class BCTransport:
         *,
         params: dict[str, str] | None = None,
         log_context: dict[str, str] | None = None,
+        overwrite: bool = True,
     ) -> dict[str, Any]:
         """Stream a GET response body to ``dest`` and return what was written.
 
@@ -494,10 +495,25 @@ class BCTransport:
                     f"Download failed after {self._max_retries + 1} attempts",
                 ) from last_error
 
-            os.replace(tmp_path, dest)
+            if overwrite:
+                os.replace(tmp_path, dest)
+            else:
+                # No-replace publication. os.link raises FileExistsError if the
+                # destination appeared after the CLI's pre-flight check — e.g. a
+                # parent directory swapped to a symlink mid-download — so a race
+                # can't silently clobber a file the user never agreed to replace.
+                # The finally below removes the now-linked temp file.
+                try:
+                    os.link(tmp_path, dest)
+                except FileExistsError:
+                    raise FileExistsError(
+                        f"Refusing to overwrite {dest}: it appeared after the "
+                        f"pre-flight check. Re-run with --overwrite to replace it."
+                    ) from None
             return result
         finally:
-            # No-op once os.replace has moved it; cleans up every failure path.
+            # No-op once os.replace has moved it; on the no-replace path this
+            # removes the source of the hardlink. Cleans up every failure path.
             tmp_path.unlink(missing_ok=True)
 
     async def post(

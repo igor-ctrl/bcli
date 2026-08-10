@@ -61,6 +61,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   changed without breaking those consumers silently. Same reasoning as the
   `bcli.queries` extraction in 0.7.0.
 
+### Security
+
+Three hardenings from a security review of the `--out` media path, before it
+ships:
+
+- **The BC-origin guard now requires `https`.** `is_bc_origin` (and the ETL
+  layer's inline copy) previously accepted `http` for an allowlisted host, so a
+  tampered `@odata.mediaReadLink` or `@odata.nextLink` of
+  `http://api.businesscentral.dynamics.com/…` would have received the bearer
+  token over cleartext. A credential-bearing request must never be plaintext;
+  BC only ever serves `https`. This tightens every caller of the guard — the
+  media download and the paginator alike — not just `--out`.
+- **`--media` can no longer smuggle percent-encoded path separators.**
+  `validate_record_key` rejects raw `/ \ ? #` but accepted percent escapes, so a
+  field like `..%2F..%2Fapi%2Fv2.0%2F…` could splice encoded traversal into the
+  token-bearing fallback URL for any gateway that decodes `%2F` before routing.
+  The field is now percent-encoded as a single path component at construction
+  (`%2F` becomes `%252F`), so no decodable separator survives. (`disable_standard_api`
+  was never the real boundary — the BC permission set is — but the client should
+  not construct a URL it did not intend.)
+- **`--out`'s no-overwrite promise is enforced at the commit, not only at
+  pre-flight.** The existence check and the `os.replace` publish resolved the
+  parent path twice, so a local attacker who swapped the output directory for a
+  symlink in between could overwrite a same-named victim file without
+  `--overwrite`. When overwrite is not requested, the download and the decoded
+  action payload now publish with a no-replace primitive (`os.link`) that fails
+  if the destination appeared after the check. The SDK's `get_media` /
+  `download` keep `overwrite=True` as their default for direct callers; only the
+  CLI opts into the strict path.
+
 ## [0.7.0] - 2026-08-04
 
 ### Added
