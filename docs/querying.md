@@ -103,6 +103,44 @@ bcli -f json -q get customers --top 100 | jq '.[] | select(.city == "Chicago") |
 bcli -f csv -q get items --select number,displayName,unitPrice --all > items.csv
 ```
 
+## Downloading Media Streams (PDFs)
+
+Some records carry a binary attachment — a scanned invoice, a rendered
+document, an image. BC advertises those as `<field>@odata.mediaReadLink`
+annotations on the record, and `--out` streams the bytes to a file instead of
+printing records.
+
+It takes two steps, because a media download addresses exactly one record:
+
+```bash
+# 1. Find the record's systemId.
+bcli get incomingDocuments --filter "description eq 'March invoice'" --top 1 -f json
+
+# 2. Download its media stream.
+bcli get incomingDocuments <systemId> --out invoice.pdf
+# ✓ Wrote 48,215 bytes to invoice.pdf (application/pdf, media field: content)
+```
+
+With no `--media`, the media property is auto-discovered from the record's
+annotations. If the record exposes several, bcli lists them and asks you to
+pick one rather than guessing:
+
+```bash
+bcli get incomingDocuments <systemId> --media attachmentContent --out invoice.pdf
+```
+
+Notes:
+
+- An existing file is never replaced without `--overwrite`, and a missing
+  parent directory is an error rather than an `mkdir`.
+- The record is fetched through the normal endpoint resolution, so a profile
+  with `disable_standard_api = true` refuses a media download from an
+  unregistered entity exactly as it refuses a read.
+- `--out` is single-record mode: it can't be combined with `--filter`,
+  `--select`, `--top`, `--all` and friends. Use step 1 for those.
+- For a bound action that *returns* a base64 payload, the equivalent flag is
+  `bcli action ... --out` (see the command reference).
+
 ## Context Banner
 
 By default, bcli shows the active profile, environment, and company before output:

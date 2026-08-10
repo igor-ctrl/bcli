@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-10
+
+### Added
+
+- `--out` on `bcli get`: write a record's media stream (a scanned invoice, a
+  rendered document) to a file instead of printing records. BC advertises a
+  streamable property as a `<field>@odata.mediaReadLink` annotation, so the
+  record is read first — without `$select`, which would drop the annotations —
+  and the single advertised link is streamed to disk. Several media properties
+  on one record, or none, is an error naming what was found; `--media <field>`
+  picks one explicitly, and also composes the conventional
+  `<record-url>/<field>` sub-resource for pages that serve a media property
+  without annotating it. The record read goes through the same resolver as any
+  other read, so the endpoint registry and `disable_standard_api` govern a media
+  download exactly as they govern `bcli get` — a media stream is not a side door
+  around the profile's allowlist. An existing file is refused without
+  `--overwrite` and a missing parent directory is an error, both checked before
+  any request goes out.
+
+  The SDK half is `AsyncBCClient.get_media` / `BCClient.get_media` over a new
+  `BCTransport.download`, which streams rather than buffering and never parses
+  the body as JSON. `download` is a deliberate sibling of the shared `_request`
+  loop rather than a branch inside it, because that method's success path calls
+  `response.json()` — wrong for every byte of a PDF. It re-validates the URL
+  against the BC host allowlist first, since a `mediaReadLink` is a URL the
+  *server* chose and the bearer token must not follow it off-origin. Bytes land
+  in a `.part` sibling that is truncated at the start of every attempt and moved
+  onto the destination with `os.replace` only on success: a retry after a
+  half-streamed response would otherwise append the second body to the first
+  half of the first, and a failed download would leave a truncated file where a
+  complete one is expected. Nothing is left behind on any failure path. The
+  downloaded file inherits the temp file's `0600` mode rather than the umask,
+  on the grounds that a downloaded invoice is the account's data.
+
+- `--out` on `bcli action`: decode a bound action's base64 return value and
+  write the raw bytes. Distinct from `--result-out`, which writes the JSON
+  result envelope *about* the invocation — the two compose, and the help text
+  says so, because an agent reaching for "write the output to a file" can
+  otherwise pick either. The destination is vetted before the POST is sent: an
+  action can change BC, and discovering an unwritable path afterwards would
+  leave the mutation applied with its payload nowhere to go. A 204 No Content
+  response reports that there was no payload rather than writing a zero-byte
+  file, which would be indistinguishable from a successful download. Decoding
+  happens before the success envelope is emitted, so a payload that can't be
+  decoded is recorded as failed.
+
+- `bcli.odata` now exports `extract_field_references`, `suggest_field` and
+  `validate_filter_fields`; `bcli.registry` now exports `import_from_metadata`.
+  Downstream tooling validating a saved-query catalog against live endpoint
+  fields needs both, and was otherwise importing `bcli.odata._filter_fields` and
+  `bcli.registry._importers` directly — private modules we could not have
+  changed without breaking those consumers silently. Same reasoning as the
+  `bcli.queries` extraction in 0.7.0.
+
 ## [0.7.0] - 2026-08-04
 
 ### Added
