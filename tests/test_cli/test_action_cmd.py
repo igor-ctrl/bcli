@@ -18,6 +18,7 @@ same client.post path. The verb takes care of:
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -93,6 +94,8 @@ def _run(
     kwargs.setdefault("result_out", None)
     kwargs.setdefault("result_fd", None)
     kwargs.setdefault("idempotency_key", None)
+    kwargs.setdefault("out", None)
+    kwargs.setdefault("overwrite", False)
     return action_cmd.action_command(
         entity_set=entity,
         key=key,
@@ -172,6 +175,121 @@ class TestProfileOverrides:
         _run(idempotency_key="k-123")
         kwargs = fake_client.post.await_args.kwargs
         assert kwargs.get("idempotency_key") == "k-123"
+
+
+class TestOutDecode:
+    """``--out`` decodes the action's base64 return value to raw bytes.
+
+    Distinct from ``--result-out``, which writes the JSON envelope *about*
+    the invocation. The two compose; neither implies the other.
+    """
+
+    def test_base64_payload_decoded_to_file(
+        self, cli_state, fake_client, tmp_path: Path, capsys,
+    ):
+        payload = b"%PDF-1.4\nfake\n%%EOF\n"
+        fake_client.post.return_value = {
+            "value": base64.b64encode(payload).decode("ascii"),
+        }
+        dest = tmp_path / "document.pdf"
+
+        _run(out=dest)
+
+        assert dest.read_bytes() == payload
+        # The base64 blob must not also land on stdout — --out means "give me
+        # the bytes", not "give me the bytes and dump the encoding too".
+        stdout = capsys.readouterr().out
+        assert base64.b64encode(payload).decode("ascii") not in stdout
+
+    def test_204_no_content_fails_rather_than_writing_an_empty_file(
+        self, cli_state, fake_client, tmp_path: Path,
+    ):
+        fake_client.post.return_value = {}
+        dest = tmp_path / "document.pdf"
+
+        with pytest.raises(typer.Exit):
+            _run(out=dest)
+
+        assert not dest.exists()
+
+    def test_204_marks_the_envelope_failed(
+        self, cli_state, fake_client, tmp_path: Path,
+    ):
+        """The POST happened; the caller still didn't get what they asked for."""
+        fake_client.post.return_value = {}
+        envelope = tmp_path / "env.json"
+
+        with pytest.raises(typer.Exit):
+            _run(out=tmp_path / "document.pdf", result_out=envelope)
+
+        assert json.loads(envelope.read_text())["status"] == "failed"
+
+    def test_dict_without_value_lists_the_keys(
+        self, cli_state, fake_client, tmp_path: Path, capsys,
+    ):
+        fake_client.post.return_value = {"status": "ok", "recordId": "42"}
+        dest = tmp_path / "document.pdf"
+
+        with pytest.raises(typer.Exit):
+            _run(out=dest)
+
+        err = capsys.readouterr().err
+        assert "recordId" in err and "status" in err
+        assert "--result-out" in err
+        assert not dest.exists()
+
+    def test_invalid_base64_fails(self, cli_state, fake_client, tmp_path: Path, capsys):
+        fake_client.post.return_value = {"value": "not base64 at all !!!"}
+        dest = tmp_path / "document.pdf"
+
+        with pytest.raises(typer.Exit):
+            _run(out=dest)
+
+        assert "base64" in capsys.readouterr().err
+        assert not dest.exists()
+
+    def test_existing_file_refused_before_the_post(
+        self, cli_state, fake_client, tmp_path: Path,
+    ):
+        """An action can mutate BC — the destination check has to come first."""
+        dest = tmp_path / "document.pdf"
+        dest.write_bytes(b"do not clobber me")
+
+        with pytest.raises(typer.Exit) as exc:
+            _run(out=dest)
+
+        assert exc.value.exit_code == 1
+        assert fake_client.post.await_count == 0
+        assert dest.read_bytes() == b"do not clobber me"
+
+    def test_overwrite_allows_replacing_the_file(
+        self, cli_state, fake_client, tmp_path: Path,
+    ):
+        payload = b"fresh bytes"
+        fake_client.post.return_value = {
+            "value": base64.b64encode(payload).decode("ascii"),
+        }
+        dest = tmp_path / "document.pdf"
+        dest.write_bytes(b"stale")
+
+        _run(out=dest, overwrite=True)
+
+        assert dest.read_bytes() == payload
+
+    def test_out_and_result_out_compose(
+        self, cli_state, fake_client, tmp_path: Path,
+    ):
+        payload = b"both channels"
+        fake_client.post.return_value = {
+            "value": base64.b64encode(payload).decode("ascii"),
+        }
+        dest = tmp_path / "document.pdf"
+        envelope = tmp_path / "env.json"
+
+        _run(out=dest, result_out=envelope)
+
+        assert dest.read_bytes() == payload
+        assert json.loads(envelope.read_text())["status"] == "succeeded"
 
 
 class TestEnvelope:

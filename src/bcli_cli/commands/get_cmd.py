@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Optional
 
 import typer
 from rich.console import Console
 
 from bcli.odata._query import Query
+from bcli_cli._out_path import prepare_out_path
 from bcli_cli._state import state
 from bcli_cli.output import format_output, print_context_banner
 
@@ -26,6 +28,9 @@ def get_command(
     skip: Optional[int] = typer.Option(None, "--skip", help="Records to skip"),
     count: bool = typer.Option(False, "--count", help="Include total record count"),
     all_pages: bool = typer.Option(False, "--all", help="Follow pagination to get all records"),
+    out: Optional[Path] = typer.Option(None, "--out", help="Write the record's media stream (raw bytes) to this path instead of printing records"),
+    media: Optional[str] = typer.Option(None, "--media", help="Media property to download (default: auto-discover from the record's @odata.mediaReadLink annotations)"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace an existing --out file (refused by default)"),
     format: Optional[str] = typer.Option(None, "--format", "-f", help="Output format: table, json, csv, ndjson, raw"),
     publisher: Optional[str] = typer.Option(None, "--publisher", help="Custom API publisher override (escape hatch — registry resolves this automatically)"),
     group: Optional[str] = typer.Option(None, "--group", help="Custom API group override (escape hatch — registry resolves this automatically)"),
@@ -39,7 +44,26 @@ def get_command(
       bcli get vendors --filter "displayName eq 'Fabrikam'"
       bcli get items --filter "unitPrice gt 100" --all
       bcli get salesInvoices --select number,totalAmountIncludingTax --orderby "number desc"
+      bcli get incomingDocuments <systemId> --out invoice.pdf
     """
+    _validate_out_flags(
+        out, media, record_id, endpoint,
+        query_flags={
+            "--filter": filter, "--select": select, "--expand": expand,
+            "--orderby": orderby, "--top": top, "--skip": skip,
+            "--count": count, "--all": all_pages,
+        },
+        # Only a locally-passed --format conflicts. A format inherited from
+        # config or a global flag is a preference about *printed records*, and
+        # --out prints none — silently ignoring it beats failing a command the
+        # user spelled correctly.
+        explicit_format=format is not None,
+    )
+
+    # Resolve and vet the destination before anything else: a --out run that
+    # can't write should cost no round trip.
+    dest = prepare_out_path(out, overwrite=overwrite) if out is not None else None
+
     # Local --format overrides global
     output_format = format or state.format
     explicit_format = (format is not None) or state.format_explicit
@@ -47,6 +71,14 @@ def get_command(
         state.quiet = True
 
     print_context_banner()
+
+    if dest is not None:
+        # record_id is guaranteed non-empty by _validate_out_flags.
+        _run_media_download(
+            endpoint, record_id or "", dest, media,
+            publisher=publisher, group=group, version=version,
+        )
+        return
 
     if filter:
         _check_filter_fields(endpoint, filter)
@@ -202,6 +234,130 @@ async def _execute_get_all_companies(
             console.print(f"[dim]  → {len(records)} record(s) from {display}[/dim]")
 
     return all_records
+
+
+def _validate_out_flags(
+    out: Optional[Path],
+    media: Optional[str],
+    record_id: Optional[str],
+    endpoint: str,
+    *,
+    query_flags: dict[str, object],
+    explicit_format: bool,
+) -> None:
+    """Enforce the ``--out`` contract before anything reaches the network.
+
+    ``--out`` switches ``get`` from "print a list of records" to "stream one
+    record's media property to a file". Every flag that shapes a record *list*
+    is therefore evidence the caller meant the other mode, and answering with
+    a file they didn't expect is worse than refusing.
+    """
+    if out is None:
+        if media is not None:
+            raise typer.BadParameter(
+                "--media requires --out — it names which media property to write, "
+                "and without --out there is nowhere to write it."
+            )
+        return
+
+    if not record_id:
+        raise typer.BadParameter(
+            f"--out needs a record id: bcli get {endpoint} <record-id> --out <path>. "
+            f"Find one first with: bcli get {endpoint} --filter \"...\" --top 1 -f json"
+        )
+
+    conflicting = sorted(name for name, value in query_flags.items() if value)
+    if conflicting:
+        raise typer.BadParameter(
+            f"--out streams one record's media bytes, so it cannot be combined with "
+            f"{', '.join(conflicting)}. Drop those to download, or drop --out to query."
+        )
+
+    if explicit_format:
+        raise typer.BadParameter(
+            "--out writes raw bytes to a file, so --format has no records to format. "
+            "Pass one or the other."
+        )
+
+
+def _run_media_download(
+    endpoint: str,
+    record_id: str,
+    dest: Path,
+    media_field: str | None,
+    *,
+    publisher: str | None,
+    group: str | None,
+    version: str | None,
+) -> None:
+    """Execute the ``--out`` branch: fetch the record, stream its media to ``dest``."""
+    if state.dry_run:
+        which = media_field or "auto-discovered from @odata.mediaReadLink"
+        console.print(
+            f"[yellow]--dry-run:[/yellow] would GET {endpoint}({record_id}), read its "
+            f"media property ({which}) and write the bytes to {dest}. "
+            f"Nothing fetched, nothing written."
+        )
+        raise typer.Exit()
+
+    import time as _time
+
+    from bcli.telemetry import events as _tev
+
+    sink = state.telemetry
+    started = _time.monotonic()
+    try:
+        result = asyncio.run(
+            _execute_get_media(
+                endpoint, record_id, dest, media_field,
+                publisher=publisher, group=group, version=version,
+            )
+        )
+        latency_ms = (_time.monotonic() - started) * 1000.0
+        name, props = _tev.query(
+            endpoint=endpoint,
+            has_filter=False,
+            status=200,
+            latency_ms=latency_ms,
+        )
+        # Additive dimension on the existing query event, so a media download
+        # still shows up in the same KQL as any other read but can be told
+        # apart from one.
+        props["media_download"] = True
+        sink.emit(name, props)
+        console.print(
+            f"[green]✓[/green] Wrote {result['bytes_written']:,} bytes to "
+            f"{result['path']} ({result['content_type'] or 'unknown content type'}, "
+            f"media field: {result['media_field']})"
+        )
+    except Exception as e:
+        sink.emit(*_tev.error(
+            error_class=type(e).__name__,
+            http_status=getattr(e, "status_code", 0) or 0,
+            bc_message=getattr(e, "bc_message", "") or str(e),
+            correlation_id=getattr(e, "correlation_id", "") or "",
+            endpoint=endpoint,
+        ))
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+async def _execute_get_media(
+    endpoint: str,
+    record_id: str,
+    dest: Path,
+    media_field: str | None,
+    *,
+    publisher: str | None = None,
+    group: str | None = None,
+    version: str | None = None,
+) -> dict:
+    async with state.make_async_client() as client:
+        return await client.get_media(
+            endpoint, record_id, dest,
+            media_field=media_field,
+            publisher=publisher, group=group, version=version,
+        )
 
 
 def _check_filter_fields(endpoint: str, filter_expr: str) -> None:

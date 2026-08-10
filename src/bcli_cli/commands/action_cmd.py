@@ -34,7 +34,9 @@ from typing import Optional
 import typer
 from rich.console import Console
 
+from bcli.errors import BCLIError
 from bcli_cli._envelope_wrap import capture, validate_flags
+from bcli_cli._out_path import atomic_write_bytes, prepare_out_path
 from bcli_cli._state import state
 from bcli_cli.output import format_output, print_context_banner
 
@@ -87,9 +89,25 @@ def action_command(
         False, "--yes", "-y",
         help="Skip the read-only-profile warning prompt",
     ),
+    out: Optional[Path] = typer.Option(
+        None, "--out",
+        help=(
+            "Decode the action's base64 return value and write the raw bytes here. "
+            "NOT the same as --result-out: --out writes the action's decoded payload "
+            "bytes (a PDF, an export), --result-out writes the JSON result envelope "
+            "describing the invocation."
+        ),
+    ),
+    overwrite: bool = typer.Option(
+        False, "--overwrite",
+        help="Replace an existing --out file (refused by default)",
+    ),
     result_out: Optional[Path] = typer.Option(
         None, "--result-out",
-        help="Write a JSON result envelope to this path (atomic). See AIP §Phase 2.",
+        help=(
+            "Write a JSON result envelope to this path (atomic). See AIP §Phase 2. "
+            "For the action's payload bytes, see --out."
+        ),
     ),
     result_fd: Optional[int] = typer.Option(
         None, "--result-fd",
@@ -107,8 +125,14 @@ def action_command(
         bcli action examples 42 archive
         bcli action items "'ALFKI'" doSomething --data '{"flag": true}'
         bcli action widgets 7 cancel --namespace Custom.Ns --data @payload.json
+        bcli action documents 42 renderPdf --out document.pdf
     """
     validate_flags(result_out, result_fd)
+
+    # Vet the destination before the write gate and before the POST. An action
+    # can change BC; finding out afterwards that the payload has nowhere to go
+    # would leave the mutation applied and the bytes lost.
+    dest = prepare_out_path(out, overwrite=overwrite) if out is not None else None
 
     # ``--data`` and ``--no-data`` may not both be set. Either alone, or
     # neither (defaults to ``{}``), is fine — matches ``bcli post``.
@@ -169,8 +193,23 @@ def action_command(
                 idempotency_key=idempotency_key,
             ))
             cap.extract_record_id_from(result)
+
+            written: int | None = None
+            if dest is not None:
+                # Decode *before* emit_success: a return value we can't turn
+                # into bytes means the caller didn't get what they asked for,
+                # and the envelope has to say failed. The POST already
+                # happened either way — that's what the envelope records.
+                written = _write_decoded_payload(result, dest)
+
             cap.emit_success()
-            if result:
+
+            if dest is not None:
+                # Deliberately no format_output here: the payload is base64,
+                # and dumping it to stdout after writing the decoded file is
+                # noise at best and a wrecked pipe at worst.
+                console.print(f"[green]✓[/green] Decoded {written:,} bytes to {dest}")
+            elif result:
                 format_output([result], output_format)
             else:
                 # 204 No Content — common for actions that mutate but
@@ -203,6 +242,55 @@ async def _audited_post(endpoint, body, **kwargs):
 async def _execute_post(endpoint, body, **kwargs):
     async with state.make_async_client() as client:
         return await client.post(endpoint, body, **kwargs)
+
+
+def _decode_base64_payload(result: dict | str) -> bytes:
+    """Turn an action's return value into the raw bytes ``--out`` asked for.
+
+    OData carries binary in an action's ``value`` property as base64, so that
+    is the shape we decode. Anything else is reported rather than guessed at:
+    an action that returned no payload, or a structured result, is a sign the
+    caller wanted ``--result-out`` (or nothing at all), and writing a
+    zero-byte file would look exactly like a successful download.
+    """
+    import base64
+    import binascii
+
+    if not result:
+        raise BCLIError(
+            "action returned 204 No Content — nothing to write to --out. The action "
+            "ran; it just has no payload. Drop --out, or use --result-out to record "
+            "the invocation itself."
+        )
+
+    if isinstance(result, str):
+        payload = result
+    elif isinstance(result.get("value"), str):
+        payload = result["value"]
+    else:
+        keys = ", ".join(sorted(str(k) for k in result))
+        raise BCLIError(
+            f"action's return value has no base64 'value' property (keys: {keys}). "
+            f"--out handles a base64 payload only — use --result-out for the JSON "
+            f"result envelope, or drop --out to print the response."
+        )
+
+    try:
+        return base64.b64decode(payload.strip(), validate=True)
+    except (binascii.Error, ValueError) as e:
+        preview = payload.strip()[:32]
+        raise BCLIError(
+            f"action's return value is not valid base64 (starts with: {preview!r}): {e}. "
+            f"If you wanted the JSON response rather than a decoded payload, use "
+            f"--result-out or drop --out."
+        ) from e
+
+
+def _write_decoded_payload(result: dict | str, dest: Path) -> int:
+    """Decode the action's payload onto ``dest`` atomically; return byte count."""
+    raw = _decode_base64_payload(result)
+    atomic_write_bytes(dest, raw)
+    return len(raw)
 
 
 def _parse_data(data: str) -> dict:
