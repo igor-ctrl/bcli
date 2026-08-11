@@ -1,5 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+# Pinned: hatchling 1.32 emits Metadata-Version 2.5, which the twine inside
+# our pinned gh-action-pypi-publish rejects ("not a valid metadata version"),
+# failing the 0.8.1 upload. An unpinned build backend also makes builds
+# non-reproducible. Un-pin once the publish action ships a twine that
+# accepts 2.5 (v1.14.2+ is the candidate; verify before widening).
+requires = ["hatchling<1.32"]
 build-backend = "hatchling.build"
 
 [project]
