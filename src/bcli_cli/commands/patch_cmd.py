@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Optional
 
 import typer
 from rich.console import Console
 
+from bcli_cli._data_arg import parse_data_argument
 from bcli_cli._envelope_wrap import capture, validate_flags
 from bcli_cli._state import state
 from bcli_cli.output import format_output, print_context_banner
@@ -53,7 +53,7 @@ def patch_command(
 
     print_context_banner()
 
-    body = _parse_data(data)
+    body = parse_data_argument(data)
 
     with capture(
         method="PATCH",
@@ -121,12 +121,3 @@ async def _audited_patch(endpoint, record_id, body, **kwargs):
 async def _execute_patch(endpoint, record_id, body, **kwargs):
     async with state.make_async_client() as client:
         return await client.patch(endpoint, record_id, body, **kwargs)
-
-
-def _parse_data(data: str) -> dict:
-    if data.startswith("@"):
-        path = Path(data[1:])
-        if not path.is_file():
-            raise typer.BadParameter(f"File not found: {path}")
-        return json.loads(path.read_text(encoding="utf-8"))
-    return json.loads(data)

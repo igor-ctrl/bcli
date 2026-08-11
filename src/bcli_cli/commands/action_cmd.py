@@ -27,7 +27,6 @@ Spec-conformance notes:
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Optional
 
@@ -35,6 +34,7 @@ import typer
 from rich.console import Console
 
 from bcli.errors import BCLIError
+from bcli_cli._data_arg import parse_data_argument
 from bcli_cli._envelope_wrap import capture, validate_flags
 from bcli_cli._out_path import atomic_write_bytes, prepare_out_path
 from bcli_cli._state import state
@@ -142,7 +142,7 @@ def action_command(
             "Pass one or the other (or neither — empty body is the default).",
         )
 
-    body: dict = {} if data is None else _parse_data(data)
+    body: dict = {} if data is None else parse_data_argument(data)
 
     ns = namespace or DEFAULT_NAMESPACE
     # Compose the synthetic bound-action string. The registry validator
@@ -291,13 +291,3 @@ def _write_decoded_payload(result: dict | str, dest: Path, *, overwrite: bool) -
     raw = _decode_base64_payload(result)
     atomic_write_bytes(dest, raw, overwrite=overwrite)
     return len(raw)
-
-
-def _parse_data(data: str) -> dict:
-    """Parse --data argument: JSON string or @filename."""
-    if data.startswith("@"):
-        path = Path(data[1:])
-        if not path.is_file():
-            raise typer.BadParameter(f"File not found: {path}")
-        return json.loads(path.read_text(encoding="utf-8"))
-    return json.loads(data)

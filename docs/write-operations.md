@@ -14,6 +14,13 @@ bcli post customers --data @customer.json
 
 The `@` prefix reads JSON from a file. The response shows the created record.
 
+The `@` is required — a bare path (`--data customer.json`, no `@`) is parsed
+as inline JSON and rejected, it isn't silently treated as a file. If your
+shell strips quotes from inline JSON (PowerShell does this routinely), pass
+`--data @customer.json` instead of fighting the quoting. Either way, a
+malformed `--data` value fails with a usage error naming the problem, not a
+Python traceback.
+
 ## PATCH (Update)
 
 Update an existing record by ID:

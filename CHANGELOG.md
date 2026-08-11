@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-11
+
+### Fixed
+
+- `bcli post`, `bcli patch`, and `bcli action` no longer crash with a raw
+  `json.JSONDecodeError` traceback when `--data`/`-d` fails to parse. All
+  three commands had their own copy of the same unguarded `json.loads()`
+  call: a shell stripping the quotes out of an inline JSON literal (routine
+  in PowerShell — `{"a": 1}` arrives as `{a: 1}`) or a bare file path passed
+  without the `@` prefix both surfaced a ~25-line Python traceback instead
+  of an actionable error. The three copies are now one helper
+  (`bcli_cli._data_arg.parse_data_argument`), and every failure raises
+  `typer.BadParameter` instead: the message names the JSON error's
+  line/column/reason plus a short excerpt of what was received (never the
+  whole payload), and — when the input looks like a filesystem path or a
+  shell-mangled literal — adds a one-line hint pointing at `-d @file.json`.
+  A malformed `@file` now names the file in its error; a missing `@file`
+  still reports `File not found` unchanged.
+
 ## [0.8.0] - 2026-08-10
 
 ### Added
