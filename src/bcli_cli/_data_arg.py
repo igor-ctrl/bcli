@@ -40,8 +40,16 @@ def _looks_like_path(data: str) -> bool:
     """
     if data.startswith("{") or data.startswith("["):
         return False
-    if Path(data).is_file():
-        return True
+    # A malformed payload is arbitrary text, not a path: on Linux anything
+    # over 255 bytes raises ENAMETOOLONG here, and an embedded NUL raises
+    # ValueError. Letting either escape would put back exactly the raw
+    # traceback this module exists to prevent — for the *long* payloads that
+    # are the most likely to be malformed in the first place.
+    try:
+        if Path(data).is_file():
+            return True
+    except (OSError, ValueError):
+        return False
     if _WINDOWS_DRIVE_RE.match(data):
         return True
     if ("/" in data or "\\" in data) and data.lower().endswith(".json"):
@@ -84,10 +92,19 @@ def parse_data_argument(data: str) -> dict:
     """
     if data.startswith("@"):
         path = Path(data[1:])
-        if not path.is_file():
+        # Same guard as _looks_like_path: an over-long or NUL-bearing name
+        # raises here rather than returning False, and an unreadable file
+        # raises on read. Report them as bad input, not as a traceback.
+        try:
+            is_file = path.is_file()
+        except (OSError, ValueError):
+            is_file = False
+        if not is_file:
             raise typer.BadParameter(f"File not found: {path}")
         try:
             return json.loads(path.read_text(encoding="utf-8"))
+        except OSError as e:
+            raise typer.BadParameter(f"Could not read {path}: {e.strerror or e}") from e
         except json.JSONDecodeError as e:
             raise typer.BadParameter(
                 f"{path} is not valid JSON: {e.msg} "

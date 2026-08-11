@@ -165,3 +165,32 @@ class TestMalformedFile:
             pass
         except json.JSONDecodeError:
             pytest.fail("json.JSONDecodeError leaked instead of BadParameter")
+
+
+class TestPathProbeIsNeverFatal:
+    """The path heuristic must not let filesystem errors escape.
+
+    Regression: `Path(data).is_file()` raises OSError(ENAMETOOLONG) on Linux
+    for any argument over 255 bytes, and ValueError for an embedded NUL — so
+    a long malformed payload (exactly the kind most likely to be malformed)
+    produced a raw traceback, the very thing this module prevents. macOS does
+    not raise, so this only reproduces on Linux/CI.
+    """
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "x" * 300,                       # ENAMETOOLONG on Linux
+            "{" + "a" * 300,                 # long *and* JSON-ish
+            "/tmp/" + "y" * 300 + ".json",   # long, path-shaped
+            "bad\x00json",                   # embedded NUL -> ValueError
+        ],
+        ids=["long", "long-brace", "long-path-shaped", "nul-byte"],
+    )
+    def test_long_or_nul_payload_still_raises_bad_parameter(self, payload):
+        with pytest.raises(typer.BadParameter):
+            parse_data_argument(payload)
+
+    def test_long_at_path_reports_not_found_not_oserror(self):
+        with pytest.raises(typer.BadParameter, match="File not found"):
+            parse_data_argument("@" + "z" * 300)
