@@ -162,6 +162,37 @@ class TestDataHandling:
         with pytest.raises(typer.BadParameter):
             _run(data='{"x": 1}', no_data=True)
 
+    def test_malformed_inline_json_raises_bad_parameter_not_traceback(
+        self, cli_state, fake_client,
+    ):
+        """Regression: a mangled inline literal used to surface a raw
+        json.JSONDecodeError. It must come back as a usage error, and
+        the call must never reach the network."""
+        with pytest.raises(typer.BadParameter):
+            _run(data="{not valid json")
+        fake_client.post.assert_not_called()
+
+    def test_bare_file_path_without_at_prefix_hints_the_fix(
+        self, cli_state, fake_client, tmp_path: Path,
+    ):
+        f = tmp_path / "payload.json"
+        f.write_text('{"x": 1}', encoding="utf-8")
+        with pytest.raises(typer.BadParameter) as exc_info:
+            _run(data=str(f))
+        assert "looks like a file path" in str(exc_info.value)
+        assert f"-d @{f}" in str(exc_info.value)
+        fake_client.post.assert_not_called()
+
+    def test_malformed_at_file_names_the_file(
+        self, cli_state, fake_client, tmp_path: Path,
+    ):
+        f = tmp_path / "bad.json"
+        f.write_text("{not valid json", encoding="utf-8")
+        with pytest.raises(typer.BadParameter) as exc_info:
+            _run(data=f"@{f}")
+        assert str(f) in str(exc_info.value)
+        fake_client.post.assert_not_called()
+
 
 class TestProfileOverrides:
     def test_publisher_group_version_forwarded(self, cli_state, fake_client):

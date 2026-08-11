@@ -328,6 +328,14 @@ Create a new record.
 bcli post <endpoint> --data <json-or-@file> [--publisher ...] [--group ...] [--version ...]
 ```
 
+`--data`/`-d` takes a JSON literal or `@<path>` to read the body from a
+file — the `@` is required; a bare path (`--data payload.json`) is parsed
+as JSON and rejected, not silently treated as a file. On PowerShell,
+inline JSON often arrives with its quotes stripped by the shell before
+bcli ever sees it, so prefer `--data @payload.json` over an inline literal
+there. A malformed `--data` value fails with a usage error naming the
+problem, not a Python traceback.
+
 ---
 
 ## patch
@@ -337,6 +345,8 @@ Update an existing record.
 ```bash
 bcli patch <endpoint> <record-id> --data <json-or-@file> [--etag <tag>] [--publisher ...] [--group ...] [--version ...]
 ```
+
+Same `--data`/`-d` rules as `post` above.
 
 ---
 
