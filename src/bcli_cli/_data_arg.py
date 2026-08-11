@@ -102,7 +102,11 @@ def parse_data_argument(data: str) -> dict:
         if not is_file:
             raise typer.BadParameter(f"File not found: {path}")
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            # utf-8-sig, not utf-8: Windows PowerShell 5.1 writes a UTF-8 BOM for
+            # `Set-Content -Encoding utf8`, and json.loads rejects the BOM
+            # outright. utf-8-sig strips one if present and is identical to
+            # utf-8 when it is not, so this only ever accepts more.
+            return json.loads(path.read_text(encoding="utf-8-sig"))
         except OSError as e:
             raise typer.BadParameter(f"Could not read {path}: {e.strerror or e}") from e
         except json.JSONDecodeError as e:

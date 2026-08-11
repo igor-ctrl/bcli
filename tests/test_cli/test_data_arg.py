@@ -194,3 +194,35 @@ class TestPathProbeIsNeverFatal:
     def test_long_at_path_reports_not_found_not_oserror(self):
         with pytest.raises(typer.BadParameter, match="File not found"):
             parse_data_argument("@" + "z" * 300)
+
+
+class TestBomTolerantAtFile:
+    """A UTF-8 BOM in an @file must not be a hard failure.
+
+    Windows PowerShell 5.1 — the runtime install-real.ps1 targets — writes a
+    BOM for `Set-Content -Encoding utf8`, and `utf8NoBOM` only exists in
+    PowerShell 6+. Reading as plain utf-8 made json.loads reject the payload
+    with "Unexpected UTF-8 BOM" before any request went out, which broke the
+    documented Windows workflow for -d.
+    """
+
+    def test_bom_prefixed_file_parses(self, tmp_path):
+        p = tmp_path / "payload.json"
+        p.write_bytes(b'\xef\xbb\xbf{"bladeType": "FAN BLADE"}')
+        assert parse_data_argument(f"@{p}") == {"bladeType": "FAN BLADE"}
+
+    def test_plain_utf8_file_still_parses(self, tmp_path):
+        p = tmp_path / "payload.json"
+        p.write_bytes(b'{"bladeType": "HPT BLADE"}')
+        assert parse_data_argument(f"@{p}") == {"bladeType": "HPT BLADE"}
+
+    def test_non_ascii_without_bom_still_parses(self, tmp_path):
+        p = tmp_path / "payload.json"
+        p.write_text('{"note": "Grüße"}', encoding="utf-8")
+        assert parse_data_argument(f"@{p}") == {"note": "Grüße"}
+
+    def test_malformed_bom_file_still_reports_cleanly(self, tmp_path):
+        p = tmp_path / "payload.json"
+        p.write_bytes(b"\xef\xbb\xbf{not valid")
+        with pytest.raises(typer.BadParameter, match="is not valid JSON"):
+            parse_data_argument(f"@{p}")
