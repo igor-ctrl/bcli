@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlparse
 
 import msal
 
+from bcli.auth._msal_cache import MsalTokenCache
 from bcli.auth._token_cache import TokenCache
 from bcli.config._defaults import BC_SCOPE, ENTRA_AUTHORITY_BASE
 from bcli.errors import AuthError
@@ -103,10 +104,12 @@ class BrowserAuth:
         token_cache: TokenCache | None = None,
         login_hint: str | None = None,
         incognito: bool = False,
+        msal_cache: MsalTokenCache | None = None,
     ) -> None:
         self._tenant_id = tenant_id
         self._client_id = client_id
         self._token_cache = token_cache or TokenCache()
+        self._msal_cache = msal_cache or MsalTokenCache()
         self._authority = f"{ENTRA_AUTHORITY_BASE}/{tenant_id}"
         self._login_hint = login_hint
         self._incognito = incognito
@@ -118,13 +121,18 @@ class BrowserAuth:
         if cached:
             return cached
 
-        # Build MSAL public client
+        # Build MSAL public client. Passing token_cache is what lets the silent
+        # path below survive process exit: MSAL's default cache is in-memory,
+        # so without this get_accounts() is always empty in a fresh process and
+        # the user gets a browser prompt every time the ~1h access token dies.
         app = msal.PublicClientApplication(
             client_id=self._client_id,
             authority=self._authority,
+            token_cache=self._msal_cache.cache,
         )
 
-        # Try silent acquisition from MSAL in-memory cache
+        # Try silent acquisition — backed by the refresh token persisted by a
+        # previous invocation, not merely this process's memory.
         accounts = app.get_accounts()
         if accounts:
             result = app.acquire_token_silent(
@@ -132,7 +140,10 @@ class BrowserAuth:
                 account=accounts[0],
             )
             if result and "access_token" in result:
+                # A silent refresh usually rotates the refresh token; persist.
+                self._msal_cache.save()
                 self._cache_token(result)
+                logger.info("Renewed BC API token silently (no browser)")
                 return result["access_token"]
 
         # Start localhost server on an ephemeral port BEFORE generating the
@@ -289,6 +300,7 @@ class BrowserAuth:
             error_desc = result.get("error_description", result.get("error", "Unknown error"))
             raise AuthError(f"Token acquisition failed: {error_desc}", status_code=401)
 
+        self._msal_cache.save()
         self._cache_token(result)
         logger.info("Acquired BC API token via browser auth flow")
         return result["access_token"]
@@ -300,5 +312,13 @@ class BrowserAuth:
         self._token_cache.put(self._tenant_id, self._client_id, access_token, expires_in)
 
     def clear_cache(self) -> None:
-        """Clear cached tokens for this tenant/client."""
+        """Clear cached tokens for this tenant/client.
+
+        Clears the persisted MSAL cache too. Dropping only the access token
+        would leave the refresh token on disk, so a "logged out" user could
+        still renew silently.
+        """
         self._token_cache.clear(self._tenant_id, self._client_id)
+        self._msal_cache.remove_accounts(
+            client_id=self._client_id, authority=self._authority
+        )

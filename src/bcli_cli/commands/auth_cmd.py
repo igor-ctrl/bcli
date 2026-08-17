@@ -9,7 +9,9 @@ from rich.console import Console
 from rich.prompt import Prompt
 
 from bcli.auth._credentials import ClientCredentialsAuth
+from bcli.auth._msal_cache import MsalTokenCache
 from bcli.auth._token_cache import TokenCache
+from bcli.config._defaults import ENTRA_AUTHORITY_BASE
 from bcli_cli._state import state
 
 app = typer.Typer(no_args_is_help=True)
@@ -126,6 +128,21 @@ def status() -> None:
     else:
         console.print("[yellow]No valid cached token.[/yellow] Run 'bcli auth login'.")
 
+    # An expired access token is not the same as "you must sign in again" — if a
+    # refresh token is persisted, the next command renews without a prompt. Say
+    # so, otherwise the line above reads as more alarming than it is.
+    if profile.auth_method in ("browser", "device_code"):
+        has_account = MsalTokenCache().has_accounts(
+            client_id=profile.client_id or "",
+            authority=f"{ENTRA_AUTHORITY_BASE}/{profile.tenant_id}",
+        )
+        if has_account:
+            console.print("  Silent renewal: [green]available[/green] (refresh token cached)")
+        else:
+            console.print(
+                "  Silent renewal: [dim]unavailable[/dim] — next command prompts interactively"
+            )
+
     # Show keychain status
     if ClientCredentialsAuth.has_keyring():
         from bcli.auth._credentials import _try_keyring_get, KEYRING_SERVICE
@@ -146,7 +163,21 @@ def logout() -> None:
     profile = state.profile
     cache = TokenCache()
     cache.clear(profile.tenant_id, profile.client_id)
+
+    # Also forget the persisted MSAL cache. Clearing only the access token
+    # above would leave the refresh token on disk, so the next command would
+    # renew silently and "logout" would be a lie.
+    removed = MsalTokenCache().remove_accounts(
+        client_id=profile.client_id or "",
+        authority=f"{ENTRA_AUTHORITY_BASE}/{profile.tenant_id}",
+    )
+
     console.print(f"[green]✓[/green] Cleared tokens for profile '{state.active_profile_name}'")
+    if removed:
+        console.print(
+            f"  [dim]Signed out {removed} cached account(s); "
+            f"next command will prompt.[/dim]"
+        )
 
 
 @app.command("store-secret")

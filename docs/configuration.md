@@ -195,7 +195,8 @@ logging.
 | File | Purpose |
 |------|---------|
 | `~/.config/bcli/config.toml` | Main configuration |
-| `~/.config/bcli/tokens.json` | Cached auth tokens |
+| `~/.config/bcli/tokens.json` | Cached access tokens (~1h) |
+| `~/.config/bcli/msal_cache.json` | MSAL cache incl. refresh tokens — enables silent renewal |
 | `~/.config/bcli/registries/*.json` | Imported custom API registries |
 | `~/.config/bcli/queries/*.yaml` | Saved queries |
 | `~/.config/bcli/audit/*.jsonl` | Per-profile audit log (when `[audit] enabled = true`) |

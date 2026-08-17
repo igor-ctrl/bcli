@@ -52,9 +52,18 @@ class _FakeMSALApp:
 
     last_redirect_uri: str | None = None
 
-    def __init__(self, client_id: str | None = None, authority: str | None = None) -> None:
+    def __init__(
+        self,
+        client_id: str | None = None,
+        authority: str | None = None,
+        token_cache: object | None = None,
+        **kwargs: object,
+    ) -> None:
         self.client_id = client_id
         self.authority = authority
+        # BrowserAuth now hands MSAL a persistent cache so refresh tokens
+        # survive process exit. Capture it so a test can assert it was passed.
+        self.token_cache = token_cache
 
     def get_accounts(self) -> list:
         return []
@@ -93,6 +102,9 @@ def stub_msal(monkeypatch):
 
 
 def _make_auth() -> BrowserAuth:
+    # The MSAL cache path is redirected to tmp_path by the autouse
+    # ``_isolate_msal_cache`` fixture in tests/conftest.py, so this never
+    # touches the developer's real ~/.config/bcli/msal_cache.json.
     return BrowserAuth(
         tenant_id="tenant",
         client_id="client",

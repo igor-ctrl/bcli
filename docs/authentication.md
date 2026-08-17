@@ -85,13 +85,29 @@ and bcli caches the resulting delegated token.
 
 ## Token Cache
 
-After authentication, bcli caches access tokens at
-`~/.config/bcli/tokens.json`. Tokens are reused until shortly before expiry.
+bcli keeps two caches, both `0600` in a `0700` directory:
+
+| File | Holds | Lifetime |
+|------|-------|----------|
+| `~/.config/bcli/tokens.json` | access tokens | ~1 hour (5-minute expiry buffer) |
+| `~/.config/bcli/msal_cache.json` | MSAL's cache, incl. **refresh tokens** | until revoked or expired |
+
+The second one is what keeps interactive auth rare. When an access token
+expires, the `browser` and `device_code` flows renew silently from the cached
+refresh token instead of prompting — so you sign in about once per
+refresh-token lifetime, not once an hour.
 
 ```bash
-bcli auth status
-bcli auth logout
+bcli auth status   # reports whether silent renewal is available
+bcli auth logout   # clears both caches — after this, the next command prompts
 ```
+
+`bcli auth logout` deliberately removes the MSAL cache too. Dropping only the
+access token would leave the refresh token in place, so the next command would
+renew silently and the "logout" would not have logged you out.
+
+Client-credentials profiles are unaffected: a service principal mints a fresh
+token from its secret on demand and has no refresh token to persist.
 
 ## Common Failures
 
