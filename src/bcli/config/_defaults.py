@@ -22,8 +22,15 @@ CONFIG_DIR = Path.home() / ".config" / "bcli"
 # Config file
 CONFIG_FILE = CONFIG_DIR / "config.toml"
 
-# Token cache
+# Token cache — bcli's own store, holds only raw access tokens (~1h TTL).
 TOKEN_CACHE_FILE = CONFIG_DIR / "tokens.json"
+
+# MSAL's own serialized cache. Separate file, and deliberately so: this one
+# holds refresh tokens, which outlive access tokens by a long way and are what
+# make silent (non-interactive) renewal possible across CLI invocations. Kept
+# apart from TOKEN_CACHE_FILE so `bcli auth logout` can reason about the two
+# independently, and so an operator can delete one without nuking the other.
+MSAL_CACHE_FILE = CONFIG_DIR / "msal_cache.json"
 
 # Stable per-laptop installation id used as a low-cardinality dimension
 # on telemetry events. Generated once on first emission, then reused. The

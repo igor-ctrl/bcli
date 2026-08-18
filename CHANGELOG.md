@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Interactive auth no longer prompts roughly once an hour. `BrowserAuth` and
+  `DeviceCodeAuth` both built `msal.PublicClientApplication` without a
+  `token_cache=`, so MSAL's cache existed only in memory. In a fresh process —
+  which is every CLI invocation — `get_accounts()` returned `[]`, the
+  `acquire_token_silent()` call sitting in both flows was unreachable dead code,
+  and only the ~1h access token in `tokens.json` was persisted. The visible
+  effect was a full browser or device-code round trip every time that access
+  token expired, all day long.
+
+  MSAL's own cache is now persisted to `~/.config/bcli/msal_cache.json`
+  (`bcli.auth.MsalTokenCache`), written through the existing
+  `_secure_io.write_secret_file` path — atomic replace, `0600`, `0700` parent —
+  the same treatment `tokens.json` already gets. The refresh token survives
+  between invocations, so silent renewal works and interactive sign-in drops to
+  roughly once per refresh-token lifetime. A corrupt or version-skewed cache
+  degrades to "sign in again" rather than raising.
+
+  `bcli auth logout` and `clear_cache()` on both providers now clear this cache
+  too — dropping only the access token would have left a usable refresh token on
+  disk, so "logout" would not have logged the user out. `bcli auth status` gained
+  a line reporting whether silent renewal is available, since an expired access
+  token no longer implies an interactive prompt.
+
+  Client-credentials profiles are unaffected: a service principal mints tokens
+  from its secret on demand and has no refresh token to cache.
+
 ## [0.8.1] - 2026-08-11
 
 ### Fixed
