@@ -55,6 +55,7 @@ def test_make_bundle_produces_valid_manifest(tmp_path):
         version="2026.05.07-1",
         publisher="ops-bcli-bot",
         release_notes="initial",
+        output_path=tmp_path / "finance-2026.05.07-1.tar.gz",
     )
     assert out.is_file()
     assert manifest.profile == "finance"
