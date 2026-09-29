@@ -47,7 +47,8 @@ def _seed_bundle_source(tmp_path: Path) -> Path:
     return src
 
 
-def test_make_bundle_produces_valid_manifest(tmp_path):
+def test_make_bundle_produces_valid_manifest(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     src = _seed_bundle_source(tmp_path)
     out, manifest = make_bundle(
         src,
