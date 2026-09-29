@@ -7,7 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `bcli registry import --from-file` reads a registry file in JSON or YAML, or
+  a Postman collection. A file can set `publisher` / `group` / `version` once
+  at the top and list endpoints by bare entity-set name. See
+  `examples/custom-apis.yaml`.
+- `bcli registry import --from-metadata` takes `--publisher`, `--group` and
+  `--version` directly instead of requiring them in the profile.
+- `bcli registry export` writes a profile's custom endpoints to a portable
+  file for teammates, packs, or team bundles. Pack registry presets accept the
+  same format.
+- Registry entries accept the short keys `publisher` / `group` / `version`
+  alongside `api_publisher` / `api_group` / `api_version`.
+
+### Changed
+
+- `bcli registry import` merges with the existing registry instead of
+  overwriting it, so importing a second API route no longer drops the first
+  and no longer deletes pack-installed endpoints. Pass `--replace` for the old
+  behaviour (pack-installed endpoints are still kept).
+- A registry entry that names only part of a custom route is rejected instead
+  of silently routing to the standard v2.0 API.
+- `--from-postman` and `--from-json` still work but are hidden in favour of
+  `--from-file`.
+
 ### Fixed
+
+- The "endpoint not registered" hint suggested
+  `bcli registry import --from-metadata <metadata-url>`, which is not valid
+  syntax.
 
 - Interactive auth no longer prompts roughly once an hour. `BrowserAuth` and
   `DeviceCodeAuth` both built `msal.PublicClientApplication` without a

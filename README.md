@@ -60,8 +60,8 @@ bcli get customers --top 5
 bcli get vendors --filter "displayName eq 'Fabrikam'" --format json
 bcli get salesInvoices --select number,totalAmountIncludingTax --top 10
 
-# Import custom APIs from a Postman collection
-bcli registry import --from-postman ./my_collection.json
+# Register your own AL API pages straight from BC
+bcli registry import --from-metadata --publisher contoso --group integration --version v1.0
 
 # Query custom endpoints (route auto-resolved)
 bcli get myCustomEntities --top 5
@@ -70,7 +70,7 @@ bcli get myCustomEntities --top 5
 ## Features
 
 - **Works out of the box** — 79 standard BC v2.0 entities (customers, vendors, items, GL entries, ...) with zero configuration beyond auth
-- **Custom API support** — Import your custom API pages from Postman collections, JSON, or live `$metadata`
+- **Custom API support** — Register your own AL API pages from live `$metadata`, a short YAML/JSON file, or a Postman collection, and share them with `bcli registry export`
 - **Three-tier endpoint resolution** — Custom registry -> standard v2.0 -> fuzzy suggestions
 - **Multi-company** — Assign aliases to companies and query across all entities
 - **OData query builder** — `--filter`, `--select`, `--expand`, `--orderby`, `--top`, `--skip` on every query

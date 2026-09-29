@@ -91,3 +91,39 @@ def test_load_pack_invalid_yaml(tmp_path: Path) -> None:
     (src / "pack.yaml").write_text("not: [valid", encoding="utf-8")
     with pytest.raises(PackLoadError, match="not valid YAML"):
         load_pack(src)
+
+
+def test_preset_in_registry_export_form(make_pack) -> None:
+    src = make_pack("demo")
+    (src / "presets").mkdir()
+    (src / "presets" / "apis.json").write_text(
+        '{"publisher": "contoso", "group": "integration", "version": "v1.0",'
+        ' "endpoints": ["shipmentTrackings", {"entity_set_name": "carrierRates"}]}',
+        encoding="utf-8",
+    )
+    manifest = (src / "pack.yaml").read_text(encoding="utf-8")
+    (src / "pack.yaml").write_text(
+        manifest.replace("contents: {}", "contents:\n  registry_presets: [apis.json]"),
+        encoding="utf-8",
+    )
+
+    presets = {p.name: p.body for p in load_pack(src).contents.registry_presets}
+
+    assert set(presets) == {"shipmentTrackings", "carrierRates"}
+    assert presets["shipmentTrackings"]["api_publisher"] == "contoso"
+    assert presets["carrierRates"]["api_version"] == "v1.0"
+
+
+def test_preset_with_partial_route_is_rejected(make_pack) -> None:
+    src = make_pack("demo")
+    (src / "presets").mkdir()
+    (src / "presets" / "apis.json").write_text(
+        '{"publisher": "contoso", "endpoints": ["shipmentTrackings"]}', encoding="utf-8",
+    )
+    manifest = (src / "pack.yaml").read_text(encoding="utf-8")
+    (src / "pack.yaml").write_text(
+        manifest.replace("contents: {}", "contents:\n  registry_presets: [apis.json]"),
+        encoding="utf-8",
+    )
+    with pytest.raises(PackLoadError, match="shipmentTrackings"):
+        load_pack(src)

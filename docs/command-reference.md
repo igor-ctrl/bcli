@@ -223,12 +223,21 @@ bcli endpoint info <entity-set-name>
 
 ### registry import
 
-Import custom API endpoints.
+Add custom API endpoints to a profile's registry. Imports merge with what is
+already registered; pass `--replace` to start over. See [Custom APIs](custom-apis.md).
 
 ```bash
-bcli registry import --from-postman <file.json> [--profile <name>]
-bcli registry import --from-json <file.json> [--profile <name>]
-bcli registry import --from-metadata [--profile <name>]
+bcli registry import --from-metadata --publisher <p> --group <g> --version <v> [--profile <name>]
+bcli registry import --from-file <file.json|file.yaml|collection.json> [--profile <name>]
+```
+
+### registry export
+
+Write a profile's custom endpoints to a portable file that others can import
+with `--from-file`.
+
+```bash
+bcli registry export [-o <file.json>] [--profile <name>]
 ```
 
 ### registry list

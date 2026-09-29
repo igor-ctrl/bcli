@@ -147,7 +147,7 @@ def check_auth_mode(ctx: CheckContext) -> CheckResult:
             "auth",
             CheckStatus.FAIL,
             "auth_method missing",
-            hint="set `auth_method = \"device_code\"` for finance/technical profiles",
+            hint="set `auth_method` to \"browser\", \"device_code\" or \"client_credentials\"",
         )
     return CheckResult(
         "auth",
@@ -284,8 +284,8 @@ def check_registry(ctx: CheckContext) -> CheckResult:
             CheckStatus.FAIL,
             "scoped profile has zero custom endpoints",
             hint=(
-                f"import a registry: `bcli registry import --from-json"
-                f" <bundle.json> --profile {ctx.profile_name}`"
+                f"import a registry: `bcli registry import --from-file"
+                f" <registry.json> --profile {ctx.profile_name}`"
             ),
         )
     if total == 0:

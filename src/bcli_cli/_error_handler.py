@@ -84,8 +84,8 @@ def _config_init_hint() -> str:
 
 def _registry_import_hint() -> str:
     return (
-        "Run 'bcli registry import --from-metadata <metadata-url>' "
-        "or 'bcli registry import --from-postman <file.json>' "
+        "Run 'bcli registry import --from-metadata --publisher <p> --group <g> "
+        "--version <v>' or 'bcli registry import --from-file <file>' "
         "to register the endpoint."
     )
 

@@ -87,11 +87,11 @@ bcli endpoint info customers
 bcli endpoint fields customers
 ```
 
-For custom APIs, import the registry first:
+For your own custom API pages, register them once (see [Custom APIs](custom-apis.md)):
 
 ```bash
-bcli registry import --from-postman ./my_collection.json
-bcli get myCustomEntities --top 5
+bcli registry import --from-metadata --publisher contoso --group integration --version v1.0
+bcli get shipmentTrackings --top 5
 ```
 
 ## Test Your Connection

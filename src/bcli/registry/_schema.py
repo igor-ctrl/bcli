@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 CautionLevel = Literal["low", "medium", "high"]
 
@@ -19,12 +19,19 @@ class EndpointMetadata(BaseModel):
     key_field: str = "id"
     category: str = ""
 
-    # For standard v2.0 these are None (route is always /api/v2.0/)
-    api_publisher: str | None = None
-    api_group: str | None = None
-    api_version: str | None = None
+    # For standard v2.0 these are None (route is always /api/v2.0/).
+    # Hand-written registry files may use the short keys publisher/group/version.
+    api_publisher: str | None = Field(
+        default=None, validation_alias=AliasChoices("api_publisher", "publisher"),
+    )
+    api_group: str | None = Field(
+        default=None, validation_alias=AliasChoices("api_group", "group"),
+    )
+    api_version: str | None = Field(
+        default=None, validation_alias=AliasChoices("api_version", "version"),
+    )
 
-    # Domain classification: "standard", "finance", "technical"
+    # Domain classification used by SafeContext write rules (e.g. "standard", "finance")
     domain: str = "standard"
 
     # Caution level for agent driving — "low" (plain CRUD), "medium"
@@ -57,4 +64,4 @@ class EndpointMetadata(BaseModel):
             return f"{self.api_publisher}/{self.api_group}/{self.api_version}"
         return "v2.0 (standard)"
 
-    model_config = {"extra": "allow"}
+    model_config = {"extra": "allow", "populate_by_name": True}

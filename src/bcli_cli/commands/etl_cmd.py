@@ -32,7 +32,7 @@ def list_entities(
 
     if not entities:
         console.print(f"[yellow]No custom endpoints found for profile '{profile}'.[/yellow]")
-        console.print("[dim]Import endpoints first: bcli registry import --from-postman <file>[/dim]")
+        console.print("[dim]Import endpoints first: bcli registry import --from-file <file>[/dim]")
         raise typer.Exit()
 
     table = Table(title=f"ETL Entities — profile: {profile}")
@@ -106,7 +106,7 @@ def sync(
     available = load_entities_from_bcli_registry(profile, custom_only=not include_standard)
     if not available:
         console.print(f"[yellow]No custom endpoints found for profile '{profile}'.[/yellow]")
-        console.print("[dim]Import endpoints first: bcli registry import --from-postman <file>[/dim]")
+        console.print("[dim]Import endpoints first: bcli registry import --from-file <file>[/dim]")
         raise typer.Exit()
 
     sync_count = len(entity_list) if entity_list else len(available)

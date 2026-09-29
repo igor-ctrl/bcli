@@ -32,6 +32,7 @@ from bcli.packs._protocol import (
     TARGET_AGENTS,
     VALID_TARGETS,
 )
+from bcli.registry._importers import parse_endpoint_list
 
 
 class PackLoadError(Exception):
@@ -261,11 +262,21 @@ def _load_presets(spec: Any, *, root: Path) -> list[PackRegistryPreset]:
             raise PackLoadError(
                 f"{root}: registry preset {file!r}: expected JSON object"
             )
-        # A preset file holds one or more endpoints. Support both
-        # forms: {"endpoints": {name: body}} and a single endpoint as
-        # the top-level object.
+        # A preset file holds one or more endpoints. Supported forms:
+        # {"endpoints": {name: body}}, the `bcli registry export` list
+        # form {"endpoints": [...]}, and a single endpoint as the
+        # top-level object.
         endpoints = data.get("endpoints")
-        if isinstance(endpoints, dict):
+        if isinstance(endpoints, list):
+            try:
+                parsed = parse_endpoint_list(data)
+            except ValueError as e:
+                raise PackLoadError(f"{root}: registry preset {file!r}: {e}") from e
+            for ep in parsed:
+                out.append(PackRegistryPreset(
+                    name=ep.entity_set_name, body=ep.model_dump(exclude_none=True),
+                ))
+        elif isinstance(endpoints, dict):
             for name, body in endpoints.items():
                 if not isinstance(body, dict):
                     raise PackLoadError(

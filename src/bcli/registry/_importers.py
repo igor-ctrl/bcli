@@ -1,4 +1,4 @@
-"""Import endpoints from Postman collections, JSON files, and $metadata."""
+"""Import endpoints from registry files (JSON/YAML), Postman collections, and $metadata."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+
+import yaml
 
 from bcli.config._defaults import REGISTRIES_DIR
 from bcli.registry._schema import CautionLevel, EndpointMetadata
@@ -183,25 +185,88 @@ def import_from_postman(postman_file: Path) -> list[EndpointMetadata]:
     return sorted(endpoints.values(), key=lambda e: e.entity_set_name)
 
 
-def import_from_json(json_file: Path) -> list[EndpointMetadata]:
-    """Import endpoints from a raw JSON registry file.
+_ROUTE_KEYS = (
+    ("api_publisher", "publisher"),
+    ("api_group", "group"),
+    ("api_version", "version"),
+)
 
-    Supports two formats:
-    1. bcli format: {"endpoints": [...]}
-    2. bcmcp format: {"finance": [...], "technical": [...], ...}
+
+def import_from_file(path: Path) -> list[EndpointMetadata]:
+    """Import endpoints from a JSON or YAML registry file.
+
+    Supports two layouts:
+
+    1. bcli format — ``{"endpoints": [...]}``. Route keys
+       (``publisher``/``group``/``version``, or their ``api_*`` spellings)
+       may be set once at the top level and are inherited by every entry,
+       and an entry may be just an entity-set name::
+
+           publisher: contoso
+           group: integration
+           version: v1.0
+           endpoints:
+             - shipmentTrackings
+             - entity_set_name: carrierRates
+               supports: [GET, POST]
+
+    2. Grouped format — ``{"<api_group>": [...], ...}``.
+
+    Raises ``ValueError`` if an entry names only part of a custom route.
     """
-    raw = json.loads(json_file.read_text(encoding="utf-8"))
-    endpoints: list[EndpointMetadata] = []
+    text = path.read_text(encoding="utf-8-sig")
+    if path.suffix.lower() in (".yaml", ".yml"):
+        raw = yaml.safe_load(text)
+    else:
+        raw = json.loads(text)
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path}: top level must be a mapping")
 
-    # bcli format
     if "endpoints" in raw:
-        for entry in raw["endpoints"]:
-            # Backfill caution from heuristic when the source file omits it.
-            entry.setdefault("caution", _infer_caution(entry.get("entity_set_name", "")))
-            endpoints.append(EndpointMetadata.model_validate(entry))
-        return endpoints
+        return parse_endpoint_list(raw)
+    return _import_grouped(raw)
 
-    # bcmcp format (grouped by api_group)
+
+def import_from_json(json_file: Path) -> list[EndpointMetadata]:
+    """Import endpoints from a registry file. See :func:`import_from_file`."""
+    return import_from_file(json_file)
+
+
+def parse_endpoint_list(raw: dict) -> list[EndpointMetadata]:
+    defaults: dict[str, str] = {}
+    for canonical, short in _ROUTE_KEYS:
+        value = raw.get(canonical) or raw.get(short)
+        if value:
+            defaults[canonical] = value
+
+    endpoints: list[EndpointMetadata] = []
+    for item in raw["endpoints"] or []:
+        entry = {"entity_set_name": item} if isinstance(item, str) else dict(item)
+        for canonical, short in _ROUTE_KEYS:
+            if short in entry and canonical not in entry:
+                entry[canonical] = entry.pop(short)
+        entry = {**defaults, **entry}
+        name = entry.get("entity_set_name", "")
+        if not name:
+            raise ValueError(f"endpoint entry is missing entity_set_name: {item!r}")
+
+        route = [entry.get(canonical) for canonical, _ in _ROUTE_KEYS]
+        if any(route) and not all(route):
+            raise ValueError(
+                f"endpoint '{name}' needs all of publisher, group and version"
+                " (set them on the entry or once at the top of the file)"
+            )
+        if all(route):
+            entry.setdefault("entity_name", _singularize(name))
+            entry.setdefault("key_field", "systemId")
+            entry.setdefault("category", entry["api_group"])
+        entry.setdefault("caution", _infer_caution(name))
+        endpoints.append(EndpointMetadata.model_validate(entry))
+    return endpoints
+
+
+def _import_grouped(raw: dict) -> list[EndpointMetadata]:
+    endpoints: list[EndpointMetadata] = []
     for group_name, items in raw.items():
         if not isinstance(items, list):
             continue
@@ -233,20 +298,65 @@ def save_custom_registry(
     profile_name: str,
     endpoints: list[EndpointMetadata],
     source: str = "import",
+    *,
+    replace: bool = False,
 ) -> Path:
-    """Save imported endpoints as a custom registry for a profile."""
+    """Save imported endpoints into a profile's custom registry.
+
+    Merges by entity-set name (case-insensitive) with what is already
+    there, so importing a second API group keeps the first. With
+    ``replace=True`` previously imported endpoints are dropped, but
+    entries installed by a pack (``source_pack``) are kept — the pack's
+    ledger still owns them.
+    """
     REGISTRIES_DIR.mkdir(parents=True, exist_ok=True)
     registry_file = REGISTRIES_DIR / f"{profile_name}.json"
+
+    merged: dict[str, dict] = {}
+    if registry_file.is_file():
+        existing = json.loads(registry_file.read_text(encoding="utf-8"))
+        for entry in existing.get("endpoints") or []:
+            if not isinstance(entry, dict) or not entry.get("entity_set_name"):
+                continue
+            if replace and not entry.get("source_pack"):
+                continue
+            merged[entry["entity_set_name"].lower()] = entry
+    for ep in endpoints:
+        merged[ep.entity_set_name.lower()] = ep.model_dump(exclude_none=True)
 
     data = {
         "source": source,
         "imported_at": datetime.now(timezone.utc).isoformat(),
-        "endpoint_count": len(endpoints),
-        "endpoints": [ep.model_dump(exclude_none=True) for ep in endpoints],
+        "endpoint_count": len(merged),
+        "endpoints": sorted(merged.values(), key=lambda e: e["entity_set_name"].lower()),
     }
 
     registry_file.write_text(json.dumps(data, indent=2))
     return registry_file
+
+
+def export_custom_registry(profile_name: str) -> dict:
+    """Return a profile's custom endpoints in the portable bcli format.
+
+    The result can be written to a file and imported on another machine
+    with ``bcli registry import --from-file``.
+    """
+    registry_file = REGISTRIES_DIR / f"{profile_name}.json"
+    if not registry_file.is_file():
+        return {"endpoints": []}
+    raw = json.loads(registry_file.read_text(encoding="utf-8"))
+    endpoints = []
+    for entry in raw.get("endpoints") or []:
+        if not isinstance(entry, dict):
+            continue
+        meta = EndpointMetadata.model_validate(entry)
+        if not meta.is_custom:
+            continue
+        dumped = meta.model_dump(exclude_none=True)
+        dumped.pop("source_pack", None)
+        dumped.pop("pack_version", None)
+        endpoints.append(dumped)
+    return {"endpoints": endpoints}
 
 
 async def import_from_metadata(
