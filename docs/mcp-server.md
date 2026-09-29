@@ -181,7 +181,7 @@ often cheaper because Claude renders compact markdown tables directly without
 the JSON serialization overhead. Use the right tool for the shape of the
 question.
 
-## Future: a Beautech-specific MCP (separate package)
+## Domain-specific MCPs (separate packages)
 
 The OSS `bcli-mcp` is intentionally generic. Domain-specific MCPs that combine
 BC OData with cross-system data (legal docs, market intel, fleet analytics)

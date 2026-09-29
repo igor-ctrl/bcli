@@ -214,9 +214,9 @@ warning — extraction never crashes the CLI on a config mistake.
 - Both built-ins accept the same schema. Switching is a one-line
   config change; you can iterate a schema cheaply on one provider and
   promote with the other.
-- Aviation/regulated data: pick the provider with the residency /
-  compliance posture your org accepts. Neither built-in routes through
-  Beautech infrastructure — your API key, your traffic.
+- Regulated data: pick the provider with the residency / compliance
+  posture your org accepts. Neither built-in routes through any
+  bcli-operated infrastructure — your API key, your traffic.
 - Cost: at time of writing, both providers price PDF input in the same
   ballpark for short documents. Long tabular reports tend to favor
   whichever provider has the cheaper input-token rate.

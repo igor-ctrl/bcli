@@ -255,7 +255,7 @@ def _format_records(records: list[dict[str, Any]]) -> None:
 
         record 1
           systemId           : b1fc5e63-…
-          engineSerialNumber : 194108
+          engineSerialNumber : 100002
           engineType         : CF34-8C
           …
 

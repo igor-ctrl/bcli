@@ -273,7 +273,7 @@ class TestBCErrorHints:
     def test_property_not_found_emits_endpoint_fields_hint(self):
         url = (
             "https://api.businesscentral.dynamics.com/v2.0/Production/api/"
-            "beautech/technical/v1.5/companies(abc123)/preservationStatuses"
+            "contoso/technical/v1.5/companies(abc123)/preservationStatuses"
         )
         bc_message = (
             "Could not find a property named 'postingDate' on type "
@@ -322,7 +322,7 @@ class TestBCErrorHints:
         with pytest.raises(ValidationError) as exc:
             await transport.get(
                 "https://api.businesscentral.dynamics.com/v2.0/Production/api/"
-                "beautech/technical/v1.5/companies(abc)/preservationStatuses"
+                "contoso/technical/v1.5/companies(abc)/preservationStatuses"
             )
 
         assert "bcli endpoint fields preservationStatuses" in str(exc.value)

@@ -14,8 +14,8 @@ def test_expand_query_resolves_param_references():
         "filter": "engineSerialNumber eq '${{ params.esn }}'",
         "top": 24,
     }
-    resolved = expand_query(spec, {"esn": "193208"})
-    assert resolved.filter == "engineSerialNumber eq '193208'"
+    resolved = expand_query(spec, {"esn": "100001"})
+    assert resolved.filter == "engineSerialNumber eq '100001'"
     assert resolved.endpoint == "engineUtilizations"
     assert resolved.top == 24
 
@@ -61,8 +61,8 @@ def test_expand_query_neutralises_injection_in_filter():
         "endpoint": "engineUtilizations",
         "filter": "engineSerialNumber eq '${{ params.esn }}'",
     }
-    resolved = expand_query(spec, {"esn": "193208' or 1 eq 1--"})
-    assert resolved.filter == "engineSerialNumber eq '193208'' or 1 eq 1--'"
+    resolved = expand_query(spec, {"esn": "100001' or 1 eq 1--"})
+    assert resolved.filter == "engineSerialNumber eq '100001'' or 1 eq 1--'"
     assert resolved.filter.count("'") % 2 == 0
 
 

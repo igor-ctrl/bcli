@@ -47,7 +47,7 @@ redundant flags that the profile + registry already supply.
 
 ```bash
 # ❌ Don't write this:
-bcli -c LLC get fixedAssets --publisher beautech --group finance --version v1.5 --all -f json
+bcli -c LLC get fixedAssets --publisher contoso --group finance --version v1.5 --all -f json
 
 # ✅ Write this:
 bcli -c LLC get fixedAssets
@@ -55,7 +55,7 @@ bcli -c LLC get fixedAssets
 
 Why each flag was wrong:
 
-- `--publisher beautech --group finance --version v1.5` — the
+- `--publisher contoso --group finance --version v1.5` — the
   registry resolves these automatically. Only pass them if the
   endpoint isn't in the registry (and even then, prefer importing it).
 - `--all` — pulls **every** page. Most asks need `--top 5` or no

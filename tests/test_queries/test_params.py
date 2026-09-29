@@ -35,7 +35,7 @@ def test_resolve_params_required_missing_raises():
 
 def test_resolve_params_required_supplied():
     declared = {"esn": {"required": True}}
-    assert resolve_params(declared, {"esn": 193208}) == {"esn": 193208}
+    assert resolve_params(declared, {"esn": 100001}) == {"esn": 100001}
 
 
 def test_resolve_params_none_declared_passes_supplied_through_unvalidated():
@@ -85,7 +85,7 @@ class TestParamValidation:
 
     def test_string_pattern_accepts_match(self):
         declared = {"airline": {"required": True, "type": "string", "pattern": r"^[A-Z0-9]{2,8}$"}}
-        assert resolve_params(declared, {"airline": "AIRNORTH"}) == {"airline": "AIRNORTH"}
+        assert resolve_params(declared, {"airline": "ACMEAIR"}) == {"airline": "ACMEAIR"}
 
     def test_string_pattern_rejects_non_match(self):
         declared = {"airline": {"required": True, "type": "string", "pattern": r"^[A-Z0-9]{2,8}$"}}
@@ -95,7 +95,7 @@ class TestParamValidation:
     def test_string_pattern_rejects_injection_attempt(self):
         declared = {"esn": {"required": True, "type": "string", "pattern": r"^\d{4,8}$"}}
         with pytest.raises(QueryParamError):
-            resolve_params(declared, {"esn": "193208' or 1 eq 1--"})
+            resolve_params(declared, {"esn": "100001' or 1 eq 1--"})
 
     def test_enum_accepts_valid(self):
         declared = {"status": {"required": True, "enum": ["Open", "Posted"]}}

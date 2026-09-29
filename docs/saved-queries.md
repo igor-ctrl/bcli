@@ -107,7 +107,7 @@ queries:
       airline:
         required: false
         type: string
-        enum: ["AIRNORTH", "QANTAS", "VIRGIN"]
+        enum: ["ACMEAIR", "CONTOSO", "FABRIKAM"]
     filter: "engineSerialNumber eq '${{ params.esn }}'"
     orderby: "asOfDate desc"
     top: "${{ params.limit }}"
@@ -117,7 +117,7 @@ queries:
 
 When a string-typed param is interpolated into the `filter:` field, `bcli`
 applies OData v4 single-quote escaping (`'` → `''`) so a value like
-`193208' or 1 eq 1--` cannot break out of the surrounding string literal.
+`100001' or 1 eq 1--` cannot break out of the surrounding string literal.
 This escape is scoped to the filter context — `select`, `orderby`, `top`,
 `skip`, `all`, and `endpoint` keep raw values, since they don't sit inside
 OData string literals.

@@ -13,36 +13,36 @@ from bcli_cli.output._formatters import (
 def _wide_record() -> dict:
     """30-column engine record — the canonical "too wide for table" case."""
     return {
-        "systemId": "b1fc5e63-e150-ef11-bfe3-000d3a7051ef",
-        "engineSerialNumber": "194108",
+        "systemId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "engineSerialNumber": "100002",
         "engineType": "CF34-8C",
         "engineModel": "CF34-8C5",
         "thrustRating": "8C5",
-        "initialDate": "2024-05-31",
-        "lastOperationDate": "2025-02-04",
-        "initialEngineTsn": "16523.96",
-        "intialEngineCsn": "11440",
-        "fc": "135",
-        "fh": "252.12",
+        "initialDate": "2024-01-01",
+        "lastOperationDate": "2025-01-01",
+        "initialEngineTsn": "10000.00",
+        "intialEngineCsn": "8000",
+        "fc": "100",
+        "fh": "200.00",
         "lastInvoiceDate": "2026-01-31",
-        "currentTsn": "17645.24",
-        "currentCsn": "12236",
-        "limiter": "12753",
-        "tspr": "17645.24",
-        "cspr": "12236",
+        "currentTsn": "10200.00",
+        "currentCsn": "8100",
+        "limiter": "9000",
+        "tspr": "10200.00",
+        "cspr": "8100",
         "tslsv": "0",
         "cslsv": "0",
-        "aprCycles": "11",
+        "aprCycles": "10",
         "qec": "Neutral",
-        "ittMargin": "35",
-        "ittMarginNotes": "May-2025 ECM",
+        "ittMargin": "30",
+        "ittMarginNotes": "Example ECM note",
         "serviceable": "Yes",
-        "notes": "Sold to United on Mar 18, 2026",
+        "notes": "Example note",
         "lessee": "",
         "operator": "",
-        "engineStatus": "Sold",
-        "location": "GO JET",
-        "systemModifiedAt": "2026-04-06T14:19:25.347Z",
+        "engineStatus": "Available",
+        "location": "Example Location",
+        "systemModifiedAt": "2026-01-01T00:00:00.000Z",
     }
 
 
@@ -68,7 +68,7 @@ class TestAutoRecords:
     def test_format_output_promotes_table_to_records_for_wide_single(self, capsys):
         format_output([_wide_record()], fmt="table")
         out = capsys.readouterr().out
-        assert "engineSerialNumber : 194108" in out
+        assert "engineSerialNumber : 100002" in out
         assert "engineType         : CF34-8C" in out
 
     def test_format_output_promotes_markdown_to_records_for_wide_single(self, capsys):
@@ -76,12 +76,12 @@ class TestAutoRecords:
         out = capsys.readouterr().out
         # Markdown table never appears — the auto-fallback fires first.
         assert "| systemId" not in out
-        assert "engineSerialNumber : 194108" in out
+        assert "engineSerialNumber : 100002" in out
 
     def test_explicit_records_format_works(self, capsys):
         format_output([_wide_record()], fmt="records")
         out = capsys.readouterr().out
-        assert "engineSerialNumber : 194108" in out
+        assert "engineSerialNumber : 100002" in out
 
     def test_records_alias_r_works(self, capsys):
         format_output([{"a": "1", "b": "2"}], fmt="r")
@@ -94,7 +94,7 @@ class TestAutoRecords:
         out = capsys.readouterr().out
         # CSV header line ends with a comma-separated set, not "name : value".
         assert "engineSerialNumber" in out
-        assert "engineSerialNumber : 194108" not in out
+        assert "engineSerialNumber : 100002" not in out
 
     def test_explicit_format_disables_auto_promote(self, capsys):
         """`-f markdown` is a contract; honor it even on a wide single row."""
@@ -102,7 +102,7 @@ class TestAutoRecords:
         out = capsys.readouterr().out
         # Markdown header pipe present, vertical view absent.
         assert "| systemId" in out
-        assert "engineSerialNumber : 194108" not in out
+        assert "engineSerialNumber : 100002" not in out
 
 
 class TestRecordsRendering:

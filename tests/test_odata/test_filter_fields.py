@@ -11,7 +11,7 @@ from bcli.odata._filter_fields import (
 
 class TestExtractFieldReferences:
     def test_simple_eq(self):
-        refs = extract_field_references("engineSerialNumber eq '193208'")
+        refs = extract_field_references("engineSerialNumber eq '100001'")
         assert refs == ["engineSerialNumber"]
 
     def test_strips_string_literals(self):
@@ -24,7 +24,7 @@ class TestExtractFieldReferences:
 
     def test_compound_filter(self):
         refs = extract_field_references(
-            "engineSerialNumber eq '193208' and tailNo eq 'VH-ANO'"
+            "engineSerialNumber eq '100001' and tailNo eq 'N12345'"
         )
         assert refs == ["engineSerialNumber", "tailNo"]
 
@@ -94,12 +94,12 @@ class TestValidateFilterFields:
 
     def test_passes_when_all_known(self):
         assert validate_filter_fields(
-            "engineSerialNumber eq '193208' and tailNo eq 'VH-ANO'",
+            "engineSerialNumber eq '100001' and tailNo eq 'N12345'",
             self.KNOWN,
         ) is None
 
     def test_flags_unknown(self):
-        result = validate_filter_fields("esn eq '193208'", self.KNOWN)
+        result = validate_filter_fields("esn eq '100001'", self.KNOWN)
         assert result is not None
         msg, unknown = result
         assert unknown == ["esn"]
@@ -109,7 +109,7 @@ class TestValidateFilterFields:
         assert "engineSerialNumber" in msg or "Did you mean" not in msg
 
     def test_flags_typo_with_close_match(self):
-        result = validate_filter_fields("tailNumber eq 'VH-ANO'", self.KNOWN)
+        result = validate_filter_fields("tailNumber eq 'N12345'", self.KNOWN)
         assert result is not None
         msg, _ = result
         # 'tailNumber' is close to 'tailNo' via difflib.

@@ -75,13 +75,13 @@ def test_resolve_params_required_missing_exits():
 
 def test_resolve_params_required_supplied():
     declared = {"esn": {"required": True}}
-    resolved = _resolve_params(declared, ["esn=193208"])
-    assert resolved == {"esn": 193208}  # YAML coerces digits
+    resolved = _resolve_params(declared, ["esn=100001"])
+    assert resolved == {"esn": 100001}  # YAML coerces digits
 
 
 def test_resolve_params_string_value():
-    resolved = _resolve_params({"airline": {"required": True}}, ["airline=AIRNORTH"])
-    assert resolved == {"airline": "AIRNORTH"}
+    resolved = _resolve_params({"airline": {"required": True}}, ["airline=ACMEAIR"])
+    assert resolved == {"airline": "ACMEAIR"}
 
 
 def test_resolve_params_invalid_format_exits():
@@ -98,8 +98,8 @@ def test_expand_query_resolves_param_references():
         "filter": "engineSerialNumber eq '${{ params.esn }}'",
         "top": 24,
     }
-    expanded = _expand_query(spec, {"esn": "193208"})
-    assert expanded["filter"] == "engineSerialNumber eq '193208'"
+    expanded = _expand_query(spec, {"esn": "100001"})
+    assert expanded["filter"] == "engineSerialNumber eq '100001'"
     assert expanded["endpoint"] == "engineUtilizations"
     assert expanded["top"] == 24
 
@@ -130,10 +130,10 @@ def test_expand_query_neutralises_injection_in_filter():
         "endpoint": "engineUtilizations",
         "filter": "engineSerialNumber eq '${{ params.esn }}'",
     }
-    expanded = _expand_query(spec, {"esn": "193208' or 1 eq 1--"})
+    expanded = _expand_query(spec, {"esn": "100001' or 1 eq 1--"})
     # The injected quote is doubled, so the literal stays well-formed and the
     # ``or 1 eq 1--`` ends up inside the string instead of as new operators.
-    assert expanded["filter"] == "engineSerialNumber eq '193208'' or 1 eq 1--'"
+    assert expanded["filter"] == "engineSerialNumber eq '100001'' or 1 eq 1--'"
     assert expanded["filter"].count("'") % 2 == 0
 
 
@@ -199,8 +199,8 @@ class TestParamValidation:
 
     def test_string_pattern_accepts_match(self):
         declared = {"airline": {"required": True, "type": "string", "pattern": r"^[A-Z0-9]{2,8}$"}}
-        resolved = _resolve_params(declared, ["airline=AIRNORTH"])
-        assert resolved == {"airline": "AIRNORTH"}
+        resolved = _resolve_params(declared, ["airline=ACMEAIR"])
+        assert resolved == {"airline": "ACMEAIR"}
 
     def test_string_pattern_rejects_non_match(self):
         declared = {"airline": {"required": True, "type": "string", "pattern": r"^[A-Z0-9]{2,8}$"}}
@@ -211,7 +211,7 @@ class TestParamValidation:
         """The injection example from the review fails the ESN pattern check."""
         declared = {"esn": {"required": True, "type": "string", "pattern": r"^\d{4,8}$"}}
         with pytest.raises(typer.Exit):
-            _resolve_params(declared, ["esn=193208' or 1 eq 1--"])
+            _resolve_params(declared, ["esn=100001' or 1 eq 1--"])
 
     def test_enum_accepts_valid(self):
         declared = {"status": {"required": True, "enum": ["Open", "Posted"]}}

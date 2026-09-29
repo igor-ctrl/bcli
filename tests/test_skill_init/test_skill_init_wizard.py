@@ -1,9 +1,8 @@
 """Tests for ``bcli skill init`` — Phase 7 wizard mechanism.
 
-The wizard is mechanism only. No Beautech-specific role content — the
+The wizard is mechanism only. No organization-specific role content — the
 OSS package emits an *empty* set of new-query proposals by default, and
-defers role-aware proposals to entry-point providers (``bcli-beautech-
-bootstrap`` ships one such provider). Tests here exercise the
+defers role-aware proposals to entry-point providers. Tests here exercise the
 mechanism: read describe, interview, project existing queries, write
 provenance-headed files atomically, refuse to write outside the allow-
 listed dirs.
@@ -514,13 +513,13 @@ class TestAtomicRollback:
         skill_init_cmd._commit_plan = original_commit
 
 
-# ─── 10. OSS mechanism emits no Beautech-specific role content ────
+# ─── 10. OSS mechanism emits no organization-specific role content ────
 
 
 class TestOssMechanismHasNoRoleContent:
     """Belt-and-braces: the OSS package's default new-query proposer
-    returns an empty list regardless of role. Beautech (or any third
-    party) plugs in via the ``bcli.skill_init.role_templates`` entry
+    returns an empty list regardless of role. Third parties plug in
+    via the ``bcli.skill_init.role_templates`` entry
     point group; nothing in this PR ships role-keyed BC entity
     affinities."""
 
