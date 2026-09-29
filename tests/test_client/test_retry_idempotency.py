@@ -5,10 +5,10 @@ GET that is free. For a POST, PATCH or DELETE it is not: the server may already
 have applied the request when the response was lost, so a retry duplicates a
 create or re-runs a business action.
 
-That is not theoretical for this SDK. Bound actions like the LLP-utilisation
-recalculation take no arguments and mutate on every invocation — there is no
-such thing as a harmless repeat. A single 503 from a gateway could recalculate
-twice, and nothing in the log would say so.
+That is not theoretical for this SDK. Bound actions like ``Microsoft.NAV.post``
+on a sales invoice take no arguments and mutate on every invocation — there is
+no such thing as a harmless repeat. A single 503 from a gateway could fire the
+action twice, and nothing in the log would say so.
 
 So retries are now allowed only when repeating the request is safe:
 

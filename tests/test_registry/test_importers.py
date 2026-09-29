@@ -23,14 +23,14 @@ def test_import_from_postman_synthetic_collection():
     groups = {f"{e.api_publisher}/{e.api_group}/{e.api_version}" for e in endpoints}
     assert "acme/finance/v1.0" in groups
     assert "acme/standard/v1.0" in groups
-    assert "acme/technical/v1.0" in groups
+    assert "acme/integration/v1.0" in groups
 
     # Specific entities parsed correctly
     names = {e.entity_set_name for e in endpoints}
     assert "glAccounts" in names
     assert "customers" in names
     assert "vendors" in names
-    assert "equipmentRecords" in names
+    assert "shipmentTrackings" in names
 
     # Methods collected (GL entries endpoint has POST)
     gl_entries = [e for e in endpoints if e.entity_set_name == "glEntries"]

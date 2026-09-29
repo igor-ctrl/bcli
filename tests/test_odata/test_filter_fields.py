@@ -11,8 +11,8 @@ from bcli.odata._filter_fields import (
 
 class TestExtractFieldReferences:
     def test_simple_eq(self):
-        refs = extract_field_references("engineSerialNumber eq '100001'")
-        assert refs == ["engineSerialNumber"]
+        refs = extract_field_references("customerNumber eq '10000'")
+        assert refs == ["customerNumber"]
 
     def test_strips_string_literals(self):
         refs = extract_field_references("displayName eq 'has eq inside'")
@@ -24,9 +24,9 @@ class TestExtractFieldReferences:
 
     def test_compound_filter(self):
         refs = extract_field_references(
-            "engineSerialNumber eq '100001' and tailNo eq 'N12345'"
+            "customerNumber eq '10000' and status eq 'Open'"
         )
-        assert refs == ["engineSerialNumber", "tailNo"]
+        assert refs == ["customerNumber", "status"]
 
     def test_function_calls_excluded(self):
         # Function name is reserved when followed by '(', but its arguments
@@ -59,20 +59,18 @@ class TestSuggestField:
         assert suggest_field("displayname", ["displayName", "name"]) == ["displayName"]
 
     def test_initialism_substring(self):
-        # 'esn' isn't close by edit-distance, but it's a substring of
-        # engineSerialNumber's lowercased form (e... s... n... → "engineserialnumber").
-        # The substring fallback handles this.
-        suggestions = suggest_field("esn", ["engineSerialNumber", "tailNo", "asOfDate"])
-        # Lowercased, "esn" appears as letters 'e','s','n' but not as a contiguous
-        # substring of "engineserialnumber". So the substring fallback only fires
-        # when needle IS contiguous. Skip: this case must rely on the user typing
-        # something close — guard the reasonable behaviour:
-        # 'tailno' → 'tailNo' contiguous.
+        # 'cn' isn't close by edit-distance to customerNumber, and although
+        # its letters appear in order in "customernumber" (c... n...), they
+        # aren't a contiguous substring. The substring fallback only fires
+        # when the needle IS contiguous, so this case must rely on the user
+        # typing something close — guard the reasonable behaviour:
+        suggestions = suggest_field("cn", ["customerNumber", "status", "dueDate"])
         assert isinstance(suggestions, list)
 
     def test_substring_fallback(self):
-        # "serial" is a contiguous substring of "engineSerialNumber".
-        assert suggest_field("serial", ["engineSerialNumber"]) == ["engineSerialNumber"]
+        # "cust" is too short for difflib to match "customerNumber", but it is
+        # a contiguous substring of it.
+        assert suggest_field("cust", ["customerNumber"]) == ["customerNumber"]
 
     def test_no_match(self):
         assert suggest_field("zzz", ["aaa", "bbb"]) == []
@@ -82,7 +80,7 @@ class TestSuggestField:
 
 
 class TestValidateFilterFields:
-    KNOWN = ["engineSerialNumber", "tailNo", "asOfDate", "efh", "efc"]
+    KNOWN = ["customerNumber", "invoiceDate", "dueDate", "status", "remainingAmount"]
 
     def test_returns_none_when_filter_empty(self):
         assert validate_filter_fields(None, self.KNOWN) is None
@@ -94,23 +92,23 @@ class TestValidateFilterFields:
 
     def test_passes_when_all_known(self):
         assert validate_filter_fields(
-            "engineSerialNumber eq '100001' and tailNo eq 'N12345'",
+            "customerNumber eq '10000' and status eq 'Open'",
             self.KNOWN,
         ) is None
 
     def test_flags_unknown(self):
-        result = validate_filter_fields("esn eq '100001'", self.KNOWN)
+        result = validate_filter_fields("cust eq '10000'", self.KNOWN)
         assert result is not None
         msg, unknown = result
-        assert unknown == ["esn"]
-        assert "esn" in msg
-        # The substring fallback finds 'engineSerialNumber' (contains 'esn').
+        assert unknown == ["cust"]
+        assert "cust" in msg
+        # The substring fallback finds 'customerNumber' (contains 'cust').
         # Either difflib or substring should produce *some* hint here.
-        assert "engineSerialNumber" in msg or "Did you mean" not in msg
+        assert "customerNumber" in msg or "Did you mean" not in msg
 
     def test_flags_typo_with_close_match(self):
-        result = validate_filter_fields("tailNumber eq 'N12345'", self.KNOWN)
+        result = validate_filter_fields("dueDateTime eq 2026-01-31", self.KNOWN)
         assert result is not None
         msg, _ = result
-        # 'tailNumber' is close to 'tailNo' via difflib.
-        assert "tailNo" in msg
+        # 'dueDateTime' is close to 'dueDate' via difflib.
+        assert "dueDate" in msg

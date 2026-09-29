@@ -37,12 +37,12 @@ queries:
   # enum are all enforced locally before the HTTP call.
   open-invoices-by-customer:
     description: Open sales invoices for a given customer
-    endpoint: customerSalesInvoices
+    endpoint: salesInvoices
     params:
       customer-id:
         required: true
         type: string
-        pattern: "^C[0-9]{5}$"   # rejects free-form text like "' or 1 eq 1--"
+        pattern: "^[0-9]{5}$"   # rejects free-form text like "10000' or 1 eq 1--"
       limit:
         default: 50
         type: integer

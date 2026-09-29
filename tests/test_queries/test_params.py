@@ -25,17 +25,17 @@ def test_resolve_params_supplied_overrides_default():
 
 
 def test_resolve_params_required_missing_raises():
-    declared = {"esn": {"required": True}}
+    declared = {"customer_no": {"required": True}}
     with pytest.raises(QueryParamError) as exc_info:
         resolve_params(declared, {})
-    assert exc_info.value.key == "esn"
+    assert exc_info.value.key == "customer_no"
     assert exc_info.value.kind == "missing_required"
-    assert "Missing required parameter 'esn'" in str(exc_info.value)
+    assert "Missing required parameter 'customer_no'" in str(exc_info.value)
 
 
 def test_resolve_params_required_supplied():
-    declared = {"esn": {"required": True}}
-    assert resolve_params(declared, {"esn": 100001}) == {"esn": 100001}
+    declared = {"customer_no": {"required": True}}
+    assert resolve_params(declared, {"customer_no": 10000}) == {"customer_no": 10000}
 
 
 def test_resolve_params_none_declared_passes_supplied_through_unvalidated():
@@ -49,9 +49,9 @@ def test_resolve_params_none_declared_and_none_supplied_is_empty():
 
 def test_resolve_params_unknown_supplied_keys_pass_through():
     """Params not in `declared` aren't validated but do end up in the result."""
-    declared = {"esn": {"required": True}}
-    resolved = resolve_params(declared, {"esn": "1", "extra": "kept"})
-    assert resolved == {"esn": "1", "extra": "kept"}
+    declared = {"customer_no": {"required": True}}
+    resolved = resolve_params(declared, {"customer_no": "1", "extra": "kept"})
+    assert resolved == {"customer_no": "1", "extra": "kept"}
 
 
 # ── validate_param via resolve_params (type/pattern/min/max/enum) ────────
@@ -84,18 +84,18 @@ class TestParamValidation:
         assert resolve_params(declared, {"limit": 50}) == {"limit": 50}
 
     def test_string_pattern_accepts_match(self):
-        declared = {"airline": {"required": True, "type": "string", "pattern": r"^[A-Z0-9]{2,8}$"}}
-        assert resolve_params(declared, {"airline": "ACMEAIR"}) == {"airline": "ACMEAIR"}
+        declared = {"currency": {"required": True, "type": "string", "pattern": r"^[A-Z]{3}$"}}
+        assert resolve_params(declared, {"currency": "USD"}) == {"currency": "USD"}
 
     def test_string_pattern_rejects_non_match(self):
-        declared = {"airline": {"required": True, "type": "string", "pattern": r"^[A-Z0-9]{2,8}$"}}
+        declared = {"currency": {"required": True, "type": "string", "pattern": r"^[A-Z]{3}$"}}
         with pytest.raises(QueryParamError):
-            resolve_params(declared, {"airline": "little caesars"})
+            resolve_params(declared, {"currency": "little caesars"})
 
     def test_string_pattern_rejects_injection_attempt(self):
-        declared = {"esn": {"required": True, "type": "string", "pattern": r"^\d{4,8}$"}}
+        declared = {"customer_no": {"required": True, "type": "string", "pattern": r"^\d{4,8}$"}}
         with pytest.raises(QueryParamError):
-            resolve_params(declared, {"esn": "100001' or 1 eq 1--"})
+            resolve_params(declared, {"customer_no": "10000' or 1 eq 1--"})
 
     def test_enum_accepts_valid(self):
         declared = {"status": {"required": True, "enum": ["Open", "Posted"]}}

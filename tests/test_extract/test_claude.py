@@ -33,18 +33,18 @@ def _list_schema(tmp_path: Path):
     return _schema(
         tmp_path,
         """
-name: "tags"
+name: "invoice-lines"
 prompt: "extract"
 list: true
 fields:
-  part_no:
+  item_no:
     type: string
     required: true
     description: "x"
 output:
-  endpoint: trackedParts
+  endpoint: purchaseInvoiceLines
   field_map:
-    partNo: part_no
+    lineObjectNumber: item_no
 """,
     )
 
@@ -81,15 +81,15 @@ def _response(records: list[dict[str, Any]]) -> SimpleNamespace:
 
 
 def test_extract_parses_tool_use_response(tmp_path: Path) -> None:
-    pdf = tmp_path / "blades.pdf"
+    pdf = tmp_path / "invoice.pdf"
     _make_pdf(pdf)
     schema = _list_schema(tmp_path)
 
     fake = _FakeAnthropic(
         _response(
             [
-                {"part_no": "PN-1", "source_pages": [1]},
-                {"part_no": "PN-2", "source_pages": [2]},
+                {"item_no": "1896-S", "source_pages": [1]},
+                {"item_no": "1906-S", "source_pages": [2]},
             ]
         )
     )
@@ -105,7 +105,7 @@ def test_extract_parses_tool_use_response(tmp_path: Path) -> None:
     result = extractor.extract(pdf, schema)
 
     assert len(result.records) == 2
-    assert result.records[0].fields == {"part_no": "PN-1"}
+    assert result.records[0].fields == {"item_no": "1896-S"}
     assert result.records[0].source_pages == (1,)
     assert result.input_tokens == 42
     assert result.output_tokens == 7
@@ -144,7 +144,7 @@ def test_extract_oversize_pdf_short_circuits_before_call(tmp_path: Path) -> None
 
 
 def test_missing_tool_use_raises(tmp_path: Path) -> None:
-    pdf = tmp_path / "blades.pdf"
+    pdf = tmp_path / "invoice.pdf"
     _make_pdf(pdf)
     schema = _list_schema(tmp_path)
     fake = _FakeAnthropic(
@@ -177,21 +177,21 @@ name: "single"
 prompt: "one"
 list: false
 fields:
-  part_no:
+  item_no:
     type: string
     required: true
     description: "x"
 output:
-  endpoint: trackedParts
+  endpoint: purchaseInvoiceLines
   field_map:
-    partNo: part_no
+    lineObjectNumber: item_no
 """,
     )
     fake = _FakeAnthropic(
         _response(
             [
-                {"part_no": "PN-1", "source_pages": [1]},
-                {"part_no": "PN-2", "source_pages": [2]},
+                {"item_no": "1896-S", "source_pages": [1]},
+                {"item_no": "1906-S", "source_pages": [2]},
             ]
         )
     )

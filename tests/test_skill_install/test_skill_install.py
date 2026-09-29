@@ -118,16 +118,16 @@ def _invoke(*args: str):
 def test_skill_install_creates_command_per_saved_query(isolated_home, cli_state):
     _write_queries(isolated_home, """
         queries:
-          utilization-by-esn:
-            description: Engine utilization for an ESN
-            categories: [aviation, daily-ops]
+          invoices-by-customer:
+            description: Sales invoices for a customer
+            categories: [sales, daily-ops]
             args:
-              - name: esn
+              - name: customer_no
                 type: string
-                example: "424322"
+                example: "10000"
                 required: true
-            endpoint: util_history
-            filter: "engine_serial eq '${{ args.esn }}'"
+            endpoint: salesInvoices
+            filter: "customerNumber eq '${{ args.customer_no }}'"
 
           customer-by-name:
             description: Look up a customer by display name
@@ -146,18 +146,18 @@ def test_skill_install_creates_command_per_saved_query(isolated_home, cli_state)
 
     cmds_dir = target / ".claude" / "commands"
     assert cmds_dir.is_dir()
-    util = cmds_dir / "bcli-utilization-by-esn.md"
+    invoices = cmds_dir / "bcli-invoices-by-customer.md"
     cust = cmds_dir / "bcli-customer-by-name.md"
-    assert util.is_file()
+    assert invoices.is_file()
     assert cust.is_file()
 
-    util_text = util.read_text(encoding="utf-8")
+    invoices_text = invoices.read_text(encoding="utf-8")
     # Frontmatter has a description.
-    assert "description: Engine utilization for an ESN" in util_text
+    assert "description: Sales invoices for a customer" in invoices_text
     # The body invokes ``bcli q ...`` with the args threaded positionally.
-    assert "bcli q utilization-by-esn esn=$1" in util_text
+    assert "bcli q invoices-by-customer customer_no=$1" in invoices_text
     # The body references --format json (agent-friendly).
-    assert "--format json" in util_text
+    assert "--format json" in invoices_text
 
     # customer-by-name has no explicit args list — installer derives one
     # from the params keys.
@@ -216,28 +216,28 @@ def test_skill_install_renders_argument_hint_in_frontmatter(isolated_home, cli_s
 
 
 def test_skill_install_creates_command_per_batch_yaml(isolated_home, cli_state):
-    _write_batch(isolated_home, "engine-360", """
-        name: engine-360
-        description: Full engine 360 for a given ESN
-        categories: [aviation]
+    _write_batch(isolated_home, "customer-360", """
+        name: customer-360
+        description: Full customer 360 for a given customer number
+        categories: [sales]
         params:
-          esn:
+          customer_no:
             required: true
         steps:
           - action: get
-            endpoint: engines
+            endpoint: customers
             params:
-              filter: "serial eq '${{ params.esn }}'"
+              filter: "number eq '${{ params.customer_no }}'"
     """)
     target = isolated_home / "proj"
     target.mkdir()
     _invoke("--target", str(target))
-    md = (target / ".claude" / "commands" / "bcli-batch-engine-360.md")
+    md = (target / ".claude" / "commands" / "bcli-batch-customer-360.md")
     assert md.is_file()
     text = md.read_text(encoding="utf-8")
     # Body invokes bcli batch run with --format json + --result-out.
     assert "bcli batch run" in text
-    assert "engine-360" in text
+    assert "customer-360" in text
     assert "--format json" in text
     assert "--result-out" in text
 
@@ -250,13 +250,13 @@ def test_skill_install_generates_index_grouped_by_categories(
 ):
     _write_queries(isolated_home, """
         queries:
-          util-a:
-            description: Aviation util A
-            categories: [aviation]
+          sales-a:
+            description: Sales report A
+            categories: [sales]
             endpoint: a
-          util-b:
-            description: Aviation util B
-            categories: [aviation]
+          sales-b:
+            description: Sales report B
+            categories: [sales]
             endpoint: b
           customer-by-name:
             description: Look up a customer
@@ -278,12 +278,12 @@ def test_skill_install_generates_index_grouped_by_categories(
     # Each category is a section header. Headings are sorted
     # alphabetically for deterministic output; ``unsorted`` (the
     # fallback bucket for the ``orphan`` query) sorts to the end.
-    assert "## aviation" in body
     assert "## finance" in body
+    assert "## sales" in body
     assert "## unsorted" in body
     # Each command listed under its category.
-    assert "bcli-util-a" in body
-    assert "bcli-util-b" in body
+    assert "bcli-sales-a" in body
+    assert "bcli-sales-b" in body
     assert "bcli-customer-by-name" in body
     assert "bcli-orphan" in body
 

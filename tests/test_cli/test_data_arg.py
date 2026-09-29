@@ -124,20 +124,20 @@ class TestShellManglingTrap:
 
     def test_no_quotes_at_all_hints_shell_mangling(self):
         with pytest.raises(typer.BadParameter) as exc_info:
-            parse_data_argument("{bladeType: HPT BLADE}")
+            parse_data_argument("{displayName: ATHENS Desk}")
         msg = str(exc_info.value)
         assert "shell" in msg.lower()
         assert "-d @payload.json" in msg
 
     def test_unquoted_keys_with_some_quotes_hints_shell_mangling(self):
         with pytest.raises(typer.BadParameter) as exc_info:
-            parse_data_argument('{bladeType: "HPT BLADE", qty: 5}')
+            parse_data_argument('{displayName: "ATHENS Desk", quantity: 5}')
         msg = str(exc_info.value)
         assert "shell" in msg.lower()
 
     def test_hint_is_a_single_sentence(self):
         with pytest.raises(typer.BadParameter) as exc_info:
-            parse_data_argument("{bladeType: HPT BLADE}")
+            parse_data_argument("{displayName: ATHENS Desk}")
         hint_line = str(exc_info.value).splitlines()[-1].strip()
         # One sentence: exactly one terminal period, not a lecture. (The
         # "e.g." abbreviation has its own internal periods, so strip it
@@ -208,13 +208,13 @@ class TestBomTolerantAtFile:
 
     def test_bom_prefixed_file_parses(self, tmp_path):
         p = tmp_path / "payload.json"
-        p.write_bytes(b'\xef\xbb\xbf{"bladeType": "FAN BLADE"}')
-        assert parse_data_argument(f"@{p}") == {"bladeType": "FAN BLADE"}
+        p.write_bytes(b'\xef\xbb\xbf{"displayName": "ATHENS Mobile Pedestal"}')
+        assert parse_data_argument(f"@{p}") == {"displayName": "ATHENS Mobile Pedestal"}
 
     def test_plain_utf8_file_still_parses(self, tmp_path):
         p = tmp_path / "payload.json"
-        p.write_bytes(b'{"bladeType": "HPT BLADE"}')
-        assert parse_data_argument(f"@{p}") == {"bladeType": "HPT BLADE"}
+        p.write_bytes(b'{"displayName": "ATHENS Desk"}')
+        assert parse_data_argument(f"@{p}") == {"displayName": "ATHENS Desk"}
 
     def test_non_ascii_without_bom_still_parses(self, tmp_path):
         p = tmp_path / "payload.json"

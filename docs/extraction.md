@@ -106,23 +106,22 @@ fields:
     description: "Unit price."
 
 output:
-  endpoint: purchaseLines
+  endpoint: purchaseInvoiceLines
   action: post
-  parent_field: documentNo
-  parent_param: invoice_no
+  parent_field: documentId
+  parent_param: invoice_id
   field_map:
-    "no": item_no
+    lineObjectNumber: item_no
     description: description
     quantity: quantity
     directUnitCost: unit_price
   constants:
-    documentType: "Invoice"
-    type: "Item"
+    lineType: "Item"
 ```
 
-`parent_param` + `parent_field` emit a `${{ params.invoice_no }}`
+`parent_param` + `parent_field` emit a `${{ params.invoice_id }}`
 placeholder in the generated `batch.yaml`. The operator fills it in
-before `batch run` (or passes `--set invoice_no=…`). This is the
+before `batch run` (or passes `--set invoice_id=…`). This is the
 intentional human-in-the-loop seam: extraction can't know which BC
 record the rows belong to, so it asks.
 
@@ -145,16 +144,16 @@ bcli extract run ./invoice-acme-1234.pdf --schema purchase_invoice_lines
 
 # Promote to sandbox (dry-run first, then real).
 bcli batch run invoice-acme-1234.batch.yaml \
-    --set invoice_no=<bc-invoice-number> \
+    --set invoice_id=<purchase-invoice-id> \
     --profile sandbox --dry-run
 
 bcli batch run invoice-acme-1234.batch.yaml \
-    --set invoice_no=<bc-invoice-number> \
+    --set invoice_id=<purchase-invoice-id> \
     --profile sandbox
 
 # Eyeball in the BC sandbox UI, then production.
 bcli batch run invoice-acme-1234.batch.yaml \
-    --set invoice_no=<bc-invoice-number> \
+    --set invoice_id=<purchase-invoice-id> \
     --profile production
 ```
 

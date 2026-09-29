@@ -60,7 +60,7 @@ def test_profile_model():
         client_id="xyz",
         client_secret_env="MY_SECRET",
         api_publisher="contoso",
-        api_group="technical",
+        api_group="integration",
         api_version="v1.5",
     )
     assert p.auth_method == "client_credentials"

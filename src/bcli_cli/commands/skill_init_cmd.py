@@ -353,7 +353,7 @@ def _collect_proposed_new_queries(
 def _interview_interactively() -> InterviewState:
     """Ask the four contract-doc-mandated questions via Rich prompts."""
     role = Prompt.ask(
-        "Role (finance / ops / aviation / sales / dev / custom)",
+        "Role (finance / ops / sales / dev / custom)",
         default="custom",
     )
     top_three = Prompt.ask(

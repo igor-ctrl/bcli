@@ -24,40 +24,44 @@ bcli batch run workflow.yaml --params month-end.yaml
 ## Batch File Format
 
 ```yaml
-name: "Monthly Engine Utilization Upload"
+name: "Monthly Sales Invoice for Adatum"
 steps:
-  - action: get
-    endpoint: equipmentOverviews
+  - name: customer
+    action: get
+    endpoint: customers
     params:
-      filter: "engineModel eq 'CF34-10E'"
-      top: 5
+      filter: "number eq '10000'"
+      select: "id,number,displayName"
+      top: 1
+
+  - name: invoice
+    action: post
+    endpoint: salesInvoices
+    data:
+      customerNumber: "${{ steps.customer.0.number }}"
+      invoiceDate: "2026-03-31"
+      externalDocumentNumber: "PO-2026-03"
 
   - action: post
-    endpoint: equipmentUtilizations
+    endpoint: salesInvoiceLines
     data:
-      esn: "ESN-123456"
-      period: "2026-03"
-      flightHours: 350.5
-      flightCycles: 210
+      documentId: "${{ steps.invoice.id }}"
+      lineType: "Item"
+      lineObjectNumber: "1896-S"
+      quantity: 2
 
   - action: post
-    endpoint: equipmentUtilizations
+    endpoint: salesInvoiceLines
     data:
-      esn: "ESN-789012"
-      period: "2026-03"
-      flightHours: 280.0
-      flightCycles: 175
-
-  - action: patch
-    endpoint: equipmentCards
-    id: "a1b2c3d4-..."
-    data:
-      status: "Available"
-
-  - action: delete
-    endpoint: tempRecords
-    id: "e5f6a7b8-..."
+      documentId: "${{ steps.invoice.id }}"
+      lineType: "Item"
+      lineObjectNumber: "1900-S"
+      quantity: 4
 ```
+
+The GET result feeds the invoice header, and the header's `id` feeds each
+line. See [Step Chaining](#step-chaining) for the `${{ steps.<name>... }}`
+syntax.
 
 ## Step Actions
 
@@ -98,7 +102,7 @@ steps:
 
 ```yaml
 - action: delete
-  endpoint: tempRecords
+  endpoint: salesQuotes
   id: "e5f6a7b8-..."
 ```
 
@@ -112,17 +116,19 @@ bcli batch run operations.yaml --dry-run
 
 Output:
 ```
-Batch: Monthly Engine Utilization Upload
-3 step(s)
+Batch: Monthly Sales Invoice for Adatum
+4 step(s)
 
-  Step 1: GET equipmentOverviews
-    Params: {'filter': "engineModel eq 'CF34-10E'", 'top': 5}
-  Step 2: POST equipmentUtilizations
-    Data: {"esn": "ESN-123456", ...}
-  Step 3: POST equipmentUtilizations
-    Data: {"esn": "ESN-789012", ...}
+  Step 1: GET customers (customer)
+    Params: {'filter': "number eq '10000'", 'select': 'id,number,displayName', 'top': 1}
+  Step 2: POST salesInvoices (invoice)
+    Data: {"customerNumber": "${{ steps.customer.0.number }}", ...}
+  Step 3: POST salesInvoiceLines
+    Data: {"documentId": "${{ steps.invoice.id }}", "lineType": "Item", "lineObjectNumber": "1896-S", ...}
+  Step 4: POST salesInvoiceLines
+    Data: {"documentId": "${{ steps.invoice.id }}", "lineType": "Item", "lineObjectNumber": "1900-S", ...}
 
---dry-run: 3 step(s) would execute.
+--dry-run: 4 step(s) would execute.
 ```
 
 ## Error Handling
@@ -130,11 +136,12 @@ Batch: Monthly Engine Utilization Upload
 If a step fails, the error is reported and subsequent steps continue:
 
 ```
-  Step 1: GET equipmentOverviews... ✓ 5 record(s)
-  Step 2: POST equipmentUtilizations... ✓ created
-  Step 3: POST equipmentUtilizations... ✗ HTTP 400: Duplicate record
+  Step 1: GET customers... ✓ 1 record(s)
+  Step 2: POST salesInvoices... ✓ created
+  Step 3: POST salesInvoiceLines... ✓ created
+  Step 4: POST salesInvoiceLines... ✗ HTTP 400: Blocked must be equal to 'No'  in Item: No.=1900-S. Current value is 'Yes'.
 
-✓ Batch complete: 2/3 steps succeeded
+✓ Batch complete: 3/4 steps succeeded
 ```
 
 ## Parameterized Workflows
@@ -158,16 +165,15 @@ steps:
     endpoint: purchaseInvoices
     params:
       filter: "vendorNumber eq '${{ params.vendor }}' and postingDate ge ${{ params.month }}-01"
-      select: "number,vendorNumber,amount,currencyCode,externalDocumentNumber"
+      select: "number,vendorNumber,totalAmountIncludingTax,currencyCode,vendorInvoiceNumber"
       top: 500
 
-  - name: ledger
+  - name: aging
     action: get
-    endpoint: vendorLedgerEntries
+    endpoint: agedAccountsPayables
     params:
-      filter: "vendorNumber eq '${{ params.vendor }}' and postingDate ge ${{ params.month }}-01"
-      select: "documentNumber,amount,currencyCode"
-      top: 500
+      filter: "vendorNumber eq '${{ params.vendor }}'"
+      select: "vendorNumber,name,currencyCode,balanceDue,currentAmount,period1Amount"
 ```
 
 Run it:

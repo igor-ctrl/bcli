@@ -11,38 +11,38 @@ from bcli_cli.output._formatters import (
 
 
 def _wide_record() -> dict:
-    """30-column engine record — the canonical "too wide for table" case."""
+    """30-column customer record — the canonical "too wide for table" case."""
     return {
-        "systemId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        "engineSerialNumber": "100002",
-        "engineType": "CF34-8C",
-        "engineModel": "CF34-8C5",
-        "thrustRating": "8C5",
-        "initialDate": "2024-01-01",
-        "lastOperationDate": "2025-01-01",
-        "initialEngineTsn": "10000.00",
-        "intialEngineCsn": "8000",
-        "fc": "100",
-        "fh": "200.00",
-        "lastInvoiceDate": "2026-01-31",
-        "currentTsn": "10200.00",
-        "currentCsn": "8100",
-        "limiter": "9000",
-        "tspr": "10200.00",
-        "cspr": "8100",
-        "tslsv": "0",
-        "cslsv": "0",
-        "aprCycles": "10",
-        "qec": "Neutral",
-        "ittMargin": "30",
-        "ittMarginNotes": "Example ECM note",
-        "serviceable": "Yes",
+        "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "number": "10000",
+        "displayName": "Adatum Corporation",
+        "type": "Company",
+        "addressLine1": "Station Road, 21",
+        "addressLine2": "",
+        "city": "Cambridge",
+        "state": "",
+        "country": "GB",
+        "postalCode": "CB1 2FB",
+        "phoneNumber": "",
+        "email": "robert.townes@contoso.com",
+        "website": "",
+        "contactName": "Robert Townes",
+        "salespersonCode": "PS",
+        "balanceDue": "1499.03",
+        "creditLimit": "0",
+        "taxLiable": "false",
+        "taxAreaId": "00000000-0000-0000-0000-000000000000",
+        "taxAreaDisplayName": "",
+        "taxRegistrationNumber": "789456278",
+        "currencyId": "00000000-0000-0000-0000-000000000000",
+        "currencyCode": "USD",
+        "paymentTermsId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+        "shipmentMethodId": "00000000-0000-0000-0000-000000000000",
+        "paymentMethodId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+        "priceGroupCode": "RETAIL",
+        "blocked": " ",
         "notes": "Example note",
-        "lessee": "",
-        "operator": "",
-        "engineStatus": "Available",
-        "location": "Example Location",
-        "systemModifiedAt": "2026-01-01T00:00:00.000Z",
+        "lastModifiedDateTime": "2026-01-01T00:00:00.000Z",
     }
 
 
@@ -68,20 +68,20 @@ class TestAutoRecords:
     def test_format_output_promotes_table_to_records_for_wide_single(self, capsys):
         format_output([_wide_record()], fmt="table")
         out = capsys.readouterr().out
-        assert "engineSerialNumber : 100002" in out
-        assert "engineType         : CF34-8C" in out
+        assert "number                : 10000" in out
+        assert "displayName           : Adatum Corporation" in out
 
     def test_format_output_promotes_markdown_to_records_for_wide_single(self, capsys):
         format_output([_wide_record()], fmt="markdown")
         out = capsys.readouterr().out
         # Markdown table never appears — the auto-fallback fires first.
-        assert "| systemId" not in out
-        assert "engineSerialNumber : 100002" in out
+        assert "| id " not in out
+        assert "number                : 10000" in out
 
     def test_explicit_records_format_works(self, capsys):
         format_output([_wide_record()], fmt="records")
         out = capsys.readouterr().out
-        assert "engineSerialNumber : 100002" in out
+        assert "number                : 10000" in out
 
     def test_records_alias_r_works(self, capsys):
         format_output([{"a": "1", "b": "2"}], fmt="r")
@@ -93,16 +93,16 @@ class TestAutoRecords:
         format_output([_wide_record()], fmt="csv")
         out = capsys.readouterr().out
         # CSV header line ends with a comma-separated set, not "name : value".
-        assert "engineSerialNumber" in out
-        assert "engineSerialNumber : 100002" not in out
+        assert "taxRegistrationNumber" in out
+        assert "number                : 10000" not in out
 
     def test_explicit_format_disables_auto_promote(self, capsys):
         """`-f markdown` is a contract; honor it even on a wide single row."""
         format_output([_wide_record()], fmt="markdown", auto_format=False)
         out = capsys.readouterr().out
         # Markdown header pipe present, vertical view absent.
-        assert "| systemId" in out
-        assert "engineSerialNumber : 100002" not in out
+        assert "| id " in out
+        assert "number                : 10000" not in out
 
 
 class TestRecordsRendering:

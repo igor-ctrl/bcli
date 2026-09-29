@@ -43,7 +43,7 @@ def test_collect_extra_context_runs_only_enabled(
         monkeypatch,
         """
         def provider(profile, last_error):
-            return {"glossary.ESN": "Engine Serial Number"}
+            return {"glossary.GL": "General Ledger"}
         """,
         name="_fake_provider_a",
     )
@@ -75,7 +75,7 @@ def test_collect_extra_context_runs_only_enabled(
         last_error=None,
         enabled=["alpha"],  # only alpha — beta must NOT run
     )
-    assert out == {"glossary.ESN": "Engine Serial Number"}
+    assert out == {"glossary.GL": "General Ledger"}
 
 
 def test_provider_failure_is_logged_not_raised(

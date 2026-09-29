@@ -547,7 +547,7 @@ class TestOssMechanismHasNoRoleContent:
             InterviewState,
             _default_role_template_proposer,
         )
-        for role in ("ops", "aviation", "sales", "dev", "custom"):
+        for role in ("ops", "purchasing", "sales", "dev", "custom"):
             interview = InterviewState(
                 role=role, top_three="x", style="flat", generate_new=True,
             )

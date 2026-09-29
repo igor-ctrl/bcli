@@ -34,18 +34,18 @@ def _list_schema(tmp_path: Path):
     return _schema(
         tmp_path,
         """
-name: "tags"
+name: "invoice-lines"
 prompt: "extract"
 list: true
 fields:
-  part_no:
+  item_no:
     type: string
     required: true
     description: "x"
 output:
-  endpoint: trackedParts
+  endpoint: purchaseInvoiceLines
   field_map:
-    partNo: part_no
+    lineObjectNumber: item_no
 """,
     )
 
@@ -124,15 +124,15 @@ def extractor() -> OpenAIExtractor:
 def test_extract_parses_output_text(
     tmp_path: Path, extractor: OpenAIExtractor
 ) -> None:
-    pdf = tmp_path / "blades.pdf"
+    pdf = tmp_path / "invoice.pdf"
     _make_pdf(pdf)
     schema = _list_schema(tmp_path)
 
     fake = _FakeOpenAI(
         _response_via_output_text(
             [
-                {"part_no": "PN-1", "source_pages": [1]},
-                {"part_no": "PN-2", "source_pages": [2]},
+                {"item_no": "1896-S", "source_pages": [1]},
+                {"item_no": "1906-S", "source_pages": [2]},
             ]
         )
     )
@@ -141,7 +141,7 @@ def test_extract_parses_output_text(
     result = extractor.extract(pdf, schema)
 
     assert len(result.records) == 2
-    assert result.records[0].fields == {"part_no": "PN-1"}
+    assert result.records[0].fields == {"item_no": "1896-S"}
     assert result.records[0].source_pages == (1,)
     assert result.input_tokens == 100
     assert result.output_tokens == 20
@@ -166,28 +166,28 @@ def test_extract_parses_output_text(
 def test_extract_parses_output_parsed(
     tmp_path: Path, extractor: OpenAIExtractor
 ) -> None:
-    pdf = tmp_path / "blades.pdf"
+    pdf = tmp_path / "invoice.pdf"
     _make_pdf(pdf)
     schema = _list_schema(tmp_path)
     extractor._client = _FakeOpenAI(
-        _response_via_parsed([{"part_no": "PN-X", "source_pages": [3]}])
+        _response_via_parsed([{"item_no": "1908-S", "source_pages": [3]}])
     )
     result = extractor.extract(pdf, schema)
-    assert result.records[0].fields == {"part_no": "PN-X"}
+    assert result.records[0].fields == {"item_no": "1908-S"}
     assert result.records[0].source_pages == (3,)
 
 
 def test_extract_parses_output_walk(
     tmp_path: Path, extractor: OpenAIExtractor
 ) -> None:
-    pdf = tmp_path / "blades.pdf"
+    pdf = tmp_path / "invoice.pdf"
     _make_pdf(pdf)
     schema = _list_schema(tmp_path)
     extractor._client = _FakeOpenAI(
-        _response_via_output_walk([{"part_no": "PN-W", "source_pages": [5]}])
+        _response_via_output_walk([{"item_no": "1920-S", "source_pages": [5]}])
     )
     result = extractor.extract(pdf, schema)
-    assert result.records[0].fields == {"part_no": "PN-W"}
+    assert result.records[0].fields == {"item_no": "1920-S"}
 
 
 def test_extract_oversize_pdf_short_circuits(tmp_path: Path) -> None:
@@ -212,7 +212,7 @@ def test_extract_oversize_pdf_short_circuits(tmp_path: Path) -> None:
 def test_extract_missing_payload_raises(
     tmp_path: Path, extractor: OpenAIExtractor
 ) -> None:
-    pdf = tmp_path / "blades.pdf"
+    pdf = tmp_path / "invoice.pdf"
     _make_pdf(pdf)
     schema = _list_schema(tmp_path)
     extractor._client = _FakeOpenAI(
@@ -225,7 +225,7 @@ def test_extract_missing_payload_raises(
 def test_uploaded_file_deleted_even_on_response_failure(
     tmp_path: Path, extractor: OpenAIExtractor
 ) -> None:
-    pdf = tmp_path / "blades.pdf"
+    pdf = tmp_path / "invoice.pdf"
     _make_pdf(pdf)
     schema = _list_schema(tmp_path)
 
@@ -257,21 +257,21 @@ name: "single"
 prompt: "one"
 list: false
 fields:
-  part_no:
+  item_no:
     type: string
     required: true
     description: "x"
 output:
-  endpoint: trackedParts
+  endpoint: purchaseInvoiceLines
   field_map:
-    partNo: part_no
+    lineObjectNumber: item_no
 """,
     )
     extractor._client = _FakeOpenAI(
         _response_via_output_text(
             [
-                {"part_no": "PN-1", "source_pages": [1]},
-                {"part_no": "PN-2", "source_pages": [2]},
+                {"item_no": "1896-S", "source_pages": [1]},
+                {"item_no": "1906-S", "source_pages": [2]},
             ]
         )
     )

@@ -24,7 +24,7 @@ class TestBoolKeyRejection:
           - action: post
             endpoint: purchaseLines
             data:
-              no: "6260-000000-000"
+              no: "8430"
         """
         with pytest.raises(WorkflowError, match="boolean False"):
             load_workflow_yaml(yaml_text)
@@ -43,10 +43,10 @@ class TestBoolKeyRejection:
           - action: post
             endpoint: purchaseLines
             data:
-              "no": "6260-000000-000"
+              "no": "8430"
         """
         result = load_workflow_yaml(yaml_text)
-        assert result["steps"][0]["data"]["no"] == "6260-000000-000"
+        assert result["steps"][0]["data"]["no"] == "8430"
 
     def test_no_inside_string_value_accepted(self) -> None:
         """Templates referencing ``no`` field work — the bool trap
@@ -100,11 +100,12 @@ class TestLoaderAcceptsValidYaml:
         repo_root = Path(__file__).resolve().parents[2]
         example = repo_root / "examples" / "create-purchase-invoice.yaml"
         result = load_workflow_yaml(example)
-        # The fix: "no" is a string key with the GL account
         post_lines = [
             step
             for step in result["steps"]
-            if step.get("endpoint") == "purchaseLines"
+            if step.get("endpoint") == "purchaseInvoiceLines"
         ]
-        assert post_lines, "example should have purchaseLines steps"
-        assert post_lines[0]["data"]["no"] == "6260-000000-000"
+        assert post_lines, "example should have purchaseInvoiceLines steps"
+        assert post_lines[0]["data"]["lineType"] == "Account"
+        for step in result["steps"]:
+            assert all(isinstance(k, str) for k in step.get("data", {}))

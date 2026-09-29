@@ -118,18 +118,23 @@ for ep in registry.list_all():
 
 ## Custom API Routes
 
+Custom APIs use their own publisher / group / version route. The examples
+below use a hypothetical `contoso/integration/v1.0` API exposing
+`shipmentTrackings`; see [Custom APIs](custom-apis.md) for how to add one to
+the registry.
+
 ```python
-# Via registry (auto-resolved)
-records = client.query("equipmentOverviews").top(5).get()
+# Via registry (auto-resolved once the custom API is imported)
+records = client.query("shipmentTrackings").top(5).get()
 
 # Explicit route override
-records = client.query("myEntity").route("mycompany", "api", "v1.0").top(5).get()
+records = client.query("shipmentTrackings").route("contoso", "integration", "v1.0").top(5).get()
 
 # Direct with route params
 response = client.get(
-    "myEntity",
-    publisher="mycompany",
-    group="api",
+    "shipmentTrackings",
+    publisher="contoso",
+    group="integration",
     version="v1.0",
 )
 ```

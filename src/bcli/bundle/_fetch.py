@@ -36,7 +36,7 @@ from bcli.bundle._manifest import Bundle, BundleManifest
 
 logger = logging.getLogger("bcli.bundle.fetch")
 
-# Hard ceilings. A real finance/engine bundle is small (KB-MB range);
+# Hard ceilings. A real finance bundle is small (KB-MB range);
 # anything outside these is either misconfigured or hostile.
 MAX_COMPRESSED_BYTES = 25 * 1024 * 1024  # 25 MB on the wire
 MAX_TOTAL_EXTRACTED_BYTES = 100 * 1024 * 1024  # 100 MB after gunzip
