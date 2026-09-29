@@ -61,7 +61,7 @@ def test_endpoint_metadata_is_custom():
     assert not standard.is_custom
 
     custom = EndpointMetadata(
-        entity_set_name="engineOverviews",
+        entity_set_name="equipmentOverviews",
         api_publisher="contoso",
         api_group="technical",
         api_version="v1.5",

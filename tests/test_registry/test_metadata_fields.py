@@ -12,7 +12,7 @@ SAMPLE_EDMX = """<?xml version="1.0" encoding="utf-8"?>
 <edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="4.0">
   <edmx:DataServices>
     <Schema Namespace="Microsoft.NAV">
-      <EntityType Name="engineUtilization">
+      <EntityType Name="equipmentUtilization">
         <Key><PropertyRef Name="systemId"/></Key>
         <Property Name="systemId" Type="Edm.Guid"/>
         <Property Name="engineSerialNumber" Type="Edm.String"/>
@@ -21,13 +21,13 @@ SAMPLE_EDMX = """<?xml version="1.0" encoding="utf-8"?>
         <Property Name="efh" Type="Edm.Decimal"/>
         <Property Name="efc" Type="Edm.Int32"/>
       </EntityType>
-      <EntityType Name="engineOverview">
+      <EntityType Name="equipmentOverview">
         <Property Name="systemId" Type="Edm.Guid"/>
         <Property Name="engineModel" Type="Edm.String"/>
       </EntityType>
       <EntityContainer Name="NAV">
-        <EntitySet Name="engineUtilizations" EntityType="Microsoft.NAV.engineUtilization"/>
-        <EntitySet Name="engineOverviews" EntityType="Microsoft.NAV.engineOverview"/>
+        <EntitySet Name="equipmentUtilizations" EntityType="Microsoft.NAV.equipmentUtilization"/>
+        <EntitySet Name="equipmentOverviews" EntityType="Microsoft.NAV.equipmentOverview"/>
       </EntityContainer>
     </Schema>
   </edmx:DataServices>
@@ -37,7 +37,7 @@ SAMPLE_EDMX = """<?xml version="1.0" encoding="utf-8"?>
 
 def test_parses_entity_type_properties():
     fields = _parse_entity_type_properties(SAMPLE_EDMX)
-    assert fields["engineUtilization"] == [
+    assert fields["equipmentUtilization"] == [
         "systemId",
         "engineSerialNumber",
         "tailNo",
@@ -45,7 +45,7 @@ def test_parses_entity_type_properties():
         "efh",
         "efc",
     ]
-    assert fields["engineOverview"] == ["systemId", "engineModel"]
+    assert fields["equipmentOverview"] == ["systemId", "engineModel"]
 
 
 def test_parse_metadata_xml_attaches_field_names():
@@ -54,17 +54,17 @@ def test_parse_metadata_xml_attaches_field_names():
     )
     by_name = {ep.entity_set_name: ep for ep in endpoints}
 
-    assert "engineUtilizations" in by_name
-    eu = by_name["engineUtilizations"]
+    assert "equipmentUtilizations" in by_name
+    eu = by_name["equipmentUtilizations"]
     assert eu.api_publisher == "contoso"
     assert eu.api_group == "technical"
     assert eu.api_version == "v1.5"
-    assert eu.entity_name == "engineUtilization"
+    assert eu.entity_name == "equipmentUtilization"
     assert "engineSerialNumber" in eu.field_names
     assert "tailNo" in eu.field_names
     assert "efh" in eu.field_names
 
-    eo = by_name["engineOverviews"]
+    eo = by_name["equipmentOverviews"]
     assert eo.field_names == ["systemId", "engineModel"]
 
 

@@ -43,12 +43,12 @@ bcli registry import --from-json ./endpoints.json
 {
   "endpoints": [
     {
-      "entity_set_name": "engineOverviews",
-      "entity_name": "engineOverview",
+      "entity_set_name": "equipmentOverviews",
+      "entity_name": "equipmentOverview",
       "api_publisher": "mycompany",
       "api_group": "technical",
       "api_version": "v1.5",
-      "description": "Engine overview data",
+      "description": "Equipment overview data",
       "supports": ["GET"],
       "key_field": "systemId"
     }
@@ -120,7 +120,7 @@ When you run `bcli get someEntity`:
 2. **Standard v2.0** — Falls back to the built-in standard registry. Routes to `/api/v2.0/`.
 3. **Not found** — Shows an error with fuzzy search suggestions and hints to import a registry.
 
-This means `bcli get customers` (standard) and `bcli get engineOverviews` (custom) work the same way — you never construct URLs.
+This means `bcli get customers` (standard) and `bcli get equipmentOverviews` (custom) work the same way — you never construct URLs.
 
 ## Discover Endpoints
 
@@ -141,7 +141,7 @@ bcli endpoint list --category sales
 bcli endpoint search engine
 
 # Full details for one endpoint
-bcli endpoint info engineOverviews
+bcli endpoint info equipmentOverviews
 ```
 
 ## Test a Custom Endpoint
@@ -149,7 +149,7 @@ bcli endpoint info engineOverviews
 After importing, verify an endpoint works:
 
 ```bash
-bcli test endpoint engineOverviews
-# ✓ engineOverviews: returned 1 record(s)
+bcli test endpoint equipmentOverviews
+# ✓ equipmentOverviews: returned 1 record(s)
 #   Fields: systemId, esn, engineModel, status, ...
 ```

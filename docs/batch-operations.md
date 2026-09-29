@@ -27,13 +27,13 @@ bcli batch run workflow.yaml --params month-end.yaml
 name: "Monthly Engine Utilization Upload"
 steps:
   - action: get
-    endpoint: engineOverviews
+    endpoint: equipmentOverviews
     params:
       filter: "engineModel eq 'CF34-10E'"
       top: 5
 
   - action: post
-    endpoint: engineUtilizations
+    endpoint: equipmentUtilizations
     data:
       esn: "ESN-123456"
       period: "2026-03"
@@ -41,7 +41,7 @@ steps:
       flightCycles: 210
 
   - action: post
-    endpoint: engineUtilizations
+    endpoint: equipmentUtilizations
     data:
       esn: "ESN-789012"
       period: "2026-03"
@@ -49,7 +49,7 @@ steps:
       flightCycles: 175
 
   - action: patch
-    endpoint: engineCards
+    endpoint: equipmentCards
     id: "a1b2c3d4-..."
     data:
       status: "Available"
@@ -115,11 +115,11 @@ Output:
 Batch: Monthly Engine Utilization Upload
 3 step(s)
 
-  Step 1: GET engineOverviews
+  Step 1: GET equipmentOverviews
     Params: {'filter': "engineModel eq 'CF34-10E'", 'top': 5}
-  Step 2: POST engineUtilizations
+  Step 2: POST equipmentUtilizations
     Data: {"esn": "ESN-123456", ...}
-  Step 3: POST engineUtilizations
+  Step 3: POST equipmentUtilizations
     Data: {"esn": "ESN-789012", ...}
 
 --dry-run: 3 step(s) would execute.
@@ -130,9 +130,9 @@ Batch: Monthly Engine Utilization Upload
 If a step fails, the error is reported and subsequent steps continue:
 
 ```
-  Step 1: GET engineOverviews... ✓ 5 record(s)
-  Step 2: POST engineUtilizations... ✓ created
-  Step 3: POST engineUtilizations... ✗ HTTP 400: Duplicate record
+  Step 1: GET equipmentOverviews... ✓ 5 record(s)
+  Step 2: POST equipmentUtilizations... ✓ created
+  Step 3: POST equipmentUtilizations... ✗ HTTP 400: Duplicate record
 
 ✓ Batch complete: 2/3 steps succeeded
 ```

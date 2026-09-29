@@ -93,7 +93,7 @@ Example with all the validation knobs:
 queries:
   utilization-by-esn:
     description: Monthly utilization records for one ESN
-    endpoint: engineUtilizations
+    endpoint: equipmentUtilizations
     params:
       esn:
         required: true

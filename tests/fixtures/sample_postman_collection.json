@@ -93,7 +93,7 @@
     },
     {
       "name": "Technical",
-      "description": "**Source Table:** \"Engine Overview\"\nTechnical data for equipment tracking.",
+      "description": "**Source Table:** \"Equipment Overview\"\nTechnical data for equipment tracking.",
       "item": [
         {
           "name": "Get Equipment Records",

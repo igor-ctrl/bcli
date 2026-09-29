@@ -120,7 +120,7 @@ for ep in registry.list_all():
 
 ```python
 # Via registry (auto-resolved)
-records = client.query("engineOverviews").top(5).get()
+records = client.query("equipmentOverviews").top(5).get()
 
 # Explicit route override
 records = client.query("myEntity").route("mycompany", "api", "v1.0").top(5).get()

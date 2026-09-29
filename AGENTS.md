@@ -76,7 +76,7 @@ when the user's question demands them.
 
 The custom registry an organization installs may be a curated subset of
 BC's catalog. Names are case-sensitive and not always plural-of-the-
-obvious-singular (e.g. `preservationStatuses`, not `preservationStatus`).
+obvious-singular (e.g. `inspectionStatuses`, not `inspectionStatus`).
 The recipe:
 
 ```bash

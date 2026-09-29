@@ -192,7 +192,7 @@ The boundary rule:
 * **OSS owns** generic BC transport, query construction, registry, OData
   escaping, auth, retry, telemetry plumbing.
 * **Private package owns** domain tool composition only — tools like
-  `engine_lookup`, `lease_amendments_for`, `vendor_analytics` that combine
+  `equipment_lookup`, `contract_amendments_for`, `vendor_analytics` that combine
   multiple BC queries with cross-system data into one named operation.
 * The private MCP is a *consumer* of `bcli` (subprocess or
   `from bcli import AsyncBCClient`), never a layer that re-implements

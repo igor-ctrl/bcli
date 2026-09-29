@@ -94,13 +94,13 @@ def test_resolve_params_invalid_format_exits():
 
 def test_expand_query_resolves_param_references():
     spec = {
-        "endpoint": "engineUtilizations",
+        "endpoint": "equipmentUtilizations",
         "filter": "engineSerialNumber eq '${{ params.esn }}'",
         "top": 24,
     }
     expanded = _expand_query(spec, {"esn": "100001"})
     assert expanded["filter"] == "engineSerialNumber eq '100001'"
-    assert expanded["endpoint"] == "engineUtilizations"
+    assert expanded["endpoint"] == "equipmentUtilizations"
     assert expanded["top"] == 24
 
 
@@ -127,7 +127,7 @@ def test_expand_query_escapes_single_quote_in_filter():
 def test_expand_query_neutralises_injection_in_filter():
     """The example from the security review must no longer break out."""
     spec = {
-        "endpoint": "engineUtilizations",
+        "endpoint": "equipmentUtilizations",
         "filter": "engineSerialNumber eq '${{ params.esn }}'",
     }
     expanded = _expand_query(spec, {"esn": "100001' or 1 eq 1--"})

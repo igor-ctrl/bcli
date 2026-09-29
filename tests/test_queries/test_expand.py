@@ -10,13 +10,13 @@ from bcli.queries import ResolvedQuery, expand_query
 
 def test_expand_query_resolves_param_references():
     spec = {
-        "endpoint": "engineUtilizations",
+        "endpoint": "equipmentUtilizations",
         "filter": "engineSerialNumber eq '${{ params.esn }}'",
         "top": 24,
     }
     resolved = expand_query(spec, {"esn": "100001"})
     assert resolved.filter == "engineSerialNumber eq '100001'"
-    assert resolved.endpoint == "engineUtilizations"
+    assert resolved.endpoint == "equipmentUtilizations"
     assert resolved.top == 24
 
 
@@ -58,7 +58,7 @@ def test_expand_query_escapes_single_quote_in_filter():
 
 def test_expand_query_neutralises_injection_in_filter():
     spec = {
-        "endpoint": "engineUtilizations",
+        "endpoint": "equipmentUtilizations",
         "filter": "engineSerialNumber eq '${{ params.esn }}'",
     }
     resolved = expand_query(spec, {"esn": "100001' or 1 eq 1--"})
