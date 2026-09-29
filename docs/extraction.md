@@ -106,23 +106,22 @@ fields:
     description: "Unit price."
 
 output:
-  endpoint: purchaseLines
+  endpoint: purchaseInvoiceLines
   action: post
-  parent_field: documentNo
-  parent_param: invoice_no
+  parent_field: documentId
+  parent_param: invoice_id
   field_map:
-    "no": item_no
+    lineObjectNumber: item_no
     description: description
     quantity: quantity
     directUnitCost: unit_price
   constants:
-    documentType: "Invoice"
-    type: "Item"
+    lineType: "Item"
 ```
 
-`parent_param` + `parent_field` emit a `${{ params.invoice_no }}`
+`parent_param` + `parent_field` emit a `${{ params.invoice_id }}`
 placeholder in the generated `batch.yaml`. The operator fills it in
-before `batch run` (or passes `--set invoice_no=…`). This is the
+before `batch run` (or passes `--set invoice_id=…`). This is the
 intentional human-in-the-loop seam: extraction can't know which BC
 record the rows belong to, so it asks.
 
@@ -145,16 +144,16 @@ bcli extract run ./invoice-acme-1234.pdf --schema purchase_invoice_lines
 
 # Promote to sandbox (dry-run first, then real).
 bcli batch run invoice-acme-1234.batch.yaml \
-    --set invoice_no=<bc-invoice-number> \
+    --set invoice_id=<purchase-invoice-id> \
     --profile sandbox --dry-run
 
 bcli batch run invoice-acme-1234.batch.yaml \
-    --set invoice_no=<bc-invoice-number> \
+    --set invoice_id=<purchase-invoice-id> \
     --profile sandbox
 
 # Eyeball in the BC sandbox UI, then production.
 bcli batch run invoice-acme-1234.batch.yaml \
-    --set invoice_no=<bc-invoice-number> \
+    --set invoice_id=<purchase-invoice-id> \
     --profile production
 ```
 
@@ -214,9 +213,9 @@ warning — extraction never crashes the CLI on a config mistake.
 - Both built-ins accept the same schema. Switching is a one-line
   config change; you can iterate a schema cheaply on one provider and
   promote with the other.
-- Aviation/regulated data: pick the provider with the residency /
-  compliance posture your org accepts. Neither built-in routes through
-  Beautech infrastructure — your API key, your traffic.
+- Regulated data: pick the provider with the residency / compliance
+  posture your org accepts. Neither built-in routes through any
+  bcli-operated infrastructure — your API key, your traffic.
 - Cost: at time of writing, both providers price PDF input in the same
   ballpark for short documents. Long tabular reports tend to favor
   whichever provider has the cheaper input-token rate.

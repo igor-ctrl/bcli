@@ -21,14 +21,14 @@ def test_custom_api_url():
     url = build_url(
         environment="SBEnvOct25T",
         company_id="abc-123",
-        entity_set_name="engineOverviews",
+        entity_set_name="shipmentTrackings",
         publisher="contoso",
-        group="technical",
+        group="integration",
         version="v1.5",
     )
-    assert "api/contoso/technical/v1.5" in url
+    assert "api/contoso/integration/v1.5" in url
     assert "SBEnvOct25T" in url
-    assert url.endswith("/engineOverviews")
+    assert url.endswith("/shipmentTrackings")
 
 
 def test_url_with_record_id():
@@ -53,9 +53,9 @@ def test_custom_api_validation_path_traversal_dot_dot():
         build_url(
             environment="Production",
             company_id="abc-123",
-            entity_set_name="engineOverviews",
+            entity_set_name="shipmentTrackings",
             publisher="contoso",
-            group="technical",
+            group="integration",
             version="..",
         )
 
@@ -66,9 +66,9 @@ def test_custom_api_validation_slash_in_segment():
         build_url(
             environment="Production",
             company_id="abc-123",
-            entity_set_name="engineOverviews",
+            entity_set_name="shipmentTrackings",
             publisher="a/b",
-            group="technical",
+            group="integration",
             version="v1.5",
         )
 

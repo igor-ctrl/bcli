@@ -1,0 +1,28 @@
+# Registry file for your own AL API pages.
+#
+# Load it with:
+#   bcli registry import --from-file examples/custom-apis.yaml
+#
+# publisher / group / version are the APIPublisher / APIGroup / APIVersion
+# properties of your API pages; entity set names are their EntitySetName.
+# Set the route once here, or per entry to mix routes in one file.
+
+publisher: contoso
+group: integration
+version: v1.0
+
+endpoints:
+  # Just the entity set name is enough.
+  - shipmentTrackings
+
+  # Optional details: description (shown by `bcli endpoint search`),
+  # supports (HTTP methods the page allows; default GET), category.
+  - entity_set_name: carrierRates
+    description: Carrier rate cards
+    supports: [GET, POST, PATCH, DELETE]
+
+  # An endpoint on a different route in the same file.
+  - entity_set_name: budgetLines
+    group: finance
+    version: v2.0
+    description: Budget lines

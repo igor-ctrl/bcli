@@ -307,33 +307,38 @@ def _auth_label(method: str) -> str:
 
 
 def _import_endpoints_for_profile(profile_name: str, import_file: Path) -> None:
-    """Run a Postman or JSON import for a freshly-created profile.
+    """Run a registry-file or Postman import for a freshly-created profile.
 
-    Detects the format by inspecting the JSON: Postman v2.1 collections have
-    a top-level ``info`` object plus an ``item`` array, while bcli/bcmcp
-    registry files have ``endpoints`` or per-group arrays.
+    Postman v2.1 collections (top-level ``info`` + ``item``) go through the
+    Postman importer; anything else is read as a JSON or YAML registry file.
     """
     import json
 
     from bcli.registry._importers import (
-        import_from_json,
+        import_from_file,
         import_from_postman,
         save_custom_registry,
     )
 
-    try:
-        raw = json.loads(import_file.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        console.print(f"[red]Could not parse {import_file}:[/red] {e}")
-        raise typer.Exit(1) from e
+    is_postman = False
+    if import_file.suffix.lower() == ".json":
+        try:
+            raw = json.loads(import_file.read_text(encoding="utf-8-sig"))
+        except json.JSONDecodeError as e:
+            console.print(f"[red]Could not parse {import_file}:[/red] {e}")
+            raise typer.Exit(1) from e
+        is_postman = isinstance(raw, dict) and "info" in raw and "item" in raw
 
-    is_postman = isinstance(raw, dict) and "info" in raw and "item" in raw
     if is_postman:
         endpoints = import_from_postman(import_file)
         source = "postman"
     else:
-        endpoints = import_from_json(import_file)
-        source = "json"
+        try:
+            endpoints = import_from_file(import_file)
+        except ValueError as e:
+            console.print(f"[red]Invalid registry file {import_file}:[/red] {e}")
+            raise typer.Exit(1) from e
+        source = "file"
 
     if not endpoints:
         console.print(f"[yellow]No endpoints found in {import_file}.[/yellow]")

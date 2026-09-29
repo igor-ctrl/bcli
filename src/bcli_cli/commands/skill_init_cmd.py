@@ -2,9 +2,9 @@
 
 Per-user setup wizard that consumes ``bcli describe`` and writes a
 right-sized Claude Code skill bundle plus optional new saved-query
-entries. **Mechanism only** — the OSS package ships no Beautech-specific
-role templates. Third-party packages (``bcli-beautech-bootstrap``) plug
-in via the ``bcli.skill_init.role_templates`` entry-point group.
+entries. **Mechanism only** — the OSS package ships no organization-specific
+role templates. Third-party packages plug in via the
+``bcli.skill_init.role_templates`` entry-point group.
 
 Hard guarantees this module enforces:
 
@@ -255,7 +255,7 @@ def _surface_queries_for_interests(
 ) -> tuple[SurfacedSlashCommand, ...]:
     """Pick the saved queries that fuzzy-match the user's free-text top-3.
 
-    No role-keyed logic — that would smuggle Beautech-specific
+    No role-keyed logic — that would smuggle organization-specific
     affinities into the OSS package. We tokenise the top-3 phrase on
     whitespace + commas, then take any query whose ``description``,
     ``name``, or ``endpoint`` contains the token (or has a SequenceMatcher
@@ -305,7 +305,7 @@ def _default_role_template_proposer(
 ) -> list[ProposedQuery]:
     """OSS default: no proposals.
 
-    Beautech (or any third party) plugs in via the
+    Third parties plug in via the
     ``bcli.skill_init.role_templates`` entry-point group — each provider
     is a callable with the same signature returning a list of
     :class:`ProposedQuery`. The OSS mechanism stays opinion-free; role
@@ -353,7 +353,7 @@ def _collect_proposed_new_queries(
 def _interview_interactively() -> InterviewState:
     """Ask the four contract-doc-mandated questions via Rich prompts."""
     role = Prompt.ask(
-        "Role (finance / ops / aviation / sales / dev / custom)",
+        "Role (finance / ops / sales / dev / custom)",
         default="custom",
     )
     top_three = Prompt.ask(

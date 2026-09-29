@@ -1,155 +1,130 @@
 # Custom APIs
 
-bcli ships with 79 standard Microsoft BC v2.0 entities. If you have custom API pages built in AL, you can import them so bcli auto-resolves their routes.
-
-## Import from Postman Collection
-
-If you have a Postman collection for your custom APIs:
-
-```bash
-bcli registry import --from-postman ./my_collection.json
-```
-
-The importer parses each request's URL to extract the API publisher, group, version, and entity set name. It also reads folder descriptions for source table metadata.
-
-**Example output:**
-```
-✓ Imported 92 custom endpoints
-  contoso/finance/v1.5: 46 endpoints
-  contoso/standard/v1.0: 23 endpoints
-  contoso/technical/v1.5: 23 endpoints
-```
-
-### Postman URL Format
-
-The importer expects URLs following BC's custom API pattern:
-
-```
-https://api.businesscentral.dynamics.com/v2.0/{env}/api/{publisher}/{group}/{version}/companies({id})/{entity}
-```
-
-## Import from JSON
-
-If you have endpoint metadata in JSON format:
+bcli ships with the 79 standard Microsoft Business Central API v2.0 entities
+(`customers`, `vendors`, `salesInvoices`, ...). If your extension publishes its
+own API pages in AL, register them once and they work exactly like the
+standard ones:
 
 ```bash
-bcli registry import --from-json ./endpoints.json
+bcli get shipmentTrackings --top 5
+bcli endpoint fields shipmentTrackings
 ```
 
-### Supported JSON Formats
+You never type the publisher, group, or version again. The registry remembers
+the route.
 
-**bcli native format:**
-```json
+## What bcli needs to know
+
+A custom API page is reached at:
+
+```
+/api/{APIPublisher}/{APIGroup}/{APIVersion}/companies({id})/{EntitySetName}
+```
+
+Those four values come straight from your AL page:
+
+```al
+page 50100 "Shipment Tracking API"
 {
-  "endpoints": [
-    {
-      "entity_set_name": "engineOverviews",
-      "entity_name": "engineOverview",
-      "api_publisher": "mycompany",
-      "api_group": "technical",
-      "api_version": "v1.5",
-      "description": "Engine overview data",
-      "supports": ["GET"],
-      "key_field": "systemId"
-    }
-  ]
+    PageType = API;
+    APIPublisher = 'contoso';
+    APIGroup = 'integration';
+    APIVersion = 'v1.0';
+    EntityName = 'shipmentTracking';
+    EntitySetName = 'shipmentTrackings';
+    ...
 }
 ```
 
-**Grouped format (by API group):**
-```json
-{
-  "finance": [
-    {
-      "entity_set_name": "vendors",
-      "entity_name": "vendor",
-      "api_publisher": "mycompany",
-      "api_group": "finance",
-      "api_version": "v1.5",
-      "data_access_intent": "ReadOnly",
-      "source_table": "Vendor"
-    }
-  ],
-  "technical": [...]
-}
-```
+## Option 1: discover from BC (recommended)
 
-## Import from $metadata (Live Discovery)
-
-Query your BC environment's OData `$metadata` endpoint to discover custom APIs automatically:
+If you can sign in to the environment, let bcli read the route's `$metadata`
+and register every entity set it publishes:
 
 ```bash
-bcli registry import --from-metadata
+bcli registry import --from-metadata --publisher contoso --group integration --version v1.0
 ```
 
-This requires `api_publisher`, `api_group`, and `api_version` to be set in your profile:
+This also records each entity's field names, so `--filter` typos get
+"did you mean" suggestions. Run it once per route. Imports merge, so a
+second route is added next to the first rather than replacing it.
+
+## Option 2: write a short registry file
+
+When you can't reach the environment (CI, a teammate without access yet), or
+you only want a few endpoints, list them in YAML or JSON. See
+[`examples/custom-apis.yaml`](../examples/custom-apis.yaml):
+
+```yaml
+publisher: contoso
+group: integration
+version: v1.0
+endpoints:
+  - shipmentTrackings
+  - entity_set_name: carrierRates
+    description: Carrier rate cards
+    supports: [GET, POST, PATCH, DELETE]
+```
 
 ```bash
-bcli config set profiles.default.api_publisher mycompany
-bcli config set profiles.default.api_group integration
-bcli config set profiles.default.api_version v1.0
-bcli registry import --from-metadata
+bcli registry import --from-file custom-apis.yaml
 ```
 
-## Registry Management
+The top-level `publisher` / `group` / `version` apply to every entry; an entry
+can override any of them. The long spellings `api_publisher` / `api_group` /
+`api_version` are accepted too. An entry that names only part of a route is
+rejected with an error instead of silently routing to the standard API.
 
-### List Imported Registries
+Optional per-entry keys:
+
+| Key | Default | Purpose |
+|---|---|---|
+| `description` | `""` | Shown by `bcli endpoint search` / `info` |
+| `supports` | `[GET]` | HTTP methods the page allows |
+| `category` | the group | Used by `bcli endpoint list --category` and scoped profiles |
+| `entity_name` | singular of the set name | Informational |
+| `caution` | inferred | `low` / `medium` / `high`; names containing verbs like `post`, `release`, `void` default to `high` |
+| `field_names` | `[]` | Known fields for filter validation (learned automatically by `bcli endpoint fields`) |
+
+`--from-file` also accepts a Postman v2.1 collection. Every request URL that
+follows the custom API pattern above becomes an endpoint.
+
+## Share your registry
+
+Export what a profile knows and commit it next to your AL extension, or hand
+it to a teammate:
 
 ```bash
-bcli registry list
-#   production: 92 endpoints (source: postman, imported: 2026-04-12T...)
-#   sandbox: 93 endpoints (source: json, imported: 2026-04-12T...)
+bcli registry export -o custom-apis.json
+# on another machine
+bcli registry import --from-file custom-apis.json
 ```
 
-### Per-Profile Registries
+For a team, the same file can ship as a registry preset inside a
+[pack](../packs/), or inside a signed team bundle
+(`bcli config refresh`), so new users get your endpoints on install.
 
-Registries are scoped to profiles. Import for a specific profile:
+## Manage registries
 
 ```bash
-bcli registry import --from-postman ./collection.json --profile production
-bcli registry import --from-postman ./collection.json --profile sandbox
+bcli registry list                          # which profiles have custom endpoints
+bcli endpoint list --custom                 # just your endpoints
+bcli endpoint info shipmentTrackings        # route, methods, caution, known fields
+bcli test endpoint shipmentTrackings        # fetch one record to confirm access
 ```
 
-Registries are stored at `~/.config/bcli/registries/<profile-name>.json`.
+Registries are per profile and live at `~/.config/bcli/registries/<profile>.json`.
+Pass `--profile` to import into a profile other than the active one. Pass
+`--replace` to drop previously imported endpoints instead of merging.
+Endpoints installed by a pack are kept, because the pack still owns them.
 
-## How Route Resolution Works
+## How route resolution works
 
-When you run `bcli get someEntity`:
+When you run `bcli get <name>`:
 
-1. **Custom registry** — Checks `~/.config/bcli/registries/<profile>.json` first. If found, uses the entity's `api_publisher/api_group/api_version` to build the URL.
-2. **Standard v2.0** — Falls back to the built-in standard registry. Routes to `/api/v2.0/`.
-3. **Not found** — Shows an error with fuzzy search suggestions and hints to import a registry.
+1. **Custom registry.** If `<name>` is registered for the profile, its route is used.
+2. **Standard v2.0.** Otherwise the built-in standard registry routes to `/api/v2.0/`.
+3. **Not found.** bcli suggests close matches and tells you how to register the endpoint.
 
-This means `bcli get customers` (standard) and `bcli get engineOverviews` (custom) work the same way — you never construct URLs.
-
-## Discover Endpoints
-
-```bash
-# List all endpoints (standard + custom)
-bcli endpoint list
-
-# Only custom endpoints
-bcli endpoint list --custom
-
-# Only standard v2.0
-bcli endpoint list --standard
-
-# Filter by category
-bcli endpoint list --category sales
-
-# Search by name or description
-bcli endpoint search engine
-
-# Full details for one endpoint
-bcli endpoint info engineOverviews
-```
-
-## Test a Custom Endpoint
-
-After importing, verify an endpoint works:
-
-```bash
-bcli test endpoint engineOverviews
-# ✓ engineOverviews: returned 1 record(s)
-#   Fields: systemId, esn, engineModel, status, ...
-```
+A custom entry with the same name as a standard entity wins, which lets you
+point `customers` at your own extended API page if you have one.

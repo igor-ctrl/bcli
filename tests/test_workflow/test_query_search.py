@@ -29,12 +29,12 @@ _SAMPLE = {
         "freshness": "live",
         "endpoint": "purchaseOrders",
     },
-    "engine-by-esn": {
-        "description": "Engine record by serial number",
-        "tags": ["engine", "ops"],
-        "owner": "technical",
+    "customer-by-no": {
+        "description": "Customer record by customer number",
+        "tags": ["customer", "sales"],
+        "owner": "sales-ops",
         "freshness": "live",
-        "endpoint": "enginesView",
+        "endpoint": "customers",
     },
 }
 
@@ -50,7 +50,7 @@ def test_normalize_handles_missing_metadata():
 
 def test_normalize_sorts_alphabetically():
     entries = normalize_queries(_SAMPLE)
-    assert [e.name for e in entries] == ["engine-by-esn", "open-pos", "overdue-ic"]
+    assert [e.name for e in entries] == ["customer-by-no", "open-pos", "overdue-ic"]
 
 
 # ─── filter_entries ───────────────────────────────────────────────────
@@ -64,8 +64,8 @@ def test_filter_by_tag():
 
 def test_filter_by_owner():
     entries = normalize_queries(_SAMPLE)
-    out = filter_entries(entries, owner="technical")
-    assert [e.name for e in out] == ["engine-by-esn"]
+    out = filter_entries(entries, owner="sales-ops")
+    assert [e.name for e in out] == ["customer-by-no"]
 
 
 def test_filter_combined():
@@ -110,8 +110,8 @@ def test_search_floor_drops_unrelated():
 
 def test_search_partial_phrase_finds_query():
     entries = normalize_queries(_SAMPLE)
-    hits = search_entries(entries, "engine serial")
-    assert any(e.name == "engine-by-esn" for _, e in hits)
+    hits = search_entries(entries, "customer number")
+    assert any(e.name == "customer-by-no" for _, e in hits)
 
 
 def test_search_ranks_name_match_above_tag_match():

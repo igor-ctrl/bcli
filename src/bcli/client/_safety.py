@@ -32,7 +32,6 @@ class DomainRule:
 # Default domain rules — override with SafeContext(domain_rules={...})
 DEFAULT_DOMAIN_RULES: dict[str, DomainRule] = {
     "finance": DomainRule(require_draft=True, require_production_confirm=True),
-    "technical": DomainRule(require_draft=False, require_production_confirm=True),
     "standard": DomainRule(require_draft=False, require_production_confirm=True),
 }
 

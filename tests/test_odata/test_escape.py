@@ -23,9 +23,9 @@ def test_multiple_single_quotes():
 
 def test_injection_attempt_neutralised():
     """Mimics the saved-query injection example from the security review."""
-    raw = "193208' or 1 eq 1--"
+    raw = "100001' or 1 eq 1--"
     escaped = escape_odata_string(raw)
-    assert escaped == "193208'' or 1 eq 1--"
+    assert escaped == "100001'' or 1 eq 1--"
     # Quote count is even after escaping, so the literal cannot terminate early.
     assert escaped.count("'") % 2 == 0
 

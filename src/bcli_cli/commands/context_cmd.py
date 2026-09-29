@@ -71,7 +71,7 @@ bcli get vendors --filter "balance gt 0" --count --top 1
 # Discover endpoints
 bcli endpoint list                    # All endpoints
 bcli endpoint list --custom           # Only custom API endpoints
-bcli endpoint search engine           # Fuzzy search
+bcli endpoint search invoice          # Fuzzy search
 bcli endpoint info customers          # Metadata for one endpoint
 bcli endpoint fields customers        # Field names + types from live data
 ```

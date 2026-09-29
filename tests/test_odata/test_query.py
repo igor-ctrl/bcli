@@ -57,9 +57,9 @@ def test_count():
 def test_fluent_chaining():
     q = (
         Query()
-        .filter("engineModel eq 'CF34-10E'")
-        .select("esn", "status", "nbv")
-        .orderby("esn")
+        .filter("status eq 'Open'")
+        .select("number", "status", "totalAmountIncludingTax")
+        .orderby("number")
         .top(50)
     )
     params = q.to_params()

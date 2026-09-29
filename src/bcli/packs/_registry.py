@@ -129,7 +129,7 @@ def discover_all(*, builtin_root: Path | None = None) -> dict[str, Pack]:
 
     On name collision the later source wins, so a third-party pack
     can override a built-in by registering the same name (rare but
-    sometimes desirable for Beautech-style overlays).
+    sometimes desirable for organization-specific overlays).
     """
     out: dict[str, Pack] = {}
     for p in discover_builtin_packs(builtin_root):

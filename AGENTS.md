@@ -36,7 +36,9 @@ you. You do **not** need `--publisher … --group … --version …` — those
 are escape hatches for the rare case where an admin hasn't imported the
 endpoint yet, and they're hidden from `--help` for that reason. If
 `bcli get <name>` errors with `RegistryError`, the fix is to import the
-endpoint into the registry, not to pass override flags.
+endpoint into the registry (`bcli registry import --from-metadata
+--publisher P --group G --version V`, see
+[`docs/custom-apis.md`](docs/custom-apis.md)), not to pass override flags.
 
 ---
 
@@ -47,17 +49,21 @@ redundant flags that the profile + registry already supply.
 
 ```bash
 # ❌ Don't write this:
-bcli -c LLC get fixedAssets --publisher beautech --group finance --version v1.5 --all -f json
+bcli -c CRONUS get fixedAssets --publisher contoso --group finance --version v1.5 --all -f json
 
 # ✅ Write this:
-bcli -c LLC get fixedAssets
+bcli -c CRONUS get fixedAssets
 ```
 
 Why each flag was wrong:
 
-- `--publisher beautech --group finance --version v1.5` — the
-  registry resolves these automatically. Only pass them if the
-  endpoint isn't in the registry (and even then, prefer importing it).
+- `--publisher contoso --group finance --version v1.5` — redundant at
+  best and wrong at worst. `fixedAssets` is a standard v2.0 entity, so
+  these flags point the request at a custom route that doesn't serve
+  it. For custom endpoints already in the registry, the registry
+  resolves publisher / group / version automatically. Only pass them
+  if the endpoint isn't in the registry (and even then, prefer
+  importing it).
 - `--all` — pulls **every** page. Most asks need `--top 5` or no
   pagination flag at all. Use `--all` only when the user explicitly
   asks for a full export.
@@ -76,7 +82,7 @@ when the user's question demands them.
 
 The custom registry an organization installs may be a curated subset of
 BC's catalog. Names are case-sensitive and not always plural-of-the-
-obvious-singular (e.g. `preservationStatuses`, not `preservationStatus`).
+obvious-singular (e.g. `agedAccountsPayables`, not `agedAccountsPayable`).
 The recipe:
 
 ```bash
@@ -99,7 +105,7 @@ markdown / json formats render every column in full.
 ## Field discovery — don't guess fields either
 
 BC custom-API field names sometimes look nothing like the column you'd
-expect (`serialNo` rather than `serialNumber`, `no` rather than
+expect (`vendNo` rather than `vendorNumber`, `no` rather than
 `number`). Don't pass `--filter "<guess> eq 'X'"` and hope for the
 best — that's 1–2 wasted tool calls per guess.
 

@@ -747,8 +747,8 @@ class AsyncBCClient:
 
             # Best-effort fuzzy suggestion. Cheap (in-memory registry scan)
             # and saves AI agents a `bcli endpoint list` round trip when
-            # they're one typo away (e.g. preservationStatus →
-            # preservationStatuses).
+            # they're one typo away (e.g. agedAccountsPayable →
+            # agedAccountsPayables).
             suggestions = self._registry.search(entity_set_name)[:3]
             did_you_mean = ""
             if suggestions:

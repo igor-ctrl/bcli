@@ -5,33 +5,32 @@ name: "AP Monthly Review — March 2026"
 steps:
   - name: Open Purchase Invoices
     action: get
-    endpoint: purchaseHeaders
+    endpoint: purchaseInvoices
     params:
-      filter: "documentType eq 'Invoice' and status eq 'Open'"
-      select: "no,buyFromVendorNo,buyFromVendorName,amount,postingDate,dueDate,poDescription"
+      filter: "status eq 'Open'"
+      select: "number,vendorNumber,vendorName,invoiceDate,dueDate,totalAmountIncludingTax"
       orderby: "dueDate asc"
 
-  - name: Vendor Ledger (March open)
+  - name: Aged Payables
     action: get
-    endpoint: vendLedgEntries
+    endpoint: agedAccountsPayables
     params:
-      filter: "postingDate ge 2026-03-01 and postingDate le 2026-03-31 and open eq true"
-      select: "vendorNo,vendorName,documentType,documentNo,amount,dueDate"
-      orderby: "dueDate asc"
+      select: "vendorNumber,name,currencyCode,balanceDue,currentAmount,period1Amount,period2Amount,period3Amount"
+      orderby: "balanceDue desc"
 
-  - name: GL Entries (AP journal, March)
+  - name: GL Entries (March)
     action: get
-    endpoint: glEntries
+    endpoint: generalLedgerEntries
     params:
-      filter: "postingDate ge 2026-03-01 and sourceCode eq 'PURCHJNL'"
-      select: "postingDate,documentNo,description,amount,sourceCode"
+      filter: "postingDate ge 2026-03-01 and postingDate le 2026-03-31"
+      select: "entryNumber,postingDate,documentNumber,accountNumber,description,debitAmount,creditAmount"
       top: "50"
       orderby: "postingDate desc"
 
-  - name: Overdue Items
+  - name: Overdue Invoices
     action: get
-    endpoint: vendLedgEntries
+    endpoint: purchaseInvoices
     params:
-      filter: "open eq true and dueDate lt 2026-03-31"
-      select: "vendorNo,vendorName,documentNo,amount,dueDate"
+      filter: "status eq 'Open' and dueDate lt 2026-03-31"
+      select: "number,vendorNumber,vendorName,dueDate,totalAmountIncludingTax"
       orderby: "dueDate asc"

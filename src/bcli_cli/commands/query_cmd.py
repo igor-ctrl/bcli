@@ -106,7 +106,7 @@ def query_command(
     Examples:
       bcli q                                  # list saved queries for this profile
       bcli q customer-by-name name=Fabrikam
-      bcli q open-invoices-by-customer customer-id=C00010 limit=20
+      bcli q open-invoices-by-customer customer-id=10000 limit=20
       bcli q customer-by-name name=Fabrikam --show
       bcli q search "overdue invoices"        # discover by NL phrase
       bcli q info customer-by-name             # full metadata for one query

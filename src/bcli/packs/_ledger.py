@@ -30,7 +30,7 @@ Schema (v1):
       "registry_endpoints": [
         {"name": "myEntity", "rendered_hash": "sha256:..."}
       ],
-      "recommended_context_providers": ["beautech"]
+      "recommended_context_providers": ["my-org"]
     }
 """
 

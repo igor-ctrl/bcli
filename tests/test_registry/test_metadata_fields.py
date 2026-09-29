@@ -12,22 +12,22 @@ SAMPLE_EDMX = """<?xml version="1.0" encoding="utf-8"?>
 <edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="4.0">
   <edmx:DataServices>
     <Schema Namespace="Microsoft.NAV">
-      <EntityType Name="engineUtilization">
+      <EntityType Name="shipmentTracking">
         <Key><PropertyRef Name="systemId"/></Key>
         <Property Name="systemId" Type="Edm.Guid"/>
-        <Property Name="engineSerialNumber" Type="Edm.String"/>
-        <Property Name="tailNo" Type="Edm.String"/>
-        <Property Name="asOfDate" Type="Edm.Date"/>
-        <Property Name="efh" Type="Edm.Decimal"/>
-        <Property Name="efc" Type="Edm.Int32"/>
+        <Property Name="shipmentNumber" Type="Edm.String"/>
+        <Property Name="trackingNumber" Type="Edm.String"/>
+        <Property Name="shipmentDate" Type="Edm.Date"/>
+        <Property Name="weight" Type="Edm.Decimal"/>
+        <Property Name="packageCount" Type="Edm.Int32"/>
       </EntityType>
-      <EntityType Name="engineOverview">
+      <EntityType Name="shipmentCarrier">
         <Property Name="systemId" Type="Edm.Guid"/>
-        <Property Name="engineModel" Type="Edm.String"/>
+        <Property Name="carrier" Type="Edm.String"/>
       </EntityType>
       <EntityContainer Name="NAV">
-        <EntitySet Name="engineUtilizations" EntityType="Microsoft.NAV.engineUtilization"/>
-        <EntitySet Name="engineOverviews" EntityType="Microsoft.NAV.engineOverview"/>
+        <EntitySet Name="shipmentTrackings" EntityType="Microsoft.NAV.shipmentTracking"/>
+        <EntitySet Name="shipmentCarriers" EntityType="Microsoft.NAV.shipmentCarrier"/>
       </EntityContainer>
     </Schema>
   </edmx:DataServices>
@@ -37,35 +37,35 @@ SAMPLE_EDMX = """<?xml version="1.0" encoding="utf-8"?>
 
 def test_parses_entity_type_properties():
     fields = _parse_entity_type_properties(SAMPLE_EDMX)
-    assert fields["engineUtilization"] == [
+    assert fields["shipmentTracking"] == [
         "systemId",
-        "engineSerialNumber",
-        "tailNo",
-        "asOfDate",
-        "efh",
-        "efc",
+        "shipmentNumber",
+        "trackingNumber",
+        "shipmentDate",
+        "weight",
+        "packageCount",
     ]
-    assert fields["engineOverview"] == ["systemId", "engineModel"]
+    assert fields["shipmentCarrier"] == ["systemId", "carrier"]
 
 
 def test_parse_metadata_xml_attaches_field_names():
     endpoints = _parse_metadata_xml(
-        SAMPLE_EDMX, publisher="contoso", group="technical", version="v1.5"
+        SAMPLE_EDMX, publisher="contoso", group="integration", version="v1.5"
     )
     by_name = {ep.entity_set_name: ep for ep in endpoints}
 
-    assert "engineUtilizations" in by_name
-    eu = by_name["engineUtilizations"]
-    assert eu.api_publisher == "contoso"
-    assert eu.api_group == "technical"
-    assert eu.api_version == "v1.5"
-    assert eu.entity_name == "engineUtilization"
-    assert "engineSerialNumber" in eu.field_names
-    assert "tailNo" in eu.field_names
-    assert "efh" in eu.field_names
+    assert "shipmentTrackings" in by_name
+    st = by_name["shipmentTrackings"]
+    assert st.api_publisher == "contoso"
+    assert st.api_group == "integration"
+    assert st.api_version == "v1.5"
+    assert st.entity_name == "shipmentTracking"
+    assert "shipmentNumber" in st.field_names
+    assert "trackingNumber" in st.field_names
+    assert "weight" in st.field_names
 
-    eo = by_name["engineOverviews"]
-    assert eo.field_names == ["systemId", "engineModel"]
+    sc = by_name["shipmentCarriers"]
+    assert sc.field_names == ["systemId", "carrier"]
 
 
 def test_parse_metadata_xml_handles_missing_properties():

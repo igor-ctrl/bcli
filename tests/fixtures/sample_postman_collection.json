@@ -92,11 +92,11 @@
       ]
     },
     {
-      "name": "Technical",
-      "description": "**Source Table:** \"Engine Overview\"\nTechnical data for equipment tracking.",
+      "name": "Integration",
+      "description": "**Source Table:** \"Shipment Tracking\"\nShipment tracking exposed as a custom API.",
       "item": [
         {
-          "name": "Get Equipment Records",
+          "name": "Get Shipment Trackings",
           "request": {
             "method": "GET",
             "url": {
@@ -105,10 +105,10 @@
                 "{{env}}",
                 "api",
                 "acme",
-                "technical",
+                "integration",
                 "v1.0",
                 "companies({{company_id}})",
-                "equipmentRecords"
+                "shipmentTrackings"
               ]
             }
           }

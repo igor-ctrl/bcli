@@ -22,39 +22,39 @@ def test_batch_yaml_round_trips_through_yaml_loader(tmp_path: Path) -> None:
     schema = _schema(
         tmp_path,
         """
-name: "8130"
-prompt: "extract one record per tag"
+name: "vendor-invoice"
+prompt: "extract one record per invoice line"
 list: true
 fields:
-  part_no:
+  item_no:
     type: string
     required: true
-    description: "block 7"
-  serial_no:
+    description: "item number column"
+  unit_of_measure:
     type: string
     required: true
-    description: "block 13"
+    description: "unit of measure column"
 output:
-  endpoint: trackedParts
+  endpoint: purchaseInvoiceLines
   action: post
-  parent_field: parentEngineId
-  parent_param: parent_engine_id
+  parent_field: documentId
+  parent_param: purchase_invoice_id
   field_map:
-    partNo: part_no
-    serialNo: serial_no
+    lineObjectNumber: item_no
+    unitOfMeasureCode: unit_of_measure
   constants:
-    documentType: "8130-3"
+    lineType: "Item"
 """,
     )
     result = ExtractionResult(
-        schema_name="8130",
+        schema_name="vendor-invoice",
         records=[
             ExtractedRecord(
-                fields={"part_no": "PN-1", "serial_no": "SN-A"},
+                fields={"item_no": "1896-S", "unit_of_measure": "PCS"},
                 source_pages=(1, 2),
             ),
             ExtractedRecord(
-                fields={"part_no": "PN-2", "serial_no": "SN-B"},
+                fields={"item_no": "1906-S", "unit_of_measure": "BOX"},
                 source_pages=(3,),
             ),
         ],
@@ -62,22 +62,22 @@ output:
     )
 
     rendered = render_batch_yaml(
-        result, schema, source_pdf=tmp_path / "blades.pdf"
+        result, schema, source_pdf=tmp_path / "invoice.pdf"
     )
     parsed = yaml.safe_load(rendered)
 
-    assert parsed["name"].startswith("Load 8130 from")
-    assert "parent_engine_id" in parsed["params"]
+    assert parsed["name"].startswith("Load vendor-invoice from")
+    assert "purchase_invoice_id" in parsed["params"]
     assert len(parsed["steps"]) == 2
 
     first = parsed["steps"][0]
     assert first["action"] == "post"
-    assert first["endpoint"] == "trackedParts"
-    assert first["data"]["partNo"] == "PN-1"
-    assert first["data"]["serialNo"] == "SN-A"
-    assert first["data"]["documentType"] == "8130-3"
+    assert first["endpoint"] == "purchaseInvoiceLines"
+    assert first["data"]["lineObjectNumber"] == "1896-S"
+    assert first["data"]["unitOfMeasureCode"] == "PCS"
+    assert first["data"]["lineType"] == "Item"
     # Parent linkage emitted as ${{ params.X }} reference
-    assert first["data"]["parentEngineId"] == "${{ params.parent_engine_id }}"
+    assert first["data"]["documentId"] == "${{ params.purchase_invoice_id }}"
 
 
 def test_batch_yaml_omits_params_when_no_parent_param(tmp_path: Path) -> None:
@@ -87,19 +87,19 @@ def test_batch_yaml_omits_params_when_no_parent_param(tmp_path: Path) -> None:
 name: "loose"
 prompt: "..."
 fields:
-  part_no:
+  item_no:
     type: string
     required: true
     description: "x"
 output:
-  endpoint: trackedParts
+  endpoint: purchaseInvoiceLines
   field_map:
-    partNo: part_no
+    lineObjectNumber: item_no
 """,
     )
     result = ExtractionResult(
         schema_name="loose",
-        records=[ExtractedRecord(fields={"part_no": "X"})],
+        records=[ExtractedRecord(fields={"item_no": "X"})],
     )
     parsed = yaml.safe_load(
         render_batch_yaml(result, schema, source_pdf=tmp_path / "f.pdf")
@@ -115,23 +115,23 @@ name: "list-only"
 prompt: "..."
 list: true
 fields:
-  part_no:
+  item_no:
     type: string
     required: true
     description: "x"
 output:
-  endpoint: trackedParts
+  endpoint: purchaseInvoiceLines
   field_map:
-    partNo: part_no
+    lineObjectNumber: item_no
 """,
     )
     result = ExtractionResult(
         schema_name="list-only",
         records=[
             ExtractedRecord(
-                fields={"part_no": "PN"},
+                fields={"item_no": "1896-S"},
                 source_pages=(7,),
-                raw='{"part_no": "PN"}',
+                raw='{"item_no": "1896-S"}',
             )
         ],
         model="claude-sonnet-4-6",

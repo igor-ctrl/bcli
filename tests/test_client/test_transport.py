@@ -273,15 +273,15 @@ class TestBCErrorHints:
     def test_property_not_found_emits_endpoint_fields_hint(self):
         url = (
             "https://api.businesscentral.dynamics.com/v2.0/Production/api/"
-            "beautech/technical/v1.5/companies(abc123)/preservationStatuses"
+            "contoso/integration/v1.5/companies(abc123)/shipmentTrackings"
         )
         bc_message = (
             "Could not find a property named 'postingDate' on type "
-            "'Microsoft.NAV.preservationStatus'."
+            "'Microsoft.NAV.shipmentTracking'."
         )
         hint = _hint_for_bc_error(400, bc_message, url)
         assert hint is not None
-        assert "bcli endpoint fields preservationStatuses" in hint
+        assert "bcli endpoint fields shipmentTrackings" in hint
 
     def test_property_not_found_with_unparseable_url_falls_back(self):
         bc_message = (
@@ -312,7 +312,7 @@ class TestBCErrorHints:
                 "error": {
                     "message": (
                         "Could not find a property named 'postingDate' on type "
-                        "'Microsoft.NAV.preservationStatus'."
+                        "'Microsoft.NAV.shipmentTracking'."
                     )
                 }
             },
@@ -322,7 +322,7 @@ class TestBCErrorHints:
         with pytest.raises(ValidationError) as exc:
             await transport.get(
                 "https://api.businesscentral.dynamics.com/v2.0/Production/api/"
-                "beautech/technical/v1.5/companies(abc)/preservationStatuses"
+                "contoso/integration/v1.5/companies(abc)/shipmentTrackings"
             )
 
-        assert "bcli endpoint fields preservationStatuses" in str(exc.value)
+        assert "bcli endpoint fields shipmentTrackings" in str(exc.value)

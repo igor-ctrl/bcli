@@ -181,10 +181,10 @@ often cheaper because Claude renders compact markdown tables directly without
 the JSON serialization overhead. Use the right tool for the shape of the
 question.
 
-## Future: a Beautech-specific MCP (separate package)
+## Domain-specific MCPs (separate packages)
 
 The OSS `bcli-mcp` is intentionally generic. Domain-specific MCPs that combine
-BC OData with cross-system data (legal docs, market intel, fleet analytics)
+BC OData with data from other systems (CRM, document storage, data warehouse)
 should live in their own packages, installed alongside this one.
 
 The boundary rule:
@@ -192,7 +192,7 @@ The boundary rule:
 * **OSS owns** generic BC transport, query construction, registry, OData
   escaping, auth, retry, telemetry plumbing.
 * **Private package owns** domain tool composition only — tools like
-  `engine_lookup`, `lease_amendments_for`, `vendor_analytics` that combine
+  `customer_360`, `vendor_analytics`, `month_end_close_status` that combine
   multiple BC queries with cross-system data into one named operation.
 * The private MCP is a *consumer* of `bcli` (subprocess or
   `from bcli import AsyncBCClient`), never a layer that re-implements

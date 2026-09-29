@@ -2,7 +2,7 @@
 
 Saved queries and other places that interpolate user-supplied values into a
 ``$filter`` string need to escape single quotes so a value like
-``193208' or 1 eq 1--`` cannot break out of the string literal it's pasted
+``100001' or 1 eq 1--`` cannot break out of the string literal it's pasted
 into. This module centralises that rule so both the saved-query layer and any
 future call-sites stay consistent.
 
@@ -26,7 +26,7 @@ def escape_odata_string(value: str) -> str:
     'Acme'
     >>> escape_odata_string("O'Brien")
     "O''Brien"
-    >>> escape_odata_string("193208' or 1 eq 1--")
-    "193208'' or 1 eq 1--"
+    >>> escape_odata_string("100001' or 1 eq 1--")
+    "100001'' or 1 eq 1--"
     """
     return value.replace("'", "''")

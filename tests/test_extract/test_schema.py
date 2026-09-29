@@ -23,46 +23,46 @@ def test_load_minimal_schema(tmp_path: Path) -> None:
 name: "Test"
 prompt: "extract things"
 fields:
-  part_no:
+  item_no:
     type: string
     required: true
-    description: "the part"
+    description: "the item"
 output:
-  endpoint: trackedParts
+  endpoint: purchaseInvoiceLines
   field_map:
-    partNo: part_no
+    lineObjectNumber: item_no
 """,
     )
     schema = load_schema(path)
 
     assert schema.name == "Test"
     assert schema.list is False
-    assert schema.fields["part_no"].required is True
-    assert schema.output.endpoint == "trackedParts"
+    assert schema.fields["item_no"].required is True
+    assert schema.output.endpoint == "purchaseInvoiceLines"
 
 
 def test_load_schema_compiles_to_json_schema_with_source_pages(tmp_path: Path) -> None:
     path = _write_schema(
         tmp_path,
         """
-name: "8130"
+name: "vendor-invoice"
 prompt: "..."
 list: true
 fields:
-  serial_no:
+  unit_of_measure:
     type: string
     required: true
-    description: "Block 13"
+    description: "unit of measure column"
 output:
-  endpoint: trackedParts
+  endpoint: purchaseInvoiceLines
   field_map:
-    serialNo: serial_no
+    unitOfMeasureCode: unit_of_measure
 """,
     )
     js = load_schema(path).to_json_schema()
 
     record_props = js["properties"]["records"]["items"]["properties"]
-    assert "serial_no" in record_props
+    assert "unit_of_measure" in record_props
     assert record_props["source_pages"]["type"] == "array"
     assert record_props["source_pages"]["items"]["type"] == "integer"
     assert "source_pages" in js["properties"]["records"]["items"]["required"]
@@ -75,14 +75,14 @@ def test_field_map_referencing_unknown_field_rejected(tmp_path: Path) -> None:
 name: "bad"
 prompt: "..."
 fields:
-  part_no:
+  item_no:
     type: string
     required: true
-    description: "the part"
+    description: "the item"
 output:
-  endpoint: trackedParts
+  endpoint: purchaseInvoiceLines
   field_map:
-    serialNo: serial_no   # not declared
+    unitOfMeasureCode: unit_of_measure   # not declared
 """,
     )
     with pytest.raises(ExtractError, match="unknown extracted fields"):
@@ -96,15 +96,15 @@ def test_parent_field_without_parent_param_rejected(tmp_path: Path) -> None:
 name: "bad parent"
 prompt: "..."
 fields:
-  part_no:
+  item_no:
     type: string
     required: true
     description: "x"
 output:
-  endpoint: trackedParts
-  parent_field: parentEngineId
+  endpoint: purchaseInvoiceLines
+  parent_field: documentId
   field_map:
-    partNo: part_no
+    lineObjectNumber: item_no
 """,
     )
     with pytest.raises(ExtractError, match="parent_param missing"):
@@ -119,16 +119,16 @@ def test_extra_output_keys_rejected(tmp_path: Path) -> None:
 name: "typo"
 prompt: "..."
 fields:
-  part_no:
+  item_no:
     type: string
     required: true
     description: "x"
 output:
-  endpoint: trackedParts
-  parent_filed: parentEngineId   # typo: filed → field
-  parent_param: parent_engine_id
+  endpoint: purchaseInvoiceLines
+  parent_filed: documentId   # typo: filed → field
+  parent_param: purchase_invoice_id
   field_map:
-    partNo: part_no
+    lineObjectNumber: item_no
 """,
     )
     with pytest.raises(ExtractError):
@@ -177,16 +177,16 @@ def test_date_field_gets_iso_hint(tmp_path: Path) -> None:
 name: "d"
 prompt: "..."
 fields:
-  cert_date:
+  invoice_date:
     type: date
     required: true
-    description: "Certification date"
+    description: "Invoice date"
 output:
   endpoint: e
   field_map:
-    certDate: cert_date
+    invoiceDate: invoice_date
 """,
     )
     js = load_schema(path).to_json_schema()
-    desc = js["properties"]["records"]["items"]["properties"]["cert_date"]["description"]
+    desc = js["properties"]["records"]["items"]["properties"]["invoice_date"]["description"]
     assert "ISO 8601" in desc

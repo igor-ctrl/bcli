@@ -10,13 +10,13 @@ from bcli.queries import ResolvedQuery, expand_query
 
 def test_expand_query_resolves_param_references():
     spec = {
-        "endpoint": "engineUtilizations",
-        "filter": "engineSerialNumber eq '${{ params.esn }}'",
+        "endpoint": "salesInvoices",
+        "filter": "customerNumber eq '${{ params.customer_no }}'",
         "top": 24,
     }
-    resolved = expand_query(spec, {"esn": "193208"})
-    assert resolved.filter == "engineSerialNumber eq '193208'"
-    assert resolved.endpoint == "engineUtilizations"
+    resolved = expand_query(spec, {"customer_no": "10000"})
+    assert resolved.filter == "customerNumber eq '10000'"
+    assert resolved.endpoint == "salesInvoices"
     assert resolved.top == 24
 
 
@@ -40,9 +40,9 @@ def test_expand_query_ignores_non_odata_metadata_fields():
         "endpoint": "x",
         "description": "irrelevant to expansion",
         "tags": ["a", "b"],
-        "params": {"esn": {"required": True}},
+        "params": {"customer_no": {"required": True}},
     }
-    resolved = expand_query(spec, {"esn": "1"})
+    resolved = expand_query(spec, {"customer_no": "1"})
     assert not hasattr(resolved, "description")
     assert not hasattr(resolved, "tags")
 
@@ -58,11 +58,11 @@ def test_expand_query_escapes_single_quote_in_filter():
 
 def test_expand_query_neutralises_injection_in_filter():
     spec = {
-        "endpoint": "engineUtilizations",
-        "filter": "engineSerialNumber eq '${{ params.esn }}'",
+        "endpoint": "salesInvoices",
+        "filter": "customerNumber eq '${{ params.customer_no }}'",
     }
-    resolved = expand_query(spec, {"esn": "193208' or 1 eq 1--"})
-    assert resolved.filter == "engineSerialNumber eq '193208'' or 1 eq 1--'"
+    resolved = expand_query(spec, {"customer_no": "10000' or 1 eq 1--"})
+    assert resolved.filter == "customerNumber eq '10000'' or 1 eq 1--'"
     assert resolved.filter.count("'") % 2 == 0
 
 

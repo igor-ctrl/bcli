@@ -44,7 +44,7 @@ queries:
 
   open-invoices-by-customer:
     description: Outstanding invoices for a customer
-    endpoint: customerSalesInvoices
+    endpoint: salesInvoices
     params:
       customer-id:
         required: true
@@ -91,25 +91,25 @@ Example with all the validation knobs:
 
 ```yaml
 queries:
-  utilization-by-esn:
-    description: Monthly utilization records for one ESN
-    endpoint: engineUtilizations
+  invoices-by-customer:
+    description: Sales invoices for one customer
+    endpoint: salesInvoices
     params:
-      esn:
+      customer_no:
         required: true
         type: string
-        pattern: "^[A-Za-z0-9-]{4,16}$"   # ESNs are alphanumeric, no spaces
+        pattern: "^[A-Za-z0-9-]{4,20}$"   # customer numbers are alphanumeric, no spaces
       limit:
         default: 24
         type: integer
         min: 1
         max: 1000
-      airline:
+      status:
         required: false
         type: string
-        enum: ["AIRNORTH", "QANTAS", "VIRGIN"]
-    filter: "engineSerialNumber eq '${{ params.esn }}'"
-    orderby: "asOfDate desc"
+        enum: ["Draft", "Open", "Paid"]
+    filter: "customerNumber eq '${{ params.customer_no }}'"
+    orderby: "invoiceDate desc"
     top: "${{ params.limit }}"
 ```
 
@@ -117,7 +117,7 @@ queries:
 
 When a string-typed param is interpolated into the `filter:` field, `bcli`
 applies OData v4 single-quote escaping (`'` → `''`) so a value like
-`193208' or 1 eq 1--` cannot break out of the surrounding string literal.
+`10000' or 1 eq 1--` cannot break out of the surrounding string literal.
 This escape is scoped to the filter context — `select`, `orderby`, `top`,
 `skip`, `all`, and `endpoint` keep raw values, since they don't sit inside
 OData string literals.
@@ -176,19 +176,19 @@ Three optional fields on each query feed the generator:
 
 ```yaml
 queries:
-  utilization-by-esn:
-    description: Engine utilization (cycles, hours, FSN) for an ESN
-    categories: [aviation, daily-ops]
+  invoices-by-customer:
+    description: Sales invoices (dates, totals, status) for one customer
+    categories: [sales, daily-ops]
     args:
-      - name: esn
+      - name: customer_no
         type: string
-        example: "424322"
+        example: "10000"
         required: true
     # existing fields below — params/filter/select/etc.
-    endpoint: util_history
+    endpoint: salesInvoices
     params:
-      esn: {required: true}
-    filter: "engine_serial eq '${{ params.esn }}'"
+      customer_no: {required: true}
+    filter: "customerNumber eq '${{ params.customer_no }}'"
 ```
 
 * `description` — used as the slash command's frontmatter `description:`

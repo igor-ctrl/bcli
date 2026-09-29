@@ -1,22 +1,27 @@
-name: "Create Draft Purchase Invoice — AAR Supply Chain"
-# Run: bcli batch run examples/create-purchase-invoice.yaml --set vendor_no=V00011
-# Dry run: bcli batch run examples/create-purchase-invoice.yaml --set vendor_no=V00011 --dry-run
+name: "Create Draft Purchase Invoice"
+# Uses the standard v2.0 purchaseInvoices / purchaseInvoiceLines entities.
 #
-# Step chaining: the invoice number from step 1 flows into steps 2 and 3
-# via ${{ steps.create_header.no }}.
+# Run: bcli batch run examples/create-purchase-invoice.yaml --set vendor_no=V00011 --set gl_account=<G/L account no.>
+# Dry run: add --dry-run
+#
+# Step chaining: the invoice id from step 1 flows into steps 2 and 3
+# via ${{ steps.create_header.id }}.
 
 params:
   vendor_no:
     description: "Vendor number (e.g. V00011)"
     required: true
-  posting_desc:
-    description: "Invoice posting description"
-    default: "Engine inspection services — March 2026"
-  inspection_desc:
-    description: "Description for the inspection line"
-    default: "CF34-10E borescope inspection"
-  inspection_cost:
-    description: "Inspection cost"
+  gl_account:
+    description: "G/L account number to expense the lines to"
+    required: true
+  vendor_invoice_no:
+    description: "Vendor's own invoice number"
+    default: "INV-2026-0315"
+  service_desc:
+    description: "Description for the service line"
+    default: "Implementation consulting — 30 hours"
+  service_cost:
+    description: "Service fee"
     default: 4500
   travel_cost:
     description: "Travel expenses"
@@ -26,34 +31,31 @@ steps:
   # 1. Create the invoice header
   - name: create_header
     action: post
-    endpoint: purchaseHeaders
+    endpoint: purchaseInvoices
     data:
-      documentType: "Invoice"
-      buyFromVendorNo: "${{ params.vendor_no }}"
-      postingDescription: "${{ params.posting_desc }}"
+      vendorNumber: "${{ params.vendor_no }}"
+      vendorInvoiceNumber: "${{ params.vendor_invoice_no }}"
 
-  # 2. Add first line (inspection fee)
-  - name: add_inspection_line
+  # 2. Add first line (service fee)
+  - name: add_service_line
     action: post
-    endpoint: purchaseLines
+    endpoint: purchaseInvoiceLines
     data:
-      documentType: "Invoice"
-      documentNo: "${{ steps.create_header.no }}"
-      type: "G_x002F_L_x0020_Account"
-      "no": "6260-000000-000"
-      description: "${{ params.inspection_desc }}"
+      documentId: "${{ steps.create_header.id }}"
+      lineType: "Account"
+      lineObjectNumber: "${{ params.gl_account }}"
+      description: "${{ params.service_desc }}"
       quantity: 1
-      directUnitCost: ${{ params.inspection_cost }}
+      directUnitCost: ${{ params.service_cost }}
 
   # 3. Add second line (travel expenses)
   - name: add_travel_line
     action: post
-    endpoint: purchaseLines
+    endpoint: purchaseInvoiceLines
     data:
-      documentType: "Invoice"
-      documentNo: "${{ steps.create_header.no }}"
-      type: "G_x002F_L_x0020_Account"
-      "no": "6260-000000-000"
+      documentId: "${{ steps.create_header.id }}"
+      lineType: "Account"
+      lineObjectNumber: "${{ params.gl_account }}"
       description: "Travel and per diem"
       quantity: 1
       directUnitCost: ${{ params.travel_cost }}

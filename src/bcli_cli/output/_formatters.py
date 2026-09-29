@@ -115,7 +115,7 @@ def _should_auto_records(records: list[dict[str, Any]]) -> bool:
         return False
     # Always flip when there are very many columns — terminal width can't
     # be trusted on Windows Terminal under some shells, and 8+ columns in
-    # 1-2 rows is the canonical "give me the engine record" lookup shape.
+    # 1-2 rows is the canonical "give me this customer record" lookup shape.
     if len(columns) > 8:
         return True
     width = shutil.get_terminal_size((120, 24)).columns
@@ -254,16 +254,16 @@ def _format_records(records: list[dict[str, Any]]) -> None:
     Output shape (line-wrapping aside, every field stays on its own line):
 
         record 1
-          systemId           : b1fc5e63-…
-          engineSerialNumber : 194108
-          engineType         : CF34-8C
+          id          : b1fc5e63-…
+          number      : 10000
+          displayName : Adatum Corporation
           …
 
         record 2
           …
 
     This is the right view for wide records on narrow terminals (Windows
-    PowerShell with ~120 columns and an engine record with ~30 fields is the
+    PowerShell with ~120 columns and a customer record with ~30 fields is the
     motivating case). It works in any terminal — no box-drawing, no ANSI,
     safe to redirect.
     """

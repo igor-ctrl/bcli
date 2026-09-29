@@ -4,7 +4,7 @@ YAML 1.1 (PyYAML's default) parses bare ``no:``, ``yes:``, ``on:``,
 ``off:`` as booleans. BC fields use ``no`` as a primary-key field
 (account number, line number) — silently coercing those to
 ``False`` produces broken workflows that hit BC with payloads like
-``{"false": "6260-..."}`` instead of ``{"no": "6260-..."}``.
+``{"false": "8430"}`` instead of ``{"no": "8430"}``.
 
 Rather than coerce-and-guess (which spelling did the user intend —
 ``no``? ``No``? ``NO``?), this loader rejects boolean keys with a

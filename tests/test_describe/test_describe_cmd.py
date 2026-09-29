@@ -102,23 +102,23 @@ def _write_custom_registry(registries_dir: Path, profile: str = "test") -> Path:
                 "supports": ["GET", "POST", "PATCH"],
                 "key_field": "id",
                 "category": "finance",
-                "api_publisher": "beautech",
+                "api_publisher": "contoso",
                 "api_group": "finance",
                 "api_version": "v1.0",
                 "domain": "finance",
                 "field_names": ["id", "number", "name"],
             },
             {
-                "entity_set_name": "engineLogbook",
-                "entity_name": "EngineLogbook",
-                "description": "Aviation engine logbook",
+                "entity_set_name": "shipmentTrackings",
+                "entity_name": "shipmentTracking",
+                "description": "Shipment tracking records",
                 "supports": ["GET"],
                 "key_field": "id",
-                "category": "aviation",
-                "api_publisher": "beautech",
-                "api_group": "aviation",
+                "category": "sales",
+                "api_publisher": "contoso",
+                "api_group": "integration",
                 "api_version": "v1.0",
-                "domain": "technical",
+                "domain": "standard",
                 "field_names": [],
             },
         ]
@@ -289,14 +289,14 @@ def test_describe_profile_constraints_projection(tmp_config):
         tmp_config["config_file"],
         disable_writes=True,
         disable_standard_api=True,
-        allowed_categories=["finance", "aviation"],
+        allowed_categories=["finance", "sales"],
     )
     result = _invoke_describe("--format", "json")
     data = json.loads(result.stdout)
     constraints = data["profile_constraints"]
     assert constraints["disable_writes"] is True
     assert constraints["disable_standard_api"] is True
-    assert constraints["allowed_categories"] == ["finance", "aviation"]
+    assert constraints["allowed_categories"] == ["finance", "sales"]
 
 
 def test_describe_profile_constraints_defaults_to_unset(tmp_config):
