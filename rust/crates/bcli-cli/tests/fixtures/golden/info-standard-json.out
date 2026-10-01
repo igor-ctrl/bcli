@@ -1,0 +1,19 @@
+{
+  "name": "accounts",
+  "category": "financials",
+  "custom": false,
+  "supported_ops": [
+    "GET"
+  ],
+  "key_field": "id",
+  "publisher": null,
+  "group": null,
+  "version": null,
+  "description": "G/L accounts (chart of accounts)",
+  "caution": "low",
+  "entity_name": "account",
+  "fields": [],
+  "fields_discovered": false,
+  "source_table": "",
+  "page_number": ""
+}

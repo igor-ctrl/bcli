@@ -1,0 +1,2846 @@
+[
+ {
+  "path": [],
+  "group": true,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [
+     "-p"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--env"
+    ],
+    "short": [
+     "-e"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--company"
+    ],
+    "short": [
+     "-c"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--verbose"
+    ],
+    "short": [
+     "-v"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--debug"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--dry-run"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--quiet"
+    ],
+    "short": [
+     "-q"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--version"
+    ],
+    "short": [
+     "-V"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--install-completion"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--show-completion"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "action"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--data"
+    ],
+    "short": [
+     "-d"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--no-data"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--namespace"
+    ],
+    "short": [
+     "-n"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--publisher"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": true,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--group"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": true,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--version"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": true,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--yes"
+    ],
+    "short": [
+     "-y"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--out"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--overwrite"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--result-out"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--result-fd"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--idempotency-key"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "entity_set",
+    "required": true,
+    "nargs": 1
+   },
+   {
+    "name": "key",
+    "required": true,
+    "nargs": 1
+   },
+   {
+    "name": "action_name",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "ai-context"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "ask"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--no-context"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--attach"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": true,
+    "required": false
+   },
+   {
+    "long": [
+     "--backend"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--dry-run"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--include-bodies"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--include-debug"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--max-tokens"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "question",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "attach"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "attach",
+   "test"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--vendor-id"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": true
+   },
+   {
+    "long": [
+     "--invoice-date"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--file-name"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--content-type"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--publisher"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": true,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--group"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": true,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--version"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": true,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--no-registry",
+     "--standard"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "file_path",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "attach",
+   "upload"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--parent-id"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": true
+   },
+   {
+    "long": [
+     "--parent-type"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--file-name"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--content-type"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--publisher"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": true,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--group"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": true,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--version"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": true,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--no-registry",
+     "--standard"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--yes"
+    ],
+    "short": [
+     "-y"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--result-out"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--result-fd"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--idempotency-key"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "file_path",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "auth"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "auth",
+   "delete-secret"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "auth",
+   "login"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--method"
+    ],
+    "short": [
+     "-m"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--incognito"
+    ],
+    "short": [
+     "-i"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "auth",
+   "logout"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "auth",
+   "status"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "auth",
+   "store-secret"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "batch"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "batch",
+   "list"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--state"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--limit"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "batch",
+   "rollback"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--dry-run"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--yes"
+    ],
+    "short": [
+     "-y"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "run_id",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "batch",
+   "run"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--dry-run"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--output"
+    ],
+    "short": [
+     "-o"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--set"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": true,
+    "required": false
+   },
+   {
+    "long": [
+     "--params"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--yes"
+    ],
+    "short": [
+     "-y"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--result-out"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--result-fd"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--progress-fd"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "file",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "batch",
+   "state"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "run_id",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "company"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "company",
+   "alias"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--name"
+    ],
+    "short": [
+     "-n"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "name",
+    "required": true,
+    "nargs": 1
+   },
+   {
+    "name": "company_id",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "company",
+   "aliases"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "company",
+   "aliases-import"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--from"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": true
+   },
+   {
+    "long": [
+     "--overwrite"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--dry-run"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "company",
+   "list"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "company",
+   "use"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": [
+   {
+    "name": "company",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "config"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "config",
+   "bundle-status"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [
+     "-p"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "config",
+   "edit"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "config",
+   "init"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [
+     "-p"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--auth"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--automation"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--headless"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--scoped"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--category"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": true,
+    "required": false
+   },
+   {
+    "long": [
+     "--import"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "config",
+   "make-bundle"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [
+     "-p"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": true
+   },
+   {
+    "long": [
+     "--version"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": true
+   },
+   {
+    "long": [
+     "--publisher"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--notes"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--previous"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--output"
+    ],
+    "short": [
+     "-o"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "source_dir",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "config",
+   "path"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "config",
+   "refresh"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [
+     "-p"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--url"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--dry-run"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--skip-verify"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "config",
+   "rollback"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [
+     "-p"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "config",
+   "set"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": [
+   {
+    "name": "key",
+    "required": true,
+    "nargs": 1
+   },
+   {
+    "name": "value",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "config",
+   "show"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "config",
+   "use"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": [
+   {
+    "name": "name",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "delete"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--etag"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--publisher"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--group"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--version"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--yes"
+    ],
+    "short": [
+     "-y"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--result-out"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--result-fd"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--idempotency-key"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "endpoint",
+    "required": true,
+    "nargs": 1
+   },
+   {
+    "name": "record_id",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "describe"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "command_path",
+    "required": false,
+    "nargs": -1
+   }
+  ]
+ },
+ {
+  "path": [
+   "doctor"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [
+     "-p"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--json"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--skip-network"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "endpoint"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "endpoint",
+   "fields"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": [
+   {
+    "name": "name",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "endpoint",
+   "info"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "name",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "endpoint",
+   "list"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--custom"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--standard"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--category"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "endpoint",
+   "search"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": [
+   {
+    "name": "query",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "env"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "env",
+   "list"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "env",
+   "use"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": [
+   {
+    "name": "name",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "etl"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "etl",
+   "entities"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--include-standard"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "etl",
+   "sync"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--entities"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--destination"
+    ],
+    "short": [
+     "-d"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--dataset"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--pipeline"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--full-refresh"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--include-standard"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--file-format"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--stamper"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": true,
+    "required": false
+   },
+   {
+    "long": [
+     "--polaris-uri"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--polaris-warehouse"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--polaris-credential"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--polaris-namespace"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "extract"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "extract",
+   "list-schemas"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "extract",
+   "run"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--schema"
+    ],
+    "short": [
+     "-s"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": true
+   },
+   {
+    "long": [
+     "--output"
+    ],
+    "short": [
+     "-o"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--sidecar"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--overwrite"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--progress-fd"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "pdf_path",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "get"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--filter"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--select"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--expand"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--orderby"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--top"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--skip"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--count"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--all"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--out"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--media"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--overwrite"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--publisher"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--group"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--version"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "endpoint",
+    "required": true,
+    "nargs": 1
+   },
+   {
+    "name": "record_id",
+    "required": false,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "pack"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "pack",
+   "info"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [
+     "-p"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "name",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "pack",
+   "install"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [
+     "-p"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--target"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--dry-run"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--replace-owned"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--accept-conflicts"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--yes"
+    ],
+    "short": [
+     "-y"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "name",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "pack",
+   "list"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [
+     "-p"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "pack",
+   "uninstall"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [
+     "-p"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--yes"
+    ],
+    "short": [
+     "-y"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "name",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "patch"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--data"
+    ],
+    "short": [
+     "-d"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": true
+   },
+   {
+    "long": [
+     "--etag"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--publisher"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--group"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--version"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--yes"
+    ],
+    "short": [
+     "-y"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--result-out"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--result-fd"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--idempotency-key"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "endpoint",
+    "required": true,
+    "nargs": 1
+   },
+   {
+    "name": "record_id",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "post"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--data"
+    ],
+    "short": [
+     "-d"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": true
+   },
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--publisher"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--group"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--version"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--yes"
+    ],
+    "short": [
+     "-y"
+    ],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--result-out"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--result-fd"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--idempotency-key"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "endpoint",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ },
+ {
+  "path": [
+   "q"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--show"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--format"
+    ],
+    "short": [
+     "-f"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": [
+   {
+    "name": "name",
+    "required": false,
+    "nargs": 1
+   },
+   {
+    "name": "params",
+    "required": false,
+    "nargs": -1
+   }
+  ]
+ },
+ {
+  "path": [
+   "registry"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "registry",
+   "import"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--from-postman"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--from-json"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--from-metadata"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [
+     "-p"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "registry",
+   "list"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "skill"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "skill",
+   "init"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--target-skills-dir"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--non-interactive"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "skill",
+   "install"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--target"
+    ],
+    "short": [
+     "-t"
+    ],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--dry-run"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "skill",
+   "update"
+  ],
+  "group": false,
+  "options": [
+   {
+    "long": [
+     "--profile"
+    ],
+    "short": [],
+    "flag": false,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   },
+   {
+    "long": [
+     "--non-interactive"
+    ],
+    "short": [],
+    "flag": true,
+    "hidden": false,
+    "multiple": false,
+    "required": false
+   }
+  ],
+  "positionals": []
+ },
+ {
+  "path": [
+   "test"
+  ],
+  "group": true,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "test",
+   "auth"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "test",
+   "connection"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": []
+ },
+ {
+  "path": [
+   "test",
+   "endpoint"
+  ],
+  "group": false,
+  "options": [],
+  "positionals": [
+   {
+    "name": "name",
+    "required": true,
+    "nargs": 1
+   }
+  ]
+ }
+]

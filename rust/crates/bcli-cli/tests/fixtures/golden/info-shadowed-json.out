@@ -1,0 +1,19 @@
+{
+  "name": "customers",
+  "category": "sales",
+  "custom": true,
+  "supported_ops": [
+    "GET"
+  ],
+  "key_field": "id",
+  "publisher": "acme",
+  "group": "sales",
+  "version": "v2.0",
+  "description": "Custom customers",
+  "caution": "high",
+  "entity_name": "",
+  "fields": [],
+  "fields_discovered": false,
+  "source_table": "",
+  "page_number": ""
+}

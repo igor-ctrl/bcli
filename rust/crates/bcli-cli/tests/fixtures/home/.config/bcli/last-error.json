@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "timestamp": "2026-10-01T00:08:30+00:00",
+  "command": "prdo endpoint",
+  "error_class": "ConfigError",
+  "exit_code": 2,
+  "status": 0,
+  "profile": "prdo",
+  "environment": "",
+  "company": "",
+  "url": "",
+  "method": "",
+  "correlation_id": "",
+  "endpoint": "",
+  "hint": "",
+  "bc_message": "",
+  "traceback_excerpt": ""
+}

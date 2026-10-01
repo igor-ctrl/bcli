@@ -1,0 +1,83 @@
+| name                        | category   | custom | supported_ops                      | key_field  | publisher | group | version | description                                  | caution |
+| --------------------------- | ---------- | ------ | ---------------------------------- | ---------- | --------- | ----- | ------- | -------------------------------------------- | ------- |
+| customers                   | sales      | true   | ["GET"]                            | id         | acme      | sales | v2.0    | Custom customers                             | high    |
+| widgetLines                 | ops        | true   | ["GET", "PATCH"]                   | id         | acme      | ops   | v1.0    | Widget lines — Überprüfung                   | low     |
+| accountingPeriods           | financials | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Accounting periods                           | low     |
+| accounts                    | financials | false  | ["GET"]                            | id         |           |       |         | G/L accounts (chart of accounts)             | low     |
+| agedAccountsPayables        | purchasing | false  | ["GET"]                            | vendorId   |           |       |         | Aged accounts payable                        | low     |
+| agedAccountsReceivables     | sales      | false  | ["GET"]                            | customerId |           |       |         | Aged accounts receivable                     | low     |
+| applyVendorEntries          | purchasing | false  | ["GET", "POST"]                    | id         |           |       |         | Apply vendor ledger entries                  | low     |
+| attachments                 | setup      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | File attachments                             | low     |
+| balanceSheets               | financials | false  | ["GET"]                            | lineNumber |           |       |         | Balance sheet report data                    | low     |
+| bankAccounts                | financials | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Bank accounts                                | low     |
+| cashFlowStatements          | financials | false  | ["GET"]                            | lineNumber |           |       |         | Cash flow statement report data              | low     |
+| companies                   | setup      | false  | ["GET"]                            | id         |           |       |         | Companies in the BC environment              | low     |
+| companyInformation          | setup      | false  | ["GET", "PATCH"]                   | id         |           |       |         | Company information and settings             | low     |
+| contacts                    | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Contacts                                     | low     |
+| contactsInformation         | sales      | false  | ["GET"]                            | contactId  |           |       |         | Contact information details                  | low     |
+| countriesRegions            | setup      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Countries and regions                        | low     |
+| currencies                  | setup      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Currencies                                   | low     |
+| currencyExchangeRates       | setup      | false  | ["GET"]                            | id         |           |       |         | Currency exchange rates                      | low     |
+| customerContacts            | sales      | false  | ["GET", "POST", "PATCH"]           | contactId  |           |       |         | Customer contact relationships               | low     |
+| customerFinancialDetails    | sales      | false  | ["GET"]                            | id         |           |       |         | Customer financial summary                   | low     |
+| customerPaymentJournals     | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Customer payment journal batches             | low     |
+| customerPayments            | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Customer payment journal lines               | low     |
+| customerReturnReasons       | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Customer return reason codes                 | low     |
+| customerSales               | sales      | false  | ["GET"]                            | customerId |           |       |         | Customer sales summary                       | low     |
+| customers                   | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Customer master data                         | low     |
+| defaultDimensions           | dimensions | false  | ["GET", "POST", "PATCH", "DELETE"] | parentId   |           |       |         | Default dimensions for entities              | low     |
+| dimensionSetLines           | dimensions | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Dimension set line entries                   | low     |
+| dimensionValues             | dimensions | false  | ["GET"]                            | id         |           |       |         | Dimension values                             | low     |
+| dimensions                  | dimensions | false  | ["GET"]                            | id         |           |       |         | Dimensions                                   | low     |
+| disputeStatus               | setup      | false  | ["GET"]                            | id         |           |       |         | Dispute status codes                         | low     |
+| documentAttachments         | setup      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Document-level attachments                   | low     |
+| employees                   | hr         | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Employee records                             | low     |
+| fixedAssetLocations         | inventory  | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Fixed asset location codes                   | low     |
+| fixedAssets                 | inventory  | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Fixed asset records                          | low     |
+| generalLedgerEntries        | financials | false  | ["GET"]                            | id         |           |       |         | G/L ledger entries                           | low     |
+| generalLedgerSetup          | financials | false  | ["GET"]                            | id         |           |       |         | G/L setup configuration                      | low     |
+| generalProductPostingGroups | setup      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | General product posting groups               | low     |
+| incomeStatements            | financials | false  | ["GET"]                            | lineNumber |           |       |         | Income statement report data                 | low     |
+| inventoryPostingGroups      | setup      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Inventory posting groups                     | low     |
+| itemCategories              | inventory  | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Item categories                              | low     |
+| itemLedgerEntries           | inventory  | false  | ["GET"]                            | id         |           |       |         | Item ledger entries                          | low     |
+| itemVariants                | inventory  | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Item variants                                | low     |
+| items                       | inventory  | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Item master data                             | low     |
+| journalLines                | financials | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | General journal lines                        | low     |
+| journals                    | financials | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | General journal batches                      | low     |
+| locations                   | inventory  | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Inventory locations                          | low     |
+| opportunities               | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Sales opportunities                          | low     |
+| paymentMethods              | setup      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Payment methods                              | low     |
+| paymentTerms                | setup      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Payment terms                                | low     |
+| pdfDocument                 | setup      | false  | ["GET"]                            | id         |           |       |         | PDF document generation for posted documents | low     |
+| pictures                    | setup      | false  | ["GET", "POST", "PATCH"]           | id         |           |       |         | Entity pictures/images                       | low     |
+| projects                    | projects   | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Projects (jobs)                              | low     |
+| purchaseCreditMemoLines     | purchasing | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Purchase credit memo lines                   | low     |
+| purchaseCreditMemos         | purchasing | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Purchase credit memos                        | low     |
+| purchaseInvoiceLines        | purchasing | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Purchase invoice lines                       | low     |
+| purchaseInvoices            | purchasing | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Purchase invoices                            | low     |
+| purchaseOrderLines          | purchasing | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Purchase order lines                         | low     |
+| purchaseOrders              | purchasing | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Purchase orders                              | low     |
+| purchaseReceiptLines        | purchasing | false  | ["GET"]                            | id         |           |       |         | Purchase receipt lines                       | low     |
+| purchaseReceipts            | purchasing | false  | ["GET"]                            | id         |           |       |         | Purchase receipts                            | low     |
+| retainedEarningsStatements  | financials | false  | ["GET"]                            | lineNumber |           |       |         | Retained earnings statement                  | low     |
+| salesCreditMemoLines        | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Sales credit memo lines                      | low     |
+| salesCreditMemos            | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Sales credit memos                           | low     |
+| salesInvoiceLines           | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Sales invoice lines                          | low     |
+| salesInvoices               | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Sales invoices                               | low     |
+| salesOrderLines             | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Sales order lines                            | low     |
+| salesOrders                 | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Sales orders                                 | low     |
+| salesQuoteLines             | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Sales quote lines                            | low     |
+| salesQuotes                 | sales      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Sales quotes                                 | low     |
+| salesShipmentLines          | sales      | false  | ["GET"]                            | id         |           |       |         | Sales shipment lines                         | low     |
+| salesShipments              | sales      | false  | ["GET"]                            | id         |           |       |         | Posted sales shipments                       | low     |
+| shipmentMethods             | setup      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Shipment methods                             | low     |
+| taxAreas                    | setup      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Tax areas                                    | low     |
+| taxGroups                   | setup      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Tax groups                                   | low     |
+| timeRegistrationEntries     | hr         | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Time registration entries                    | low     |
+| trialBalances               | financials | false  | ["GET"]                            | accountId  |           |       |         | Trial balance report data                    | low     |
+| unitsOfMeasure              | setup      | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Units of measure                             | low     |
+| vendorPaymentJournals       | purchasing | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Vendor payment journal batches               | low     |
+| vendorPayments              | purchasing | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Vendor payment journal lines                 | low     |
+| vendorPurchases             | purchasing | false  | ["GET"]                            | vendorId   |           |       |         | Vendor purchase summary                      | low     |
+| vendors                     | purchasing | false  | ["GET", "POST", "PATCH", "DELETE"] | id         |           |       |         | Vendor master data                           | low     |

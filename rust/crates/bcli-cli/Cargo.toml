@@ -1,0 +1,39 @@
+[package]
+name = "bcli-cli"
+description = "CLI for Microsoft Dynamics 365 Business Central APIs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[[bin]]
+name = "bcli"
+path = "src/main.rs"
+
+[features]
+default = ["keyring"]
+keyring = ["bcli-core/keyring"]
+
+[dependencies]
+bcli-core.workspace = true
+clap.workspace = true
+comfy-table.workspace = true
+csv.workspace = true
+difflib.workspace = true
+indexmap.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+wiremock.workspace = true
+
+[lints]
+workspace = true
