@@ -1,0 +1,2 @@
+Error: Profile 'nope' not found. Available: prod, scoped. Run 'bcli config init --profile nope' to create it, or 'bcli config use <name>' to switch.
+  Did you mean: scoped?

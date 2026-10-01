@@ -1,0 +1,21 @@
+# Golden parity cases: <name> | <bcli args>
+# Outputs in this directory were produced by the Python bcli against
+# ../home (see rust/scripts/parity.sh); the Rust binary must match them.
+version | --version
+list-json | endpoint list -f json
+list-ndjson | endpoint list -f ndjson
+list-csv | endpoint list -f csv
+list-raw | endpoint list -f raw
+list-markdown | endpoint list -f markdown
+list-custom-markdown | endpoint list --custom -f markdown
+list-category-json | endpoint list --custom --category OPS -f json
+list-scoped-profile | -p scoped endpoint list -f json
+list-auto-records | endpoint list --custom --category ops -f markdown
+info-custom-json | endpoint info widgetLines -f json
+info-shadowed-json | endpoint info CUSTOMERS -f json
+info-standard-json | endpoint info accounts -f json
+info-text | endpoint info widgetLines
+info-unknown | endpoint info widget
+search-none | endpoint search zzzz
+error-unknown-profile | -p nope endpoint list -f json
+error-profile-typo | -p prdo endpoint list -f json

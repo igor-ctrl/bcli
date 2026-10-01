@@ -1,0 +1,43 @@
+name: Rust scaffold
+
+on:
+  push:
+    branches: [main]
+    paths: ["rust/**", "src/bcli/registry/standard_v2.json", ".github/workflows/rust.yml"]
+  pull_request:
+    paths: ["rust/**", "src/bcli/registry/standard_v2.json", ".github/workflows/rust.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: build / clippy / test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is a follow-up: golden fixtures still assume Unix paths.
+        os: [ubuntu-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+
+      # rustup on the hosted runners honours rust/rust-toolchain.toml.
+      - name: Toolchain components
+        run: rustup component add clippy rustfmt
+
+      - name: fmt
+        run: cargo fmt --all --check
+
+      - name: build
+        run: cargo build --workspace --locked
+
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: test
+        run: cargo test --workspace --locked

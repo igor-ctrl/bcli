@@ -1,0 +1,33 @@
+[package]
+name = "bcli-core"
+description = "Business Central API client core for bcli (config, registry, auth, HTTP)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[features]
+default = ["keyring"]
+# OS keychain lookup for client secrets (service "bcli", user "<tenant>:<client>").
+keyring = ["dep:keyring"]
+
+[dependencies]
+chrono.workspace = true
+indexmap.workspace = true
+keyring = { workspace = true, optional = true }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+wiremock.workspace = true
+
+[lints]
+workspace = true

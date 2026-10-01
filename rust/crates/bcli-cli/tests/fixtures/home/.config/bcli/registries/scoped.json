@@ -1,0 +1,6 @@
+{"endpoints": [
+ {"entity_set_name": "widgetLines", "entity_name": "widgetLine", "description": "Widget lines — Überprüfung", "category": "ops",
+  "api_publisher": "acme", "api_group": "ops", "api_version": "v1.0", "supports": ["GET", "PATCH"], "field_names": ["no", "qty"], "source_table": "50100"},
+ {"entity_set_name": "customers", "description": "Custom customers", "category": "sales",
+  "api_publisher": "acme", "api_group": "sales", "api_version": "v2.0", "caution": "high"}
+]}

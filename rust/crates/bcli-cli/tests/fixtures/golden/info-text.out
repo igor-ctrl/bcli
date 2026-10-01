@@ -1,0 +1,29 @@
+{
+  "name": "widgetLines",
+  "category": "ops",
+  "custom": true,
+  "supported_ops": [
+    "GET",
+    "PATCH"
+  ],
+  "key_field": "id",
+  "publisher": "acme",
+  "group": "ops",
+  "version": "v1.0",
+  "description": "Widget lines \u2014 \u00dcberpr\u00fcfung",
+  "caution": "low",
+  "entity_name": "widgetLine",
+  "fields": [
+    {
+      "name": "no",
+      "type": ""
+    },
+    {
+      "name": "qty",
+      "type": ""
+    }
+  ],
+  "fields_discovered": true,
+  "source_table": "50100",
+  "page_number": ""
+}

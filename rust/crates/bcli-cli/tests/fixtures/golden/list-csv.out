@@ -1,0 +1,82 @@
+name,category,custom,supported_ops,key_field,publisher,group,version,description,caution
+customers,sales,True,['GET'],id,acme,sales,v2.0,Custom customers,high
+widgetLines,ops,True,"['GET', 'PATCH']",id,acme,ops,v1.0,Widget lines — Überprüfung,low
+accountingPeriods,financials,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Accounting periods,low
+accounts,financials,False,['GET'],id,,,,G/L accounts (chart of accounts),low
+agedAccountsPayables,purchasing,False,['GET'],vendorId,,,,Aged accounts payable,low
+agedAccountsReceivables,sales,False,['GET'],customerId,,,,Aged accounts receivable,low
+applyVendorEntries,purchasing,False,"['GET', 'POST']",id,,,,Apply vendor ledger entries,low
+attachments,setup,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,File attachments,low
+balanceSheets,financials,False,['GET'],lineNumber,,,,Balance sheet report data,low
+bankAccounts,financials,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Bank accounts,low
+cashFlowStatements,financials,False,['GET'],lineNumber,,,,Cash flow statement report data,low
+companies,setup,False,['GET'],id,,,,Companies in the BC environment,low
+companyInformation,setup,False,"['GET', 'PATCH']",id,,,,Company information and settings,low
+contacts,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Contacts,low
+contactsInformation,sales,False,['GET'],contactId,,,,Contact information details,low
+countriesRegions,setup,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Countries and regions,low
+currencies,setup,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Currencies,low
+currencyExchangeRates,setup,False,['GET'],id,,,,Currency exchange rates,low
+customerContacts,sales,False,"['GET', 'POST', 'PATCH']",contactId,,,,Customer contact relationships,low
+customerFinancialDetails,sales,False,['GET'],id,,,,Customer financial summary,low
+customerPaymentJournals,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Customer payment journal batches,low
+customerPayments,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Customer payment journal lines,low
+customerReturnReasons,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Customer return reason codes,low
+customerSales,sales,False,['GET'],customerId,,,,Customer sales summary,low
+customers,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Customer master data,low
+defaultDimensions,dimensions,False,"['GET', 'POST', 'PATCH', 'DELETE']",parentId,,,,Default dimensions for entities,low
+dimensionSetLines,dimensions,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Dimension set line entries,low
+dimensionValues,dimensions,False,['GET'],id,,,,Dimension values,low
+dimensions,dimensions,False,['GET'],id,,,,Dimensions,low
+disputeStatus,setup,False,['GET'],id,,,,Dispute status codes,low
+documentAttachments,setup,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Document-level attachments,low
+employees,hr,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Employee records,low
+fixedAssetLocations,inventory,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Fixed asset location codes,low
+fixedAssets,inventory,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Fixed asset records,low
+generalLedgerEntries,financials,False,['GET'],id,,,,G/L ledger entries,low
+generalLedgerSetup,financials,False,['GET'],id,,,,G/L setup configuration,low
+generalProductPostingGroups,setup,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,General product posting groups,low
+incomeStatements,financials,False,['GET'],lineNumber,,,,Income statement report data,low
+inventoryPostingGroups,setup,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Inventory posting groups,low
+itemCategories,inventory,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Item categories,low
+itemLedgerEntries,inventory,False,['GET'],id,,,,Item ledger entries,low
+itemVariants,inventory,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Item variants,low
+items,inventory,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Item master data,low
+journalLines,financials,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,General journal lines,low
+journals,financials,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,General journal batches,low
+locations,inventory,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Inventory locations,low
+opportunities,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Sales opportunities,low
+paymentMethods,setup,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Payment methods,low
+paymentTerms,setup,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Payment terms,low
+pdfDocument,setup,False,['GET'],id,,,,PDF document generation for posted documents,low
+pictures,setup,False,"['GET', 'POST', 'PATCH']",id,,,,Entity pictures/images,low
+projects,projects,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Projects (jobs),low
+purchaseCreditMemoLines,purchasing,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Purchase credit memo lines,low
+purchaseCreditMemos,purchasing,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Purchase credit memos,low
+purchaseInvoiceLines,purchasing,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Purchase invoice lines,low
+purchaseInvoices,purchasing,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Purchase invoices,low
+purchaseOrderLines,purchasing,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Purchase order lines,low
+purchaseOrders,purchasing,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Purchase orders,low
+purchaseReceiptLines,purchasing,False,['GET'],id,,,,Purchase receipt lines,low
+purchaseReceipts,purchasing,False,['GET'],id,,,,Purchase receipts,low
+retainedEarningsStatements,financials,False,['GET'],lineNumber,,,,Retained earnings statement,low
+salesCreditMemoLines,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Sales credit memo lines,low
+salesCreditMemos,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Sales credit memos,low
+salesInvoiceLines,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Sales invoice lines,low
+salesInvoices,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Sales invoices,low
+salesOrderLines,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Sales order lines,low
+salesOrders,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Sales orders,low
+salesQuoteLines,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Sales quote lines,low
+salesQuotes,sales,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Sales quotes,low
+salesShipmentLines,sales,False,['GET'],id,,,,Sales shipment lines,low
+salesShipments,sales,False,['GET'],id,,,,Posted sales shipments,low
+shipmentMethods,setup,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Shipment methods,low
+taxAreas,setup,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Tax areas,low
+taxGroups,setup,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Tax groups,low
+timeRegistrationEntries,hr,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Time registration entries,low
+trialBalances,financials,False,['GET'],accountId,,,,Trial balance report data,low
+unitsOfMeasure,setup,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Units of measure,low
+vendorPaymentJournals,purchasing,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Vendor payment journal batches,low
+vendorPayments,purchasing,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Vendor payment journal lines,low
+vendorPurchases,purchasing,False,['GET'],vendorId,,,,Vendor purchase summary,low
+vendors,purchasing,False,"['GET', 'POST', 'PATCH', 'DELETE']",id,,,,Vendor master data,low

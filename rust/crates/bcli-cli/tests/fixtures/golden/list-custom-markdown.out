@@ -1,0 +1,23 @@
+record 1
+  name          : customers
+  category      : sales
+  custom        : true
+  supported_ops : ["GET"]
+  key_field     : id
+  publisher     : acme
+  group         : sales
+  version       : v2.0
+  description   : Custom customers
+  caution       : high
+
+record 2
+  name          : widgetLines
+  category      : ops
+  custom        : true
+  supported_ops : ["GET", "PATCH"]
+  key_field     : id
+  publisher     : acme
+  group         : ops
+  version       : v1.0
+  description   : Widget lines — Überprüfung
+  caution       : low
