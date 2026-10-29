@@ -83,6 +83,48 @@ class _SlashItem:
     batch_relpath: str = ""  # relative path passed to ``bcli batch run``
 
 
+# ─── Untrusted-text guards ──────────────────────────────────────────
+#
+# Saved queries / batches can arrive from pack directories and bundles,
+# and the files we render are interpreted by Claude Code (frontmatter
+# keys such as ``allowed-tools``; ``!`cmd` `` runs shell). Names reach
+# paths, shell lines and frontmatter verbatim, so only identifier-ish
+# names are projected; free text is collapsed to one line with
+# backticks neutralised.
+
+_SAFE_NAME_RE = skill_init_cmd._SAFE_NAME_RE
+_safe_name = skill_init_cmd._safe_name
+_one_line = skill_init_cmd._one_line
+
+
+def _cell(text: str) -> str:
+    return text.replace("|", "\\|")
+
+
+def _yaml_frontmatter(fields: dict[str, str]) -> str:
+    """Serialise ``fields`` as YAML, one line per key.
+
+    ``safe_dump`` quotes whatever needs quoting and escapes
+    non-printables (C1 controls, DEL), so the frontmatter always
+    re-parses to exactly ``fields``; infinite width stops line folding.
+    """
+    return yaml.safe_dump(
+        fields, sort_keys=False, allow_unicode=True, width=float("inf"),
+    )
+
+
+def _skip_unsafe(kind: str, name: str, args: list[_Arg]) -> bool:
+    bad = [name] if not _safe_name(name) else []
+    bad += [a.name for a in args if not _safe_name(a.name)]
+    if bad:
+        err.print(
+            f"Skipping {kind} {name!r}: unsafe name(s) {bad!r} "
+            f"(allowed: {_SAFE_NAME_RE.pattern})",
+            markup=False, highlight=False,
+        )
+    return bool(bad)
+
+
 # ─── YAML parsing helpers (additive — no breaking changes) ─────────
 
 
@@ -100,9 +142,9 @@ def _coerce_args(raw: Any, params: dict[str, Any] | None = None) -> list[_Arg]:
                 continue
             out.append(_Arg(
                 name=str(entry["name"]),
-                type=str(entry.get("type") or "string"),
+                type=_one_line(entry.get("type") or "string"),
                 required=bool(entry.get("required", False)),
-                example=str(entry.get("example") or ""),
+                example=_one_line(entry.get("example") or ""),
             ))
         if out:
             return out
@@ -116,9 +158,9 @@ def _coerce_args(raw: Any, params: dict[str, Any] | None = None) -> list[_Arg]:
         spec = value if isinstance(value, dict) else {}
         arg = _Arg(
             name=str(key),
-            type=str(spec.get("type") or "string"),
+            type=_one_line(spec.get("type") or "string"),
             required=bool(spec.get("required", False)),
-            example=str(spec.get("example") or ""),
+            example=_one_line(spec.get("example") or ""),
         )
         if arg.required:
             required_first.append(arg)
@@ -129,7 +171,7 @@ def _coerce_args(raw: Any, params: dict[str, Any] | None = None) -> list[_Arg]:
 
 def _coerce_categories(raw: Any) -> list[str]:
     if isinstance(raw, list) and raw:
-        return [str(c) for c in raw if str(c).strip()]
+        return [_one_line(c) for c in raw if str(c).strip()]
     return ["unsorted"]
 
 
@@ -181,9 +223,11 @@ def _items_from_queries(queries: dict[str, dict[str, Any]]) -> list[_SlashItem]:
     for name, body in queries.items():
         if not isinstance(body, dict):
             continue
-        description = str(body.get("description") or name)
+        description = _one_line(body.get("description") or name)
         categories = _coerce_categories(body.get("categories"))
         args = _coerce_args(body.get("args"), body.get("params"))
+        if _skip_unsafe("query", name, args):
+            continue
         out.append(_SlashItem(
             kind="query",
             name=name,
@@ -199,9 +243,17 @@ def _items_from_queries(queries: dict[str, dict[str, Any]]) -> list[_SlashItem]:
 def _items_from_batches(batches: list[tuple[str, Path, dict[str, Any]]]) -> list[_SlashItem]:
     out: list[_SlashItem] = []
     for name, path, raw in batches:
-        description = str(raw.get("description") or name)
+        # Batch ``name:`` is often a human title; fall back to the file
+        # stem (used for the slug and the ``--result-out`` path). After
+        # the fallback ``name`` is either safe or the stem, so checking
+        # the stem + args covers both.
+        if not _safe_name(name):
+            name = path.stem
+        description = _one_line(raw.get("description") or name)
         categories = _coerce_categories(raw.get("categories"))
         args = _coerce_args(raw.get("args"), raw.get("params"))
+        if _skip_unsafe("batch", path.stem, args):
+            continue
         out.append(_SlashItem(
             kind="batch",
             name=name,
@@ -290,12 +342,10 @@ def _render_command_md_body(
         usage_args = " ".join(f"<{a.name}>" for a in item.args)
         usage_line = f"/{item.slug}" + (f" {usage_args}" if usage_args else "")
 
-    frontmatter = (
-        "---\n"
-        f"description: {item.description}\n"
-        + (f"argument-hint: {hint}\n" if hint else "")
-        + "---\n"
-    )
+    fields = {"description": item.description}
+    if hint:
+        fields["argument-hint"] = hint
+    frontmatter = f"---\n{_yaml_frontmatter(fields)}---\n"
     hash_line = (
         f"     content_hash: sha256:{content_hash}\n"
         if content_hash is not None
@@ -312,9 +362,9 @@ def _render_command_md_body(
     args_table = ""
     if item.args:
         rows = "\n".join(
-            f"| `{a.name}` | {a.type} | "
+            f"| `{a.name}` | {_cell(a.type)} | "
             f"{'required' if a.required else 'optional'} | "
-            f"{a.example or '—'} |"
+            f"{_cell(a.example) or '—'} |"
             for a in item.args
         )
         args_table = (

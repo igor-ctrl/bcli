@@ -36,6 +36,7 @@ import getpass
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 from dataclasses import asdict, dataclass
@@ -58,6 +59,29 @@ _stderr = Console(stderr=True)
 PROVENANCE_VERSION = "0.1"
 _ENTRYPOINT_GROUP = "bcli.skill_init.role_templates"
 _STATE_CACHE_FILENAME = ".last-init.json"
+
+
+def _one_line(text: Any) -> str:
+    """Collapse untrusted text to one line with backticks neutralised.
+
+    Saved-query text lands in files Claude Code interprets (``!`cmd` ``
+    runs shell), so it must not open a code span or start a new line.
+    Shared with ``skill_cmd``.
+    """
+    return " ".join(str(text).split()).replace("`", "'")
+
+
+_SAFE_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
+
+
+def _safe_name(name: Any) -> bool:
+    """True for identifier-ish names that may sit inside a code span.
+
+    ``_one_line`` alone is not enough there: a name ending in ``!``
+    followed by the template's closing backtick forms ``!`...` ``.
+    Shared with ``skill_cmd``.
+    """
+    return _SAFE_NAME_RE.fullmatch(str(name)) is not None
 
 
 # ─── Errors ───────────────────────────────────────────────────────────
@@ -433,10 +457,12 @@ def _render_skill_md(plan: SkillPlan) -> str:
         lines.append("## Existing saved queries surfaced for you")
         lines.append("")
         for sc in plan.slash_commands:
+            if not _safe_name(sc.query_name):
+                continue
             line = f"- `bcli q {sc.query_name}`"
             if sc.description:
-                line += f" — {sc.description}"
-            if sc.endpoint:
+                line += f" — {_one_line(sc.description)}"
+            if sc.endpoint and _safe_name(sc.endpoint):
                 line += f" _(endpoint: `{sc.endpoint}`)_"
             lines.append(line)
         lines.append("")
@@ -444,7 +470,9 @@ def _render_skill_md(plan: SkillPlan) -> str:
         lines.append("## New queries you approved")
         lines.append("")
         for q in plan.approved_new_queries:
-            desc = q.body.get("description", "")
+            if not _safe_name(q.name):
+                continue
+            desc = _one_line(q.body.get("description", ""))
             lines.append(f"- `bcli q {q.name}` — {desc}")
         lines.append("")
     lines.extend([
