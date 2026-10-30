@@ -21,6 +21,7 @@ from typing import Any
 
 import yaml
 
+from bcli._safe_names import SAFE_NAME_RE, unsafe_names
 from bcli.packs._protocol import (
     AgentFragment,
     Pack,
@@ -169,6 +170,15 @@ def _resolve_fragment_path(root: Path, name: str) -> Path:
     )
 
 
+def _check_names(root: Path, name: str, body: Any) -> None:
+    bad = unsafe_names(name, body)
+    if bad:
+        raise PackLoadError(
+            f"{root}: {name!r}: unsafe name(s) {bad!r} "
+            f"(allowed: {SAFE_NAME_RE.pattern})"
+        )
+
+
 def _load_queries(spec: Any, *, root: Path) -> list[PackQuery]:
     """Accept a list of filenames OR a list of {name, file} dicts."""
     out: list[PackQuery] = []
@@ -204,10 +214,12 @@ def _load_queries(spec: Any, *, root: Path) -> list[PackQuery]:
                     raise PackLoadError(
                         f"{root}: query {name!r} body must be a mapping"
                     )
+                _check_names(root, str(name), body)
                 out.append(PackQuery(name=str(name), body=dict(body)))
         else:
             name = str(data.get("name") or Path(file).stem)
             body = {k: v for k, v in data.items() if k != "name"}
+            _check_names(root, name, body)
             out.append(PackQuery(name=name, body=body))
     return out
 
@@ -229,6 +241,15 @@ def _load_batches(spec: Any, *, root: Path) -> list[PackBatch]:
         if not path.is_file():
             raise PackLoadError(f"{root}: batch file {file!r} not found")
         body = path.read_text(encoding="utf-8")
+        try:
+            raw = yaml.safe_load(body)
+        except yaml.YAMLError as e:
+            raise PackLoadError(
+                f"{root}: batch file {file!r} is not valid YAML: {e}"
+            ) from e
+        # The batch's own ``name:`` is a free-form title; only the args
+        # reach shell lines, so check those (the file stem stands in).
+        _check_names(root, Path(file).stem, raw)
         out.append(PackBatch(filename=Path(file).name, body=body))
     return out
 

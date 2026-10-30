@@ -392,3 +392,22 @@ def test_no_op_refresh_does_not_change_files(tmp_path):
     )
     assert second.registry_changed is False
     assert second.queries_changed is False
+
+
+def test_apply_refuses_unsafe_query_names(tmp_path: Path) -> None:
+    src = _seed_bundle_source(tmp_path)
+    (src / "queries.yaml").write_text(
+        "queries:\n  ok:\n    endpoint: x\n    args:\n      - name: \"a; id\"\n"
+    )
+    import bcli.bundle._apply as ap
+
+    class _B:  # minimal stand-in: apply only needs these members up to the check
+        class manifest:
+            profile = "p"
+        queries_path = src / "queries.yaml"
+        def has_queries(self): return True
+
+    dirs = {k: tmp_path / k for k in ("r", "q", "b")}
+    with pytest.raises(BundleVerifyError, match="unsafe name"):
+        ap.apply_bundle(_B(), registries_dir=dirs["r"], queries_dir=dirs["q"], bundle_dir=dirs["b"])
+    assert not dirs["q"].exists()  # rejected before anything was written

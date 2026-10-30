@@ -20,7 +20,10 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from bcli.bundle._manifest import Bundle, write_local_manifest
+import yaml
+
+from bcli._safe_names import SAFE_NAME_RE, unsafe_names
+from bcli.bundle._manifest import Bundle, BundleVerifyError, write_local_manifest
 
 logger = logging.getLogger("bcli.bundle.apply")
 
@@ -67,6 +70,8 @@ def apply_bundle(
         lists leave the registry untouched.
     """
     profile = bundle.manifest.profile
+    if bundle.has_queries():
+        _check_queries(bundle.queries_path.read_bytes())
     registries_dir.mkdir(parents=True, exist_ok=True)
     queries_dir.mkdir(parents=True, exist_ok=True)
     bundle_dir.mkdir(parents=True, exist_ok=True)
@@ -116,6 +121,26 @@ def apply_bundle(
             queries_changed=queries_changed,
             field_lists_changed=field_lists_changed,
         )
+
+
+def _check_queries(payload: bytes) -> None:
+    """Refuse a bundle whose saved-query names could inject into skill files."""
+    try:
+        raw = yaml.safe_load(payload) or {}
+    except yaml.YAMLError as e:
+        raise BundleVerifyError(f"queries.yaml is not valid YAML: {e}") from e
+    queries = raw.get("queries") if isinstance(raw, dict) else None
+    if queries is None:
+        return
+    if not isinstance(queries, dict):
+        raise BundleVerifyError("queries.yaml: 'queries' must be a mapping")
+    for name, body in queries.items():
+        bad = unsafe_names(name, body)
+        if bad:
+            raise BundleVerifyError(
+                f"queries.yaml: {name!r}: unsafe name(s) {bad!r} "
+                f"(allowed: {SAFE_NAME_RE.pattern})"
+            )
 
 
 def rollback_bundle(
