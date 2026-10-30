@@ -122,8 +122,9 @@ class TelemetryConfig(BaseModel):
     Built-in backends:
       * ``"null"``           — drop everything (default; effectively disabled)
       * ``"console"``        — pretty-print events to stderr (handy for dev)
-      * ``"azure_monitor"``  — Azure Application Insights via
-                               ``azure-monitor-opentelemetry`` (extra: ``[telemetry]``)
+      * ``"azure_monitor"``  — Azure Application Insights. Events are spooled
+                               to ``~/.config/bcli/telemetry/`` and shipped by a
+                               detached process, so commands never wait on it.
 
     Custom backends:
       * ``"my_pkg.module:MySink"`` — any importable class implementing the

@@ -62,9 +62,9 @@ cli = []
 etl = [
     "dlt[parquet,filesystem,s3]>=1.0",
 ]
-telemetry = [
-    "azure-monitor-opentelemetry>=1.6",
-]
+# Backward-compatible no-op extra: the azure_monitor backend now posts with
+# httpx (a core dependency) instead of azure-monitor-opentelemetry.
+telemetry = []
 extract = [
     "bc-cli[extract-claude]",
     "bc-cli[extract-openai]",

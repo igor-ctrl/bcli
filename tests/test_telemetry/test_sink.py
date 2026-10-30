@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+
 import pytest
 from pydantic import ValidationError
 
@@ -11,9 +15,11 @@ from bcli.telemetry import (
     ConsoleSink,
     NullSink,
     TelemetrySink,
+    _azure_monitor,
     events,
     get_sink,
 )
+from bcli.telemetry._azure_monitor import parse_connection_string
 
 
 # ── get_sink dispatch ────────────────────────────────────────────────
@@ -135,32 +141,93 @@ class TestConsoleSink:
         assert isinstance(sink, ConsoleSink)
 
 
+CS = (
+    "InstrumentationKey=00000000-0000-0000-0000-000000000001;"
+    "IngestionEndpoint=https://example.in.applicationinsights.azure.com/;"
+    "LiveEndpoint=https://example.livediagnostics.monitor.azure.com/"
+)
+
+
 class TestAzureMonitorSink:
-    """Azure SDK is the optional [telemetry] extra; sink must soft-fail without it."""
+    """Spools envelopes locally; never touches the network in-process."""
 
-    def test_emit_when_sdk_missing(self, monkeypatch):
-        # Simulate SDK absence by making its import raise
-        import builtins
-        real_import = builtins.__import__
+    def _spooled(self, spool_dir):
+        path = spool_dir / "spool.jsonl"
+        if not path.exists():
+            return []
+        return [json.loads(line) for line in path.read_text().splitlines()]
 
-        def bomb(name, *args, **kwargs):
-            if name.startswith("azure.monitor.opentelemetry"):
-                raise ImportError("simulated missing dep")
-            return real_import(name, *args, **kwargs)
+    def test_connection_string_parsing(self):
+        assert parse_connection_string(CS) == (
+            "00000000-0000-0000-0000-000000000001",
+            "https://example.in.applicationinsights.azure.com/v2.1/track",
+        )
+        # Key only → Azure's documented default ingestion endpoint.
+        assert parse_connection_string("InstrumentationKey=k")[1] == (
+            "https://dc.services.visualstudio.com/v2.1/track"
+        )
 
-        monkeypatch.setattr(builtins, "__import__", bomb)
+    def test_emit_spools_an_app_insights_event(self, tmp_path):
+        sink = AzureMonitorSink(connection_string=CS, spool_dir=tmp_path)
+        sink.emit(*events.command(command="get vendors", profile="p", duration_ms=12.5))
+        (env,) = self._spooled(tmp_path)
+        assert env["name"] == "Microsoft.ApplicationInsights.Event"
+        assert env["iKey"] == "00000000-0000-0000-0000-000000000001"
+        base = env["data"]["baseData"]
+        assert env["data"]["baseType"] == "EventData"
+        assert base["name"] == "bcli.command"
+        # App Insights properties are string-valued.
+        assert base["properties"]["duration_ms"] == "12.5"
+        assert all(isinstance(v, str) for v in base["properties"].values())
 
-        sink = AzureMonitorSink(connection_string="InstrumentationKey=fake;")
-        sink.emit(*events.startup(profile="x"))  # must not raise
-        assert sink._unavailable is True
-
-        # Subsequent emits no-op without re-trying the import
-        sink.emit(*events.query(endpoint="vendors", has_filter=False))
-
-    def test_empty_connection_string_marks_unavailable(self):
-        sink = AzureMonitorSink(connection_string="")
+    def test_missing_instrumentation_key_drops_events(self, tmp_path):
+        sink = AzureMonitorSink(connection_string="", spool_dir=tmp_path)
         sink.emit(*events.startup(profile="x"))
-        assert sink._unavailable is True
+        assert self._spooled(tmp_path) == []
+        sink.flush()  # nothing spooled → nothing to start
+
+    def test_spool_cap_drops_new_events(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_azure_monitor, "MAX_SPOOL_BYTES", 1)
+        sink = AzureMonitorSink(connection_string=CS, spool_dir=tmp_path)
+        sink.emit(*events.startup(profile="x"))  # first write fits (0 bytes waiting)
+        sink.emit(*events.startup(profile="x"))  # over the cap → dropped
+        assert len(self._spooled(tmp_path)) == 1
+
+    def test_full_spool_still_starts_the_shipper(self, tmp_path, monkeypatch):
+        # A later command that only hits the cap must still drain the backlog,
+        # or a full spool would never ship again.
+        monkeypatch.setattr(_azure_monitor, "MAX_SPOOL_BYTES", 1)
+        (tmp_path / "outbox-1.jsonl").write_text("{}\n")
+        calls = []
+        monkeypatch.setattr(_azure_monitor.subprocess, "Popen", lambda argv, **kw: calls.append(argv))
+        sink = AzureMonitorSink(connection_string=CS, spool_dir=tmp_path)
+        sink.emit(*events.startup(profile="x"))
+        assert self._spooled(tmp_path) == []  # dropped
+        sink.flush()
+        assert len(calls) == 1
+
+    def test_unwritable_spool_never_raises(self, tmp_path):
+        blocker = tmp_path / "not-a-dir"
+        blocker.write_text("")
+        sink = AzureMonitorSink(connection_string=CS, spool_dir=blocker / "spool")
+        sink.emit(*events.startup(profile="x"))  # must not raise
+
+    def test_flush_starts_detached_shipper_only_after_spooling(self, tmp_path, monkeypatch):
+        calls = []
+        monkeypatch.setattr(_azure_monitor.subprocess, "Popen", lambda argv, **kw: calls.append((argv, kw)))
+        sink = AzureMonitorSink(connection_string=CS, spool_dir=tmp_path)
+        sink.flush()
+        assert calls == []
+        sink.emit(*events.startup(profile="x"))
+        sink.flush()
+        (argv, kw), = calls
+        assert argv[1:] == [
+            "-m", "bcli.telemetry._ship", str(tmp_path),
+            "https://example.in.applicationinsights.azure.com/v2.1/track",
+        ]
+        assert kw["stdout"] is subprocess.DEVNULL and kw["stderr"] is subprocess.DEVNULL
+        if os.name != "nt":
+            assert kw["start_new_session"] is True
 
 
 # ── TelemetryConfig validation ───────────────────────────────────────

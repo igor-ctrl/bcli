@@ -35,6 +35,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Client-credentials profiles are unaffected: a service principal mints tokens
   from its secret on demand and has no refresh token to cache.
 
+### Changed
+
+- The `azure_monitor` telemetry backend no longer slows commands down. It used
+  `azure-monitor-opentelemetry`, whose exporter shut down synchronously at
+  process exit — about 2 s added to every command (0.3 s → 2.3 s for
+  `bcli endpoint list`) — and whose Azure VM resource detector printed an IMDS
+  timeout traceback on every machine that isn't an Azure VM.
+
+  Events are now appended as Application Insights envelopes to
+  `~/.config/bcli/telemetry/spool.jsonl` (microseconds, no network), and at
+  exit a detached `python -m bcli.telemetry._ship` posts them to the
+  connection string's ingestion endpoint with `httpx`. Commands with telemetry
+  on now run in the same time as with it off. A single shipper runs at a time
+  (lock file, taken over when stale); events that fail with a network error or
+  a retryable status stay on disk for the next run, and the spool is capped at
+  5 MB so an offline machine can't grow it without bound.
+
+  Events now land as real custom events (`customEvents` / `AppEvents` in a
+  workspace-based resource) with string-valued properties; read numbers back
+  with `todouble(...)`. The `[telemetry]` extra is now empty and kept only so
+  existing install commands still resolve. No config change is needed.
+
 ## [0.8.1] - 2026-08-11
 
 ### Fixed

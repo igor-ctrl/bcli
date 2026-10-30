@@ -38,6 +38,10 @@ MSAL_CACHE_FILE = CONFIG_DIR / "msal_cache.json"
 # is durability, not secrecy. See ``bcli.telemetry.events._install_id``.
 INSTALL_ID_FILE = CONFIG_DIR / "install-id"
 
+# Telemetry spool: events are appended here during a command and shipped
+# by a detached background process. See ``bcli.telemetry._ship``.
+TELEMETRY_DIR = CONFIG_DIR / "telemetry"
+
 # Custom registries directory
 REGISTRIES_DIR = CONFIG_DIR / "registries"
 
