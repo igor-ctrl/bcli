@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-10-30
+
+### Fixed
+
+- Generated Claude Code command files now quote frontmatter, flatten free text,
+  and skip unsafe query, batch and argument names. Packs and bundles with
+  non-identifier names are rejected at load.
+
 ## [0.8.4] - 2026-10-30
 
 ### Added
