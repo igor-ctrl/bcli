@@ -6,7 +6,8 @@ first. Built-in backends:
 
 * ``"null"`` (default) — drop everything
 * ``"console"`` — pretty-print to stderr (dev / debugging)
-* ``"azure_monitor"`` — Azure Application Insights (extra: ``[telemetry]``)
+* ``"azure_monitor"`` — Azure Application Insights (spooled locally, shipped
+  by a detached background process; no extra dependencies)
 
 Custom backends are loaded by ``module.path:ClassName`` import spec and
 must satisfy the :class:`TelemetrySink` protocol — i.e. expose
