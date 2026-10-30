@@ -117,7 +117,7 @@ def test_batch_run_emits_step_events_to_progress_fd(tmp_path: Path, monkeypatch)
     # Build a fake async-with client that responds to .post.
     fake_client = AsyncMock()
     fake_client.post = AsyncMock(return_value={"systemId": "rec-1"})
-    fake_client._resolve_url = lambda *a, **kw: "https://example.com/api/vendors"
+    fake_client.resolve = lambda *a, **kw: "https://example.com/api/vendors"
 
     class _CM:
         async def __aenter__(self_inner):

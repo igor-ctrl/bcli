@@ -1,8 +1,10 @@
-"""CLI-side audit-log integration.
+"""Audit for ``bcli attach upload`` — the one write not on the SDK write path.
 
-Two entry points used by the write commands:
+Every other write (post / patch / delete / action, batch, MCP, SDK) is audited
+inside ``AsyncBCClient.write``. An upload is two requests (metadata POST, then
+binary PATCH) recorded as one ``UPLOAD``, so it keeps this wrapper:
 
-* :func:`audited_write` wraps the actual write coroutine, emitting one
+* :func:`audited_write` wraps the upload coroutine, emitting one
   ``completed`` or ``failed`` audit entry per call.
 * :func:`emit_dry_run_audit` is called by ``render_dry_run`` to record
   the ``dry_run`` outcome before short-circuiting.
@@ -10,10 +12,6 @@ Two entry points used by the write commands:
 Both fast-path when audit is disabled (no sink construction, no work
 beyond a property read) so the audit feature has zero overhead until
 the user opts in.
-
-The SDK (``AsyncBCClient``) intentionally does NOT auto-emit — programmatic
-users get unfiltered access. Audit is a CLI-layer ergonomic, layered on
-top of BC's own permission set (the actual security boundary).
 """
 
 from __future__ import annotations

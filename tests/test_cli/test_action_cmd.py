@@ -21,7 +21,6 @@ from __future__ import annotations
 import base64
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 import typer
@@ -60,14 +59,10 @@ def cli_state():
 
 
 @pytest.fixture
-def fake_client(monkeypatch):
-    c = AsyncMock()
-    c.__aenter__ = AsyncMock(return_value=c)
-    c.__aexit__ = AsyncMock(return_value=False)
-    c.post = AsyncMock(return_value={"result": "ok"})
-    c._resolve_url = lambda entity, **kw: f"https://example.test/{entity}"
-    monkeypatch.setattr(state, "make_async_client", lambda **_: c)
-    return c
+def bc(fake_bc):
+    """The real client against the fake transport; BC answers ``{"result": "ok"}``."""
+    fake_bc.default = {"result": "ok"}
+    return fake_bc
 
 
 @pytest.fixture(autouse=True)
@@ -109,71 +104,68 @@ def _run(
 
 
 class TestURLComposition:
-    def test_default_namespace_is_microsoft_nav(self, cli_state, fake_client):
+    def test_default_namespace_is_microsoft_nav(self, cli_state, bc):
         _run()
-        endpoint_arg = fake_client.post.await_args.args[0]
-        assert endpoint_arg == "examples(42)/Microsoft.NAV.archive"
+        assert bc.last.url.endswith("/companies(c-123)/examples(42)/Microsoft.NAV.archive")
 
-    def test_namespace_override(self, cli_state, fake_client):
+    def test_namespace_override(self, cli_state, bc):
         _run(namespace="Custom.Ns")
-        endpoint_arg = fake_client.post.await_args.args[0]
-        assert endpoint_arg == "examples(42)/Custom.Ns.archive"
+        assert bc.last.url.endswith("/examples(42)/Custom.Ns.archive")
 
-    def test_quoted_string_key_passed_through(self, cli_state, fake_client):
+    def test_quoted_string_key_passed_through(self, cli_state, bc):
         _run(key="'ALFKI'")
-        endpoint_arg = fake_client.post.await_args.args[0]
-        assert endpoint_arg == "examples('ALFKI')/Microsoft.NAV.archive"
+        assert bc.last.url.endswith("/examples('ALFKI')/Microsoft.NAV.archive")
 
-    def test_action_uses_post_not_get(self, cli_state, fake_client):
+    def test_action_uses_post_not_get(self, cli_state, bc):
         """OData actions are always POST. The verb must NOT call .get,
         even if a future flag suggests otherwise."""
         _run()
-        assert fake_client.post.await_count == 1
+        assert [r.method for r in bc.sent] == ["POST"]
 
 
 class TestDataHandling:
-    def test_data_json_literal_parsed(self, cli_state, fake_client):
+    def test_data_json_literal_parsed(self, cli_state, bc):
         _run(data='{"a": 1, "b": "two"}')
-        body_arg = fake_client.post.await_args.args[1]
+        body_arg = bc.last.json_body
         assert body_arg == {"a": 1, "b": "two"}
 
-    def test_data_from_file(self, cli_state, fake_client, tmp_path: Path):
+    def test_data_from_file(self, cli_state, bc, tmp_path: Path):
         f = tmp_path / "payload.json"
         f.write_text('{"loaded": "from-file"}', encoding="utf-8")
         _run(data=f"@{f}")
-        body_arg = fake_client.post.await_args.args[1]
+        body_arg = bc.last.json_body
         assert body_arg == {"loaded": "from-file"}
 
-    def test_no_data_flag_sends_empty_body(self, cli_state, fake_client):
+    def test_no_data_flag_sends_empty_body(self, cli_state, bc):
         """Explicit --no-data sends an empty body."""
         _run(data=None, no_data=True)
-        body_arg = fake_client.post.await_args.args[1]
+        body_arg = bc.last.json_body
         assert body_arg == {}
 
-    def test_neither_flag_defaults_to_empty_body(self, cli_state, fake_client):
+    def test_neither_flag_defaults_to_empty_body(self, cli_state, bc):
         """Omitting both flags is equivalent to --no-data — matches
         ``bcli post`` semantics so AI agents calling
         ``bcli action examples 42 archive`` don't get a BadParameter."""
         _run(data=None, no_data=False)
-        body_arg = fake_client.post.await_args.args[1]
+        body_arg = bc.last.json_body
         assert body_arg == {}
 
-    def test_data_and_no_data_mutually_exclusive(self, cli_state, fake_client):
+    def test_data_and_no_data_mutually_exclusive(self, cli_state, bc):
         with pytest.raises(typer.BadParameter):
             _run(data='{"x": 1}', no_data=True)
 
     def test_malformed_inline_json_raises_bad_parameter_not_traceback(
-        self, cli_state, fake_client,
+        self, cli_state, bc,
     ):
         """Regression: a mangled inline literal used to surface a raw
         json.JSONDecodeError. It must come back as a usage error, and
         the call must never reach the network."""
         with pytest.raises(typer.BadParameter):
             _run(data="{not valid json")
-        fake_client.post.assert_not_called()
+        assert bc.sent == []
 
     def test_bare_file_path_without_at_prefix_hints_the_fix(
-        self, cli_state, fake_client, tmp_path: Path,
+        self, cli_state, bc, tmp_path: Path,
     ):
         f = tmp_path / "payload.json"
         f.write_text('{"x": 1}', encoding="utf-8")
@@ -181,31 +173,27 @@ class TestDataHandling:
             _run(data=str(f))
         assert "looks like a file path" in str(exc_info.value)
         assert f"-d @{f}" in str(exc_info.value)
-        fake_client.post.assert_not_called()
+        assert bc.sent == []
 
     def test_malformed_at_file_names_the_file(
-        self, cli_state, fake_client, tmp_path: Path,
+        self, cli_state, bc, tmp_path: Path,
     ):
         f = tmp_path / "bad.json"
         f.write_text("{not valid json", encoding="utf-8")
         with pytest.raises(typer.BadParameter) as exc_info:
             _run(data=f"@{f}")
         assert str(f) in str(exc_info.value)
-        fake_client.post.assert_not_called()
+        assert bc.sent == []
 
 
 class TestProfileOverrides:
-    def test_publisher_group_version_forwarded(self, cli_state, fake_client):
+    def test_publisher_group_version_forwarded(self, cli_state, bc):
         _run(publisher="acme", group="custom", version="v1.0")
-        kwargs = fake_client.post.await_args.kwargs
-        assert kwargs.get("publisher") == "acme"
-        assert kwargs.get("group") == "custom"
-        assert kwargs.get("version") == "v1.0"
+        assert "/api/acme/custom/v1.0/companies(c-123)/examples(42)/" in bc.last.url
 
-    def test_idempotency_key_forwarded(self, cli_state, fake_client):
+    def test_idempotency_key_forwarded(self, cli_state, bc):
         _run(idempotency_key="k-123")
-        kwargs = fake_client.post.await_args.kwargs
-        assert kwargs.get("idempotency_key") == "k-123"
+        assert bc.last.idempotency_key == "k-123"
 
 
 class TestOutDecode:
@@ -216,10 +204,10 @@ class TestOutDecode:
     """
 
     def test_base64_payload_decoded_to_file(
-        self, cli_state, fake_client, tmp_path: Path, capsys,
+        self, cli_state, bc, tmp_path: Path, capsys,
     ):
         payload = b"%PDF-1.4\nfake\n%%EOF\n"
-        fake_client.post.return_value = {
+        bc.default = {
             "value": base64.b64encode(payload).decode("ascii"),
         }
         dest = tmp_path / "document.pdf"
@@ -233,9 +221,9 @@ class TestOutDecode:
         assert base64.b64encode(payload).decode("ascii") not in stdout
 
     def test_204_no_content_fails_rather_than_writing_an_empty_file(
-        self, cli_state, fake_client, tmp_path: Path,
+        self, cli_state, bc, tmp_path: Path,
     ):
-        fake_client.post.return_value = {}
+        bc.default = {}
         dest = tmp_path / "document.pdf"
 
         with pytest.raises(typer.Exit):
@@ -244,10 +232,10 @@ class TestOutDecode:
         assert not dest.exists()
 
     def test_204_marks_the_envelope_failed(
-        self, cli_state, fake_client, tmp_path: Path,
+        self, cli_state, bc, tmp_path: Path,
     ):
         """The POST happened; the caller still didn't get what they asked for."""
-        fake_client.post.return_value = {}
+        bc.default = {}
         envelope = tmp_path / "env.json"
 
         with pytest.raises(typer.Exit):
@@ -256,9 +244,9 @@ class TestOutDecode:
         assert json.loads(envelope.read_text())["status"] == "failed"
 
     def test_dict_without_value_lists_the_keys(
-        self, cli_state, fake_client, tmp_path: Path, capsys,
+        self, cli_state, bc, tmp_path: Path, capsys,
     ):
-        fake_client.post.return_value = {"status": "ok", "recordId": "42"}
+        bc.default = {"status": "ok", "recordId": "42"}
         dest = tmp_path / "document.pdf"
 
         with pytest.raises(typer.Exit):
@@ -269,8 +257,8 @@ class TestOutDecode:
         assert "--result-out" in err
         assert not dest.exists()
 
-    def test_invalid_base64_fails(self, cli_state, fake_client, tmp_path: Path, capsys):
-        fake_client.post.return_value = {"value": "not base64 at all !!!"}
+    def test_invalid_base64_fails(self, cli_state, bc, tmp_path: Path, capsys):
+        bc.default = {"value": "not base64 at all !!!"}
         dest = tmp_path / "document.pdf"
 
         with pytest.raises(typer.Exit):
@@ -280,7 +268,7 @@ class TestOutDecode:
         assert not dest.exists()
 
     def test_existing_file_refused_before_the_post(
-        self, cli_state, fake_client, tmp_path: Path,
+        self, cli_state, bc, tmp_path: Path,
     ):
         """An action can mutate BC — the destination check has to come first."""
         dest = tmp_path / "document.pdf"
@@ -290,14 +278,14 @@ class TestOutDecode:
             _run(out=dest)
 
         assert exc.value.exit_code == 1
-        assert fake_client.post.await_count == 0
+        assert bc.sent == []
         assert dest.read_bytes() == b"do not clobber me"
 
     def test_overwrite_allows_replacing_the_file(
-        self, cli_state, fake_client, tmp_path: Path,
+        self, cli_state, bc, tmp_path: Path,
     ):
         payload = b"fresh bytes"
-        fake_client.post.return_value = {
+        bc.default = {
             "value": base64.b64encode(payload).decode("ascii"),
         }
         dest = tmp_path / "document.pdf"
@@ -308,10 +296,10 @@ class TestOutDecode:
         assert dest.read_bytes() == payload
 
     def test_out_and_result_out_compose(
-        self, cli_state, fake_client, tmp_path: Path,
+        self, cli_state, bc, tmp_path: Path,
     ):
         payload = b"both channels"
-        fake_client.post.return_value = {
+        bc.default = {
             "value": base64.b64encode(payload).decode("ascii"),
         }
         dest = tmp_path / "document.pdf"
@@ -325,7 +313,7 @@ class TestOutDecode:
 
 class TestEnvelope:
     def test_envelope_written_on_success(
-        self, cli_state, fake_client, tmp_path: Path,
+        self, cli_state, bc, tmp_path: Path,
     ):
         out = tmp_path / "env.json"
         _run(result_out=out)

@@ -8,6 +8,7 @@ import os
 import re
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +96,15 @@ def _hint_for_bc_error(status: int, bc_message: str | None, url: str) -> str | N
     return None
 
 
+@dataclass(frozen=True)
+class BCResponse:
+    """A successful response: the parsed body plus what BC said about the call."""
+
+    body: dict[str, Any]
+    status: int
+    correlation_id: str | None
+
+
 class BCTransport:
     """HTTP transport with auth injection, retry, and BC error parsing."""
 
@@ -124,7 +134,11 @@ class BCTransport:
         token = await self._auth.get_access_token()
         return {"Authorization": f"Bearer {token}"}
 
-    async def _request(
+    async def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+        """Execute a request and return only the parsed body."""
+        return (await self.request(method, url, **kwargs)).body
+
+    async def request(
         self,
         method: str,
         url: str,
@@ -136,7 +150,7 @@ class BCTransport:
         etag: str | None = None,
         idempotency_key: str | None = None,
         log_context: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> BCResponse:
         """Execute an HTTP request with retry and error handling.
 
         Request body handling:
@@ -148,7 +162,7 @@ class BCTransport:
         - Passing both is an error — the caller should pick one.
         """
         if json_body is not None and content is not None:
-            raise ValueError("BCTransport._request: pass either json_body or content, not both")
+            raise ValueError("BCTransport.request: pass either json_body or content, not both")
 
         last_error: Exception | None = None
         backoff = INITIAL_BACKOFF
@@ -204,16 +218,18 @@ class BCTransport:
                         headers=headers,
                     )
 
-                correlation_id = response.headers.get("x-ms-correlation-request-id")
+                correlation_id = _correlation_id(response)
 
                 if response.is_success:
                     self._emit_request_log(
                         method, url, response.status_code, attempt,
                         time.monotonic() - t0, correlation_id, log_context,
                     )
-                    if response.status_code == 204 or not response.content:
-                        return {}
-                    return response.json()
+                    body = (
+                        {} if response.status_code == 204 or not response.content
+                        else response.json()
+                    )
+                    return BCResponse(body, response.status_code, correlation_id)
 
                 # Parse BC error response
                 bc_message, correlation_id = _parse_bc_error(response)
@@ -567,10 +583,19 @@ class BCTransport:
         )
 
 
+def _correlation_id(response: httpx.Response) -> str | None:
+    """BC's correlation id: the ``request-id`` header, the value BC's own error
+    messages quote as ``CorrelationId``. ``x-ms-correlation-request-id`` is an
+    Azure Resource Manager header BC does not send; kept as a fallback."""
+    return response.headers.get("request-id") or response.headers.get(
+        "x-ms-correlation-request-id"
+    )
+
+
 def _parse_bc_error(response: httpx.Response) -> tuple[str | None, str | None]:
     """Extract error message and correlation ID from a BC error response."""
     bc_message = None
-    correlation_id = response.headers.get("x-ms-correlation-request-id")
+    correlation_id = _correlation_id(response)
 
     try:
         body = response.json()

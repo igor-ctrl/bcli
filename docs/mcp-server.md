@@ -8,16 +8,21 @@ Desktop, but it also works with the official [MCP Inspector](https://github.com/
 and any other client that speaks the spec.
 
 The server generates its tool list **dynamically** by subprocessing
-`bcli describe --format json` once on startup, and delegates every call to the
-bcli CLI as a subprocess. Profile resolution, auth, retry, telemetry, and the
-read-only `disable_writes` gate are inherited from the CLI for free. New CLI
-commands light up automatically as MCP tools; deprecated ones disappear.
+`bcli describe --format json` once on startup. New CLI commands light up
+automatically as MCP tools; deprecated ones disappear.
 
-Read commands return parsed stdout JSON. Mutating commands (`bcli_post`,
-`bcli_patch`, `bcli_delete`, `bcli_attach_upload`, `bcli_batch_run`) pass
-`--result-out <tmp>` and return the AIP §Phase 2 result envelope content as
-the tool result. A `status="failed"` envelope surfaces as an MCP `ToolError`
-with the BC correlation id quoted so the agent can cite it.
+Record writes (`bcli_post`, `bcli_patch`, `bcli_delete`) run in-process
+through the SDK's write operation (`client.plan` + `client.write`): the same
+URL resolution, audit (`caller = "mcp"`) and BC correlation id as the CLI.
+They return the AIP §Phase 2 result envelope fields plus the response `body`.
+A `disable_writes` profile is refused unless the agent passes `yes=true`; any
+failure raises an MCP `ToolError` quoting the correlation id.
+
+Read commands, `bcli_attach_upload` and `bcli_batch_run` still delegate to the
+bcli CLI as a subprocess (run off the event loop): reads return parsed stdout
+JSON; the two mutating ones pass `--result-out <tmp>` and return the envelope,
+and a `status="failed"` envelope surfaces as a `ToolError` with the
+correlation id quoted.
 
 ## Install
 
@@ -203,7 +208,8 @@ Two separate MCP processes, two `mcpServers` blocks in
 crash the public MCP, and an OSS install never needs to skip optional
 private-package imports.
 
-If exposing mutating tools from a private MCP, the package must either
-subprocess `bcli post / patch / delete` (so the CLI's `disable_writes` gate
-applies) or reimplement that gate locally — the SDK alone does not enforce
-it. See `src/bcli_cli/_safety.py` for the canonical helper.
+If exposing mutating tools from a private MCP, use the SDK's `client.plan` +
+`client.write` (resolution and audit come with it) and apply the
+`disable_writes` rule yourself, as `bcli_mcp._server._make_sdk_write_handler`
+does — `write()` does not enforce it. The CLI's interactive version is
+`src/bcli_cli/_safety.py`.

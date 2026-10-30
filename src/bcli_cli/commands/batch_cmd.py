@@ -146,21 +146,6 @@ def _validate_step_names(steps: list[dict]) -> None:
         seen.add(name)
 
 
-def _close_if_coroutine(obj: Any) -> None:
-    """Close a stray coroutine to suppress the ResourceWarning that fires
-    when an ``AsyncMock``'s synchronously-accessed attribute returns a
-    coroutine the production code never awaits. No-op for non-coroutines.
-    """
-    if hasattr(obj, "close") and callable(obj.close):
-        # ``inspect.iscoroutine`` is stricter than necessary — duck-type
-        # on ``send`` / ``close`` to also cover generator-coroutines.
-        if hasattr(obj, "send") or type(obj).__name__ in {"coroutine"}:
-            try:
-                obj.close()
-            except Exception:
-                pass
-
-
 def _body_hash(body: Any) -> str | None:
     """sha256 of a JSON-serialised body, or None if there's no body.
 
@@ -207,14 +192,48 @@ def _compose_rollback_url(client: Any, entity: str, post_result: Any) -> str | N
     if not record_id:
         return None
     try:
-        base = client._resolve_url(entity)  # noqa: SLF001
+        return client.resolve(entity, record_id=str(record_id))
     except Exception:
         return None
-    if not isinstance(base, str):
-        _close_if_coroutine(base)
-        return None
-    # OData record URL convention: <entitySet>(<id>)
-    return f"{base}({record_id})"
+
+
+_WRITE_ACTIONS = frozenset({"post", "patch", "delete"})
+_DONE_LABEL = {"post": "created", "patch": "updated", "delete": "deleted"}
+
+
+def _step_action(step: dict) -> str:
+    """A step's lower-case action, accepting the ``method:`` alias.
+
+    Authors who copy-paste OData examples (especially bound-action
+    invocations) reach for ``method`` — silently treating that as a missing
+    ``action`` and downgrading to GET would let a mutating POST step land as a
+    GET round-trip. See ``bcli.workflow._models.StepDef`` for the equivalent
+    normalisation at schema-validation time.
+    """
+    raw = step.get("action")
+    if raw is None and "method" in step:
+        m = step.get("method")
+        raw = m.lower() if isinstance(m, str) else None
+    return (raw or "get").lower()
+
+
+def _plan_step(client: Any, step: dict, action: str) -> Any:
+    """Plan a write step exactly as ``bcli post/patch/delete`` would."""
+    from bcli.errors import BCLIError
+
+    record_id = step.get("id")
+    if action != "post" and not record_id:
+        raise BCLIError("missing 'id' field")
+    return client.plan(
+        action.upper(), step.get("endpoint", ""),
+        body=None if action == "delete" else (step.get("data") or {}),
+        record_id=record_id,
+        etag=step.get("etag", "*"),
+        idempotency_key=step.get("idempotency_key"),
+        publisher=step.get("publisher"),
+        group=step.get("group"),
+        version=step.get("version"),
+    )
 
 
 # ─── Command: batch run ──────────────────────────────────────────────
@@ -348,7 +367,7 @@ def run_batch(
         # zombie ``running`` row that never gets resolved). The envelope
         # records ``dry_run=true`` for disambiguation.
         if dry_run or state.dry_run:
-            _print_dry_run(steps, context)
+            _print_dry_run(steps, context, state.make_async_client())
             ledger.finish_run(run_id, "completed")
             ledger.close()
             cap.mark_dry_run()
@@ -361,20 +380,8 @@ def run_batch(
         # review). Lives after ``start_run`` so the ledger has a row to
         # update; the BaseException branch below derives a truthful
         # state from the (empty) step table when the gate fires.
-        mutating_actions = {"post", "patch", "delete"}
-
-        def _step_action(step: dict) -> str:
-            """Mirror the alias logic from ``_execute_batch`` so the
-            disable_writes gate doesn't miss a step that uses
-            ``method: POST`` instead of ``action: post``."""
-            raw = step.get("action")
-            if raw is None and "method" in step:
-                m = step.get("method")
-                raw = m.lower() if isinstance(m, str) else None
-            return (raw or "get").lower()
-
         mutating_steps = [
-            step for step in steps if _step_action(step) in mutating_actions
+            step for step in steps if _step_action(step) in _WRITE_ACTIONS
         ]
         if mutating_steps:
             from bcli_cli._safety import confirm_write_or_exit
@@ -492,8 +499,13 @@ def run_batch(
 # ─── Dry run ─────────────────────────────────────────────────────────
 
 
-def _print_dry_run(steps: list[dict], context: Any | None) -> None:
-    """Print resolved (or partially resolved) requests without executing."""
+def _print_dry_run(steps: list[dict], context: Any | None, client: Any) -> None:
+    """Preview every step without executing.
+
+    Write steps are planned exactly as the real run plans them, so the
+    preview shows the URL that would be hit (and records a ``dry_run`` audit
+    entry).
+    """
     from bcli.workflow._resolver import resolve_references
 
     for i, step in enumerate(steps, 1):
@@ -507,21 +519,30 @@ def _print_dry_run(steps: list[dict], context: Any | None) -> None:
                 # Step references can't resolve at dry-run time — show raw
                 step_to_show = step
 
-        action_raw = step_to_show.get("action")
-        if action_raw is None and "method" in step_to_show:
-            method_raw = step_to_show.get("method")
-            action_raw = method_raw.lower() if isinstance(method_raw, str) else None
-        action = (action_raw or "get").upper()
+        action = _step_action(step_to_show)
         endpoint = step_to_show.get("endpoint", "?")
         name = step_to_show.get("name", "")
         data = step_to_show.get("data")
         params = step_to_show.get("params", {})
 
-        label = f"  [dim]Step {i}:[/dim] {action} {endpoint}"
+        url = error = None
+        if action in _WRITE_ACTIONS:
+            try:
+                plan = _plan_step(client, step_to_show, action)
+                url = plan.url
+                client.record_dry_run(plan)
+            except Exception as e:
+                error = str(e)
+
+        label = f"  [dim]Step {i}:[/dim] {action.upper()} {endpoint}"
         if name and name != endpoint:
             label += f" [dim]({name})[/dim]"
         console.print(label)
 
+        if url:
+            console.print(f"    [dim]URL: {url}[/dim]")
+        if error:
+            console.print(f"    [red]✗ {error}[/red]")
         if params:
             console.print(f"    [dim]Params: {params}[/dim]")
         if data:
@@ -577,24 +598,12 @@ async def _execute_batch(
                         )
                     continue
 
-            # Accept the ``method:`` alias for ``action:``. Authors who
-            # copy-paste OData examples (especially bound-action
-            # invocations) reach for ``method`` — silently treating that
-            # as a missing ``action`` and downgrading to GET would let a
-            # mutating POST step land as a GET round-trip. See
-            # ``bcli.workflow._models.StepDef`` for the equivalent
-            # normalisation at schema-validation time.
-            action_raw = step.get("action")
-            if action_raw is None and "method" in step:
-                method_raw = step.get("method")
-                action_raw = method_raw.lower() if isinstance(method_raw, str) else None
-            action = (action_raw or "get").lower()
+            action = _step_action(step)
             endpoint = step.get("endpoint", "")
             step_name = step.get("name") or endpoint
             data = step.get("data")
             params = step.get("params", {})
             record_id = step.get("id")
-            etag = step.get("etag", "*")
             # AIP §Phase 4d — optional per-step idempotency token; same-run
             # replay protection is enforced below.
             idempotency_key = step.get("idempotency_key")
@@ -659,25 +668,27 @@ async def _execute_batch(
                     )
                     continue
 
+            # Plan a write once: its URL goes into the ledger intent and is
+            # the URL the write hits. A planning error (bad key, unroutable
+            # endpoint, missing id) is recorded as this step's failure below.
+            plan = plan_error = None
+            if action in _WRITE_ACTIONS:
+                try:
+                    plan = _plan_step(client, step, action)
+                except Exception as e:
+                    plan_error = e
+
             # ── Ledger: write intent BEFORE the HTTP call. ──
-            # The resolved URL is computed lazily via the client's
-            # registry. If resolution fails (or the client is a mock
-            # whose ``_resolve_url`` returns something non-string), fall
-            # back to the entity name so the operator has *something* to
-            # look at and the SQLite TEXT column accepts the value.
+            # Falls back to the entity name when the URL can't be resolved,
+            # so the operator has *something* to look at.
             ledger_step_id: int | None = None
             if ledger is not None:
                 intent_url = endpoint
-                if endpoint:
+                if plan is not None:
+                    intent_url = plan.url
+                elif endpoint and plan_error is None:
                     try:
-                        candidate = client._resolve_url(endpoint, record_id=record_id)  # noqa: SLF001
-                        if isinstance(candidate, str):
-                            intent_url = candidate
-                        else:
-                            # AsyncMock returns a coroutine when treated
-                            # as sync — close it to avoid the resource
-                            # warning at GC time.
-                            _close_if_coroutine(candidate)
+                        intent_url = client.resolve(endpoint, record_id=record_id)
                     except Exception:
                         intent_url = endpoint
                 ledger_step_id = ledger.write_intent(
@@ -717,7 +728,11 @@ async def _execute_batch(
                     if params.get("orderby"):
                         query.orderby(params["orderby"])
 
-                    response = await client.get(endpoint, record_id, query=query)
+                    response = await client.get(
+                        endpoint, record_id, query=query,
+                        publisher=step.get("publisher"), group=step.get("group"),
+                        version=step.get("version"),
+                    )
                     records = response.value if not record_id else [response.raw] if response.raw else []
                     console.print(f"[green]✓[/green] {len(records)} record(s)")
                     result_entry = {"step": i, "name": step_name, "action": action, "endpoint": endpoint, "status": "ok", "count": len(records), "data": records}
@@ -742,123 +757,41 @@ async def _execute_batch(
                         )
                     step_terminal_status = "committed"
 
-                elif action == "post":
-                    result = await client.post(
-                        endpoint, data or {},
-                        idempotency_key=idempotency_key,
-                    )
-                    console.print("[green]✓[/green] created")
-                    result_entry = {"step": i, "name": step_name, "action": action, "endpoint": endpoint, "status": "ok", "data": [result] if result else []}
-                    results.append(result_entry)
-
-                    if isinstance(context, WorkflowContext):
-                        context.set_result(
-                            step_name,
-                            StepResult(name=step_name, action=action, endpoint=endpoint, status="ok", data=result or {}),
-                        )
-
-                    if output_format and result:
-                        format_output([result], output_format)
-
-                    if ledger is not None and ledger_step_id is not None:
-                        rb_url = _compose_rollback_url(client, endpoint, result)
-                        ledger.write_outcome(
-                            step_id=ledger_step_id, status="committed",
-                            bc_correlation_id=None, error_message=None,
-                            rollback_url=rb_url,
-                        )
-                    step_terminal_status = "committed"
-
-                elif action == "patch":
-                    if not record_id:
-                        console.print("[red]✗ missing 'id' field[/red]")
-                        results.append({"step": i, "name": step_name, "action": action, "endpoint": endpoint, "status": "error", "error": "missing id"})
-                        if ledger is not None and ledger_step_id is not None:
-                            ledger.write_outcome(
-                                step_id=ledger_step_id, status="failed",
-                                bc_correlation_id=None,
-                                error_message="missing id",
-                                rollback_url=None,
-                            )
-                        step_terminal_status = "failed"
-                        step_terminal_error = "missing id"
-                        # Emit step_completed before the early ``continue``
-                        # so the agent sees a complete pair.
-                        prog.emit(
-                            event="step_completed",
-                            seq=i, name=step_name, method=step_method,
-                            endpoint=endpoint, status=step_terminal_status,
-                            error=step_terminal_error,
-                            duration_ms=max(0, int((_time.monotonic_ns() - step_started_ns) / 1_000_000)),
-                        )
-                        continue
-                    result = await client.patch(
-                        endpoint, record_id, data or {},
-                        etag=etag,
-                        idempotency_key=idempotency_key,
-                    )
-                    console.print("[green]✓[/green] updated")
-                    result_entry = {"step": i, "name": step_name, "action": action, "endpoint": endpoint, "status": "ok", "data": [result] if result else []}
-                    results.append(result_entry)
-
-                    if isinstance(context, WorkflowContext):
-                        context.set_result(
-                            step_name,
-                            StepResult(name=step_name, action=action, endpoint=endpoint, status="ok", data=result or {}),
-                        )
-
-                    if ledger is not None and ledger_step_id is not None:
-                        ledger.write_outcome(
-                            step_id=ledger_step_id, status="committed",
-                            bc_correlation_id=None, error_message=None,
-                            # PATCH rollback would need a pre-image snapshot
-                            # we don't keep in v0.1 — see help text on
-                            # ``bcli batch rollback``.
-                            rollback_url=None,
-                        )
-                    step_terminal_status = "committed"
-
-                elif action == "delete":
-                    if not record_id:
-                        console.print("[red]✗ missing 'id' field[/red]")
-                        results.append({"step": i, "name": step_name, "action": action, "endpoint": endpoint, "status": "error", "error": "missing id"})
-                        if ledger is not None and ledger_step_id is not None:
-                            ledger.write_outcome(
-                                step_id=ledger_step_id, status="failed",
-                                bc_correlation_id=None,
-                                error_message="missing id",
-                                rollback_url=None,
-                            )
-                        step_terminal_status = "failed"
-                        step_terminal_error = "missing id"
-                        prog.emit(
-                            event="step_completed",
-                            seq=i, name=step_name, method=step_method,
-                            endpoint=endpoint, status=step_terminal_status,
-                            error=step_terminal_error,
-                            duration_ms=max(0, int((_time.monotonic_ns() - step_started_ns) / 1_000_000)),
-                        )
-                        continue
-                    await client.delete(
-                        endpoint, record_id,
-                        etag=etag,
-                        idempotency_key=idempotency_key,
-                    )
-                    console.print("[green]✓[/green] deleted")
+                elif action in _WRITE_ACTIONS:
+                    if plan_error is not None:
+                        raise plan_error
+                    written = await client.write(plan)
+                    body = written.body
+                    console.print(f"[green]✓[/green] {_DONE_LABEL[action]}")
                     result_entry = {"step": i, "name": step_name, "action": action, "endpoint": endpoint, "status": "ok"}
+                    if action != "delete":
+                        result_entry["data"] = [body] if body else []
                     results.append(result_entry)
 
                     if isinstance(context, WorkflowContext):
                         context.set_result(
                             step_name,
-                            StepResult(name=step_name, action=action, endpoint=endpoint, status="ok", data={}),
+                            StepResult(
+                                name=step_name, action=action, endpoint=endpoint, status="ok",
+                                data={} if action == "delete" else (body or {}),
+                            ),
                         )
+
+                    if output_format and body and action == "post":
+                        format_output([body], output_format)
 
                     if ledger is not None and ledger_step_id is not None:
                         ledger.write_outcome(
                             step_id=ledger_step_id, status="committed",
-                            bc_correlation_id=None, error_message=None,
-                            rollback_url=None,  # DELETE has no clean inverse
+                            bc_correlation_id=written.correlation_id, error_message=None,
+                            # Only a POST has a clean inverse (DELETE the new
+                            # record). PATCH would need a pre-image snapshot
+                            # we don't keep; DELETE has none — see help text
+                            # on ``bcli batch rollback``.
+                            rollback_url=(
+                                _compose_rollback_url(client, endpoint, body)
+                                if action == "post" else None
+                            ),
                         )
                     step_terminal_status = "committed"
 
@@ -885,7 +818,7 @@ async def _execute_batch(
                 if ledger is not None and ledger_step_id is not None:
                     ledger.write_outcome(
                         step_id=ledger_step_id, status="failed",
-                        bc_correlation_id=None,
+                        bc_correlation_id=getattr(e, "correlation_id", None),
                         error_message=str(e),
                         rollback_url=None,
                     )

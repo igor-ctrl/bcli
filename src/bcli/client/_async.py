@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -12,6 +14,7 @@ from bcli.auth._base import AuthProvider
 from bcli.auth._credentials import ClientCredentialsAuth
 from bcli.client._safety import SafeContext
 from bcli.client._transport import BCTransport
+from bcli.client._write import WRITE_METHODS, WritePlan, WriteResult
 from bcli.config import BCConfig, BCProfile, load_config
 from bcli.errors import BCLIError, ConfigError
 from bcli.odata._pagination import PageIterator
@@ -117,7 +120,9 @@ class AsyncBCClient:
         # Shared options
         timeout: int | None = None,
         auth: AuthProvider | None = None,
+        caller: str = "sdk",
     ) -> None:
+        self._caller = caller
         if tenant_id is not None:
             # Programmatic mode — build a synthetic profile
             self._config = BCConfig()
@@ -128,14 +133,16 @@ class AsyncBCClient:
                 client_id=client_id,
             )
             self._programmatic_secret = client_secret
+            self._profile_name = "programmatic"
             self._registry = EndpointRegistry()
         else:
             # Profile-based mode — read from config
             self._config = config or load_config()
             self._profile = self._config.get_profile(profile)
             self._programmatic_secret = None
+            self._profile_name = profile or self._config.defaults.profile
             self._registry = EndpointRegistry(
-                profile_name=profile or self._config.defaults.profile,
+                profile_name=self._profile_name,
                 disable_standard=self._profile.disable_standard_api,
                 allowed_categories=self._profile.allowed_categories or None,
                 allowed_endpoints=self._profile.allowed_endpoints or None,
@@ -144,17 +151,24 @@ class AsyncBCClient:
         self._transport: BCTransport | None = None
         self._timeout = timeout or self._config.defaults.timeout
         self._injected_auth = auth
+        self._audit_sink = None
 
-    def _ensure_transport(self) -> BCTransport:
-        if self._transport is None:
+    @property
+    def auth(self) -> AuthProvider:
+        """The provider this client authenticates with (built once, on first use)."""
+        if self._injected_auth is None:
             # An injected provider wins outright: the caller already holds a token,
             # so the profile's auth_method is never consulted. That is what lets a
             # `browser` profile work server-side, where there is no local browser
             # and no loopback listener to bind.
-            auth = self._injected_auth or self._build_auth(
+            self._injected_auth = self._build_auth(
                 self._profile, self._programmatic_secret, self._config
             )
-            self._transport = BCTransport(auth, timeout=self._timeout)
+        return self._injected_auth
+
+    def _ensure_transport(self) -> BCTransport:
+        if self._transport is None:
+            self._transport = BCTransport(self.auth, timeout=self._timeout)
         return self._transport
 
     @staticmethod
@@ -224,7 +238,7 @@ class AsyncBCClient:
         """Execute a GET request."""
         transport = self._ensure_transport()
 
-        url = self._resolve_url(
+        url = self.resolve(
             entity_set_name,
             record_id=record_id,
             publisher=publisher,
@@ -235,6 +249,29 @@ class AsyncBCClient:
         params = query.to_params() if query else {}
         data = await transport.get(url, params=params)
         return ODataResponse(data)
+
+    def pages(
+        self,
+        entity_set_name: str,
+        query: Query | None = None,
+        *,
+        publisher: str | None = None,
+        group: str | None = None,
+        version: str | None = None,
+        company_id: str | None = None,
+    ) -> PageIterator:
+        """Iterate every page of ``entity_set_name``, following ``@odata.nextLink``.
+
+        ``query`` is sent whole on the first request (filter, select, expand,
+        orderby, top, skip, count). ``company_id`` queries another company in
+        the same environment.
+        """
+        url = self.resolve(
+            entity_set_name, publisher=publisher, group=group, version=version,
+            company_id=company_id,
+        )
+        params = query.to_params() if query else {}
+        return PageIterator(self._ensure_transport(), url, params)
 
     async def post(
         self,
@@ -253,11 +290,12 @@ class AsyncBCClient:
         it lets reverse proxies / gateways apply replay protection and
         keeps the ledger key consistent with what was wired out.
         """
-        transport = self._ensure_transport()
-        url = self._resolve_url(entity_set_name, publisher=publisher, group=group, version=version)
-        return await transport.post(
-            url, json_body=body, idempotency_key=idempotency_key,
+        plan = self.plan(
+            "POST", entity_set_name, body=body,
+            publisher=publisher, group=group, version=version,
+            idempotency_key=idempotency_key,
         )
+        return (await self.write(plan)).body
 
     async def patch(
         self,
@@ -272,14 +310,12 @@ class AsyncBCClient:
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """PATCH (update) a record."""
-        transport = self._ensure_transport()
-        url = self._resolve_url(
-            entity_set_name, record_id=record_id,
+        plan = self.plan(
+            "PATCH", entity_set_name, body=body, record_id=record_id, etag=etag,
             publisher=publisher, group=group, version=version,
+            idempotency_key=idempotency_key,
         )
-        return await transport.patch(
-            url, json_body=body, etag=etag, idempotency_key=idempotency_key,
-        )
+        return (await self.write(plan)).body
 
     async def delete(
         self,
@@ -293,13 +329,140 @@ class AsyncBCClient:
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """DELETE a record."""
-        transport = self._ensure_transport()
-        url = self._resolve_url(
+        plan = self.plan(
+            "DELETE", entity_set_name, record_id=record_id, etag=etag,
+            publisher=publisher, group=group, version=version,
+            idempotency_key=idempotency_key,
+        )
+        return (await self.write(plan)).body
+
+    # ─── Write operation ─────────────────────────────────────────
+
+    def plan(
+        self,
+        method: str,
+        entity_set_name: str,
+        *,
+        body: dict[str, Any] | None = None,
+        record_id: str | None = None,
+        etag: str = "*",
+        idempotency_key: str | None = None,
+        publisher: str | None = None,
+        group: str | None = None,
+        version: str | None = None,
+        environment: str | None = None,
+        company_id: str | None = None,
+    ) -> WritePlan:
+        """Resolve a mutation once, without sending it.
+
+        Raises the same errors the real write would (``ValueError`` for an
+        invalid key or route segment, ``RegistryError`` / ``ConfigError`` for
+        an endpoint that cannot be routed), so a dry-run built from the plan
+        fails exactly where the real run fails. ``environment`` / ``company_id``
+        retarget the write away from the profile's defaults.
+        """
+        method = method.upper()
+        if method not in WRITE_METHODS:
+            raise ValueError(f"Unsupported write method {method!r}; expected one of {sorted(WRITE_METHODS)}")
+        environment = environment or self._profile.environment
+        company_id = company_id or self._profile.company_id
+        url = self.resolve(
             entity_set_name, record_id=record_id,
             publisher=publisher, group=group, version=version,
+            environment=environment, company_id=company_id,
         )
-        return await transport.delete(
-            url, etag=etag, idempotency_key=idempotency_key,
+        return WritePlan(
+            method=method,
+            endpoint=entity_set_name,
+            url=url,
+            environment=environment,
+            company_id=company_id,
+            record_id=record_id,
+            body=None if method == "DELETE" else body,
+            etag=etag,
+            idempotency_key=idempotency_key,
+        )
+
+    async def write(self, plan: WritePlan) -> WriteResult:
+        """Send a planned mutation and record the outcome in the audit log."""
+        transport = self._ensure_transport()
+        start = time.perf_counter()
+        try:
+            response = await transport.request(
+                plan.method,
+                plan.url,
+                json_body=plan.body,
+                etag=None if plan.method == "POST" else plan.etag,
+                idempotency_key=plan.idempotency_key,
+            )
+        except Exception as exc:
+            self._audit(
+                plan, "failed",
+                status=getattr(exc, "status_code", None),
+                correlation_id=getattr(exc, "correlation_id", None),
+                latency_ms=_elapsed_ms(start),
+                error=str(exc),
+            )
+            raise
+        result = WriteResult(
+            plan=plan,
+            body=response.body,
+            status=response.status,
+            correlation_id=response.correlation_id,
+            latency_ms=_elapsed_ms(start),
+        )
+        self._audit(
+            plan, "completed",
+            status=result.status,
+            correlation_id=result.correlation_id,
+            latency_ms=result.latency_ms,
+        )
+        return result
+
+    def record_dry_run(self, plan: WritePlan, *, method: str | None = None) -> None:
+        """Record that ``plan`` was previewed but not sent."""
+        self._audit(plan, "dry_run", method=method)
+
+    def _audit(
+        self,
+        plan: WritePlan,
+        outcome: str,
+        *,
+        method: str | None = None,
+        status: int | None = None,
+        correlation_id: str | None = None,
+        latency_ms: int | None = None,
+        error: str | None = None,
+    ) -> None:
+        from bcli._version import __version__
+        from bcli.audit import AuditEntry, get_audit_sink, redact
+
+        if self._audit_sink is None:
+            self._audit_sink = get_audit_sink(self._config.audit, profile_name=self._profile_name)
+        if not self._audit_sink.is_active:
+            return
+        self._audit_sink.emit(
+            AuditEntry(
+                ts=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                profile=self._profile_name,
+                environment=plan.environment,
+                company_id=plan.company_id,
+                method=(method or plan.method).upper(),
+                endpoint=plan.endpoint,
+                resolved_url=plan.url,
+                record_id=plan.record_id,
+                request_body=(
+                    None if plan.body is None
+                    else redact(plan.body, self._config.audit.redact_keys)
+                ),
+                status=status,
+                correlation_id=correlation_id,
+                latency_ms=latency_ms,
+                cli_version=__version__,
+                caller=self._caller,
+                outcome=outcome,
+                error=error,
+            )
         )
 
     async def delete_url(self, url: str, *, etag: str = "*") -> dict[str, Any]:
@@ -311,8 +474,15 @@ class AsyncBCClient:
         endpoint may have moved between runs); we trust the captured
         URL.
         """
-        transport = self._ensure_transport()
-        return await transport.delete(url, etag=etag)
+        plan = WritePlan(
+            method="DELETE",
+            endpoint=url.rsplit("/", 1)[-1],
+            url=url,
+            environment=self._profile.environment,
+            company_id=self._profile.company_id,
+            etag=etag,
+        )
+        return (await self.write(plan)).body
 
     async def upload_attachment(
         self,
@@ -397,10 +567,14 @@ class AsyncBCClient:
                 idempotency_key=idempotency_key,
             )
         else:
-            metadata = await self.post(
-                "documentAttachments",
-                metadata_body,
-                publisher=publisher, group=group, version=version,
+            # Straight to the transport, not self.post: the caller audits the
+            # upload as one UPLOAD, not as an extra POST.
+            metadata = await transport.post(
+                self.resolve(
+                    "documentAttachments",
+                    publisher=publisher, group=group, version=version,
+                ),
+                json_body=metadata_body,
                 idempotency_key=idempotency_key,
             )
         attachment_id = metadata.get("id") or metadata.get("systemId")
@@ -419,7 +593,7 @@ class AsyncBCClient:
                 record_id=attachment_id,
             )
         else:
-            base_url = self._resolve_url(
+            base_url = self.resolve(
                 "documentAttachments",
                 record_id=attachment_id,
                 publisher=publisher, group=group, version=version,
@@ -481,7 +655,7 @@ class AsyncBCClient:
         straight to a file.
 
         Two requests. First the record itself, resolved through the same
-        ``_resolve_url`` every other read uses — so registry routing, an
+        ``resolve`` every other read uses — so registry routing, an
         explicit ``publisher``/``group``/``version`` override and the
         ``disable_standard_api`` lockdown all apply here exactly as they do to
         ``get``. A media download is not a side door around the profile's
@@ -507,7 +681,7 @@ class AsyncBCClient:
         """
         transport = self._ensure_transport()
 
-        record_url = self._resolve_url(
+        record_url = self.resolve(
             entity_set_name,
             record_id=record_id,
             publisher=publisher,
@@ -633,8 +807,8 @@ class AsyncBCClient:
     ) -> str:
         """Resolve entity to a full URL bound to an explicit target.
 
-        Used by ``SafeContext`` so writes go to the environment + company the
-        caller passed to ``client.safe_write(...)``, not the client's
+        Called through :meth:`resolve`; ``SafeContext`` passes its explicit
+        environment + company so writes never fall back to the client's
         profile-bound target. See vuln-0004.
 
         Registry lookup, custom-route binding, ``disable_standard_api``
@@ -774,7 +948,7 @@ class AsyncBCClient:
             record_id=record_id,
         )
 
-    def _resolve_url(
+    def resolve(
         self,
         entity_set_name: str,
         *,
@@ -782,11 +956,20 @@ class AsyncBCClient:
         publisher: str | None = None,
         group: str | None = None,
         version: str | None = None,
+        environment: str | None = None,
+        company_id: str | None = None,
     ) -> str:
-        """Resolve entity to full URL using the client's profile-bound target."""
+        """Resolve an entity (or bound action) to its full URL.
+
+        The one place that decides which route an entity uses: explicit
+        ``publisher/group/version`` override, then the custom registry, then
+        standard v2.0 unless ``disable_standard_api`` forbids it. Targets the
+        profile's environment and company unless ``environment`` /
+        ``company_id`` say otherwise (e.g. ``get --company all``).
+        """
         return self._resolve_url_for_target(
-            self._profile.environment,
-            self._profile.company_id or "",
+            environment or self._profile.environment,
+            company_id or self._profile.company_id or "",
             entity_set_name,
             record_id=record_id,
             publisher=publisher,
@@ -801,6 +984,10 @@ class AsyncBCClient:
     @property
     def profile(self) -> BCProfile:
         return self._profile
+
+
+def _elapsed_ms(start: float) -> int:
+    return int((time.perf_counter() - start) * 1000)
 
 
 class BoundQuery:
@@ -866,11 +1053,7 @@ class BoundQuery:
 
     async def pages(self) -> PageIterator:
         """Return a page iterator for streaming large result sets."""
-        url = self._client._resolve_url(
-            self._entity,
-            publisher=self._publisher,
-            group=self._group,
-            version=self._version,
+        return self._client.pages(
+            self._entity, self._query,
+            publisher=self._publisher, group=self._group, version=self._version,
         )
-        transport = self._client._ensure_transport()
-        return PageIterator(transport, url, self._query.to_params())

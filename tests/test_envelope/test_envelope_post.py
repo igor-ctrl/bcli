@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 import typer
@@ -37,6 +36,16 @@ def force_non_interactive(monkeypatch):
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
 
 
+@pytest.fixture
+def bc(cli_state, fake_bc):
+    """Writable profile + the real client against the fake transport.
+
+    BC answers with a ``systemId`` so the envelope can pick a record_id.
+    """
+    fake_bc.default = {"systemId": "vnd-9", "displayName": "Acme"}
+    return fake_bc
+
+
 def _run_post(endpoint="vendors", data='{"displayName": "Acme"}', **kwargs):
     kwargs.setdefault("format", None)
     kwargs.setdefault("publisher", None)
@@ -53,7 +62,7 @@ def _run_post(endpoint="vendors", data='{"displayName": "Acme"}', **kwargs):
 
 
 class TestEnvelopeOnSuccess:
-    def test_writes_envelope_to_path(self, stub_client, tmp_path: Path):
+    def test_writes_envelope_to_path(self, bc, tmp_path: Path):
         out = tmp_path / "out.json"
         _run_post(result_out=out)
         assert out.is_file()
@@ -64,7 +73,7 @@ class TestEnvelopeOnSuccess:
         assert env["status"] == "succeeded"
         assert env["exit_code"] == 0
 
-    def test_envelope_has_all_spec_fields(self, stub_client, tmp_path: Path):
+    def test_envelope_has_all_spec_fields(self, bc, tmp_path: Path):
         out = tmp_path / "out.json"
         _run_post(result_out=out)
         env = json.loads(out.read_text())
@@ -80,7 +89,7 @@ class TestEnvelopeOnSuccess:
         assert len(env["invocation_id"]) >= 16
 
     def test_envelope_captures_profile_environment_company(
-        self, stub_client, tmp_path: Path,
+        self, bc, tmp_path: Path,
     ):
         out = tmp_path / "out.json"
         _run_post(result_out=out)
@@ -90,43 +99,43 @@ class TestEnvelopeOnSuccess:
         assert env["company"] == "c-123"
 
     def test_record_id_extracted_from_systemid(
-        self, stub_client, tmp_path: Path,
+        self, bc, tmp_path: Path,
     ):
-        stub_client.post.return_value = {"systemId": "vnd-12345", "x": 1}
+        bc.default = {"systemId": "vnd-12345", "x": 1}
         out = tmp_path / "out.json"
         _run_post(result_out=out)
         env = json.loads(out.read_text())
         assert env["record_id"] == "vnd-12345"
 
     def test_record_id_falls_back_to_id_field(
-        self, stub_client, tmp_path: Path,
+        self, bc, tmp_path: Path,
     ):
-        stub_client.post.return_value = {"id": "vnd-fallback"}
+        bc.default = {"id": "vnd-fallback"}
         out = tmp_path / "out.json"
         _run_post(result_out=out)
         env = json.loads(out.read_text())
         assert env["record_id"] == "vnd-fallback"
 
     def test_record_id_null_when_response_has_no_id_field(
-        self, stub_client, tmp_path: Path,
+        self, bc, tmp_path: Path,
     ):
-        stub_client.post.return_value = {"opaqueResult": True}
+        bc.default = {"opaqueResult": True}
         out = tmp_path / "out.json"
         _run_post(result_out=out)
         env = json.loads(out.read_text())
         assert env["record_id"] is None
 
     def test_resolved_url_populated_on_success(
-        self, stub_client, tmp_path: Path,
+        self, bc, tmp_path: Path,
     ):
         out = tmp_path / "out.json"
         _run_post(result_out=out)
         env = json.loads(out.read_text())
-        # try_resolve_url -> AsyncBCClient._resolve_url stub returned this
-        assert env["resolved_url"] == "https://example.test/vendors"
+        assert env["resolved_url"] == bc.last.url
+        assert env["resolved_url"].endswith("/companies(c-123)/vendors")
 
     def test_started_at_and_duration_present(
-        self, stub_client, tmp_path: Path,
+        self, bc, tmp_path: Path,
     ):
         out = tmp_path / "out.json"
         _run_post(result_out=out)
@@ -136,7 +145,7 @@ class TestEnvelopeOnSuccess:
         assert env["duration_ms"] >= 0
 
     def test_dry_run_field_false_on_real_write(
-        self, stub_client, tmp_path: Path,
+        self, bc, tmp_path: Path,
     ):
         out = tmp_path / "out.json"
         _run_post(result_out=out)
@@ -145,7 +154,7 @@ class TestEnvelopeOnSuccess:
 
 
 class TestAtomicity:
-    def test_uses_os_replace(self, stub_client, tmp_path: Path, monkeypatch):
+    def test_uses_os_replace(self, bc, tmp_path: Path, monkeypatch):
         out = tmp_path / "out.json"
         real_replace = os.replace
         calls: list[tuple[str, str]] = []
@@ -163,7 +172,7 @@ class TestAtomicity:
 
 class TestStdoutUnaffected:
     def test_stdout_does_not_contain_envelope(
-        self, stub_client, tmp_path: Path, capsys,
+        self, bc, tmp_path: Path, capsys,
     ):
         """The envelope writes to its own channel — stdout still follows
         ``--format`` (here: default table render). Critically, none of the
@@ -178,7 +187,7 @@ class TestStdoutUnaffected:
 
 
 class TestResultFdMode:
-    def test_writes_envelope_to_fd(self, stub_client, tmp_path: Path):
+    def test_writes_envelope_to_fd(self, bc, tmp_path: Path):
         r, w = os.pipe()
         try:
             _run_post(result_fd=w)
@@ -197,19 +206,19 @@ class TestResultFdMode:
 
 class TestMutualExclusion:
     def test_result_out_and_result_fd_mutually_exclusive(
-        self, stub_client, tmp_path: Path,
+        self, bc, tmp_path: Path,
     ):
         with pytest.raises(typer.BadParameter):
             _run_post(result_out=tmp_path / "x.json", result_fd=2)
 
 
 class TestEnvelopeOnFailure:
-    def test_envelope_on_http_4xx(self, stub_client, tmp_path: Path):
-        stub_client.post.side_effect = ValidationError(
+    def test_envelope_on_http_4xx(self, bc, tmp_path: Path):
+        bc.reply(ValidationError(
             "field 'displayName' missing",
             status_code=400,
             correlation_id="corr-400",
-        )
+        ))
         out = tmp_path / "out.json"
         with pytest.raises(typer.Exit):
             _run_post(result_out=out)
@@ -219,12 +228,12 @@ class TestEnvelopeOnFailure:
         assert env["exit_code"] == EXIT_REMOTE_4XX
         assert env["bc_correlation_id"] == "corr-400"
 
-    def test_envelope_on_http_5xx(self, stub_client, tmp_path: Path):
-        stub_client.post.side_effect = ServerError(
+    def test_envelope_on_http_5xx(self, bc, tmp_path: Path):
+        bc.reply(ServerError(
             "boom",
             status_code=502,
             correlation_id="corr-5xx",
-        )
+        ))
         out = tmp_path / "out.json"
         with pytest.raises(typer.Exit):
             _run_post(result_out=out)
@@ -233,8 +242,8 @@ class TestEnvelopeOnFailure:
         assert env["exit_code"] == EXIT_REMOTE_5XX
         assert env["bc_correlation_id"] == "corr-5xx"
 
-    def test_envelope_on_generic_exception(self, stub_client, tmp_path: Path):
-        stub_client.post.side_effect = RuntimeError("oops")
+    def test_envelope_on_generic_exception(self, bc, tmp_path: Path):
+        bc.reply(RuntimeError("oops"))
         out = tmp_path / "out.json"
         with pytest.raises(typer.Exit):
             _run_post(result_out=out)
@@ -245,41 +254,26 @@ class TestEnvelopeOnFailure:
 
 
 class TestEnvelopeOnDryRun:
-    def test_dry_run_writes_envelope_no_http(
-        self, cli_state, stub_resolve_url, tmp_path: Path, monkeypatch,
-    ):
+    def test_dry_run_writes_envelope_no_http(self, bc, tmp_path: Path):
         """``--dry-run`` short-circuits HTTP but still drops an envelope so
         an agent driving the CLI can verify the request shape was correct
         without parsing stdout prose."""
-        called = {"post": False}
-
-        async def _no_call(*a, **kw):
-            called["post"] = True
-            return {}
-
-        fake = AsyncMock()
-        fake.__aenter__ = AsyncMock(return_value=fake)
-        fake.__aexit__ = AsyncMock(return_value=False)
-        fake.post = _no_call
-        fake._resolve_url = lambda entity, **kw: f"https://example.test/{entity}"
-        monkeypatch.setattr(state, "make_async_client", lambda **_: fake)
-
         state.dry_run = True
         out = tmp_path / "out.json"
         with pytest.raises(typer.Exit) as exc:
             _run_post(result_out=out)
-        # render_dry_run uses typer.Exit(); exit_code attr will be 0/None
         assert (exc.value.exit_code or 0) == 0
-        assert not called["post"], "Dry-run must NOT issue the HTTP call"
+        assert bc.sent == [], "Dry-run must NOT issue the HTTP call"
         env = json.loads(out.read_text())
         assert env["dry_run"] is True
         assert env["status"] == "succeeded"
         assert env["exit_code"] == 0
+        assert env["resolved_url"].endswith("/companies(c-123)/vendors")
 
 
 class TestAddedFlagIsOptional:
     def test_envelope_not_written_when_neither_flag_set(
-        self, stub_client, tmp_path: Path,
+        self, bc, tmp_path: Path,
     ):
         """Backward-compat — calling post_command without the envelope flags
         leaves no envelope file anywhere. The flag is strictly opt-in."""

@@ -9,7 +9,7 @@ Three scenarios:
 2. **Partial commit.** One step succeeds, the next raises → envelope
    ``status="failed"``, ledger ``state="partially_committed"``.
 3. **Policy refusal.** ``disable_writes=true`` + non-interactive +
-   no ``--yes`` → envelope ``status="failed"`` with ``exit_code=1``;
+   no ``--yes`` → envelope ``status="failed"`` with ``exit_code=8`` (EXIT_POLICY);
    the ledger row exists (``start_run`` ran) and is finalized as
    ``failed`` (no committed steps).
 
@@ -25,7 +25,6 @@ import sqlite3
 import sys
 import textwrap
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
 
 import pytest
 import typer
@@ -95,21 +94,6 @@ def readonly_state():
     state._telemetry = None
 
 
-@pytest.fixture
-def fake_client():
-    c = AsyncMock()
-    c.__aenter__ = AsyncMock(return_value=c)
-    c.__aexit__ = AsyncMock(return_value=False)
-    c.post = AsyncMock(return_value={"id": "rec-1", "@odata.context": "x"})
-    c.patch = AsyncMock(return_value={"id": "rec-1"})
-    c.delete = AsyncMock(return_value=None)
-    c.get = AsyncMock(return_value=type("R", (), {"value": [], "raw": None})())
-    c._resolve_url = lambda entity, record_id=None, **_: (
-        f"https://x/{entity}({record_id})" if record_id else f"https://x/{entity}"
-    )
-    return c
-
-
 def _write_yaml(tmp_path: Path, name: str, content: str) -> Path:
     f = tmp_path / name
     f.write_text(textwrap.dedent(content).strip(), encoding="utf-8")
@@ -137,7 +121,7 @@ class TestEnvelopeAndLedgerAgreeOnSuccess:
     uses to drill into per-step detail)."""
 
     def test_success_envelope_matches_ledger_run_id(
-        self, writable_state, isolated_home, fake_client, tmp_path,
+        self, writable_state, isolated_home, fake_bc, tmp_path,
     ):
         yaml_file = _write_yaml(tmp_path, "ok.yaml", """
             name: happy
@@ -149,15 +133,11 @@ class TestEnvelopeAndLedgerAgreeOnSuccess:
         """)
         out = tmp_path / "envelope.json"
 
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            batch_cmd.run_batch(
-                file=yaml_file, dry_run=False, output=None, format=None,
-                set_params=None, params_file=None, yes=True,
-                result_out=out, result_fd=None,
-            )
+        batch_cmd.run_batch(
+            file=yaml_file, dry_run=False, output=None, format=None,
+            set_params=None, params_file=None, yes=True,
+            result_out=out, result_fd=None,
+        )
 
         env = json.loads(out.read_text())
         assert env["status"] == "succeeded"
@@ -170,6 +150,7 @@ class TestEnvelopeAndLedgerAgreeOnSuccess:
         assert derived["state"] == "completed"
         # The envelope's record_id is the ledger run id — agents pivot here.
         assert env["record_id"] == run_row["run_id"]
+        assert [s.method for s in fake_bc.sent] == ["POST"]
 
 
 class TestEnvelopeAndLedgerAgreeOnPartialCommit:
@@ -178,17 +159,9 @@ class TestEnvelopeAndLedgerAgreeOnPartialCommit:
     landed before the crash."""
 
     def test_partial_commit_envelope_failed_ledger_partial(
-        self, writable_state, isolated_home, fake_client, tmp_path,
+        self, writable_state, isolated_home, fake_bc, tmp_path,
     ):
-        call_count = {"n": 0}
-
-        async def post_side_effect(entity, body, **kwargs):
-            call_count["n"] += 1
-            if call_count["n"] == 2:
-                raise RuntimeError("boom on step 2")
-            return {"id": f"rec-{call_count['n']}"}
-
-        fake_client.post.side_effect = post_side_effect
+        fake_bc.reply({"id": "rec-1"}, RuntimeError("boom on step 2"))
 
         yaml_file = _write_yaml(tmp_path, "partial.yaml", """
             name: partial
@@ -204,16 +177,12 @@ class TestEnvelopeAndLedgerAgreeOnPartialCommit:
         """)
         out = tmp_path / "envelope.json"
 
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            with pytest.raises(typer.Exit) as excinfo:
-                batch_cmd.run_batch(
-                    file=yaml_file, dry_run=False, output=None, format=None,
-                    set_params=None, params_file=None, yes=True,
-                    result_out=out, result_fd=None,
-                )
+        with pytest.raises(typer.Exit) as excinfo:
+            batch_cmd.run_batch(
+                file=yaml_file, dry_run=False, output=None, format=None,
+                set_params=None, params_file=None, yes=True,
+                result_out=out, result_fd=None,
+            )
         assert excinfo.value.exit_code == 1
 
         env = json.loads(out.read_text())
@@ -238,7 +207,7 @@ class TestEnvelopeOnPolicyRefusalForBatch:
     """
 
     def test_policy_refusal_emits_failed_envelope_and_failed_ledger(
-        self, readonly_state, isolated_home, fake_client, tmp_path, monkeypatch,
+        self, readonly_state, isolated_home, fake_bc, tmp_path, monkeypatch,
     ):
         # Force non-interactive stdin so confirm_write_or_exit refuses.
         monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
@@ -253,16 +222,12 @@ class TestEnvelopeOnPolicyRefusalForBatch:
         """)
         out = tmp_path / "envelope.json"
 
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            with pytest.raises(typer.Exit) as excinfo:
-                batch_cmd.run_batch(
-                    file=yaml_file, dry_run=False, output=None, format=None,
-                    set_params=None, params_file=None, yes=False,
-                    result_out=out, result_fd=None,
-                )
+        with pytest.raises(typer.Exit) as excinfo:
+            batch_cmd.run_batch(
+                file=yaml_file, dry_run=False, output=None, format=None,
+                set_params=None, params_file=None, yes=False,
+                result_out=out, result_fd=None,
+            )
         assert excinfo.value.exit_code == 8  # AIP §Phase 4a: EXIT_POLICY
 
         env = json.loads(out.read_text())
@@ -283,4 +248,4 @@ class TestEnvelopeOnPolicyRefusalForBatch:
         assert steps == []
 
         # And the actual write was never issued.
-        fake_client.post.assert_not_awaited()
+        assert fake_bc.sent == []

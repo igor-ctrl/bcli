@@ -311,7 +311,7 @@ When the user has `[audit] enabled = true` in `~/.config/bcli/config.toml`,
 every write you trigger appends a JSON line to
 `~/.config/bcli/audit/<profile>.jsonl` (or whatever the user configured).
 Each entry includes `outcome` (`completed` / `failed` / `dry_run`),
-`correlation_id` (BC's `x-ms-correlation-request-id`), `latency_ms`, and the
+`correlation_id` (BC's `request-id` header, the CorrelationId BC quotes in errors), `latency_ms`, and the
 redacted request body. Useful for:
 
 * Showing the user "here's what just happened" after a multi-step task.

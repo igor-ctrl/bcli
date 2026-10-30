@@ -24,6 +24,13 @@ def force_non_interactive(monkeypatch):
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
 
 
+@pytest.fixture
+def bc(cli_state, fake_bc):
+    """Writable profile + the real client against the fake transport."""
+    fake_bc.default = {"systemId": "vnd-9", "displayName": "Acme2"}
+    return fake_bc
+
+
 # ── PATCH ──────────────────────────────────────────────────────────────
 
 
@@ -46,20 +53,28 @@ def _run_patch(**kwargs):
 
 
 class TestPatchEnvelope:
-    def test_patch_writes_envelope(self, stub_client, tmp_path: Path):
+    def test_patch_writes_envelope(self, bc, tmp_path: Path):
+        # An API keyed on No. returns a systemId that differs from the key we sent;
+        # the envelope keeps the key the caller addressed.
+        bc.default = {"systemId": "vnd-9", "displayName": "Renamed"}
         out = tmp_path / "out.json"
         _run_patch(result_out=out)
+        assert bc.last.method == "PATCH"
+        assert bc.last.url.endswith("/companies(c-123)/vendors(vnd-1)")
+        assert bc.last.json_body == {"displayName": "Renamed"}
         env = json.loads(out.read_text())
+        assert env["resolved_url"] == bc.last.url
+        assert env["bc_correlation_id"] == "corr-test"
         assert env["method"] == "PATCH"
         assert env["endpoint"] == "vendors"
         assert env["record_id"] == "vnd-1"
         assert env["status"] == "succeeded"
         assert env["exit_code"] == 0
 
-    def test_patch_envelope_on_failure(self, stub_client, tmp_path: Path):
-        stub_client.patch.side_effect = ValidationError(
+    def test_patch_envelope_on_failure(self, bc, tmp_path: Path):
+        bc.reply(ValidationError(
             "etag mismatch", status_code=412, correlation_id="corr-patch",
-        )
+        ))
         out = tmp_path / "out.json"
         with pytest.raises(typer.Exit):
             _run_patch(result_out=out)
@@ -90,19 +105,24 @@ def _run_delete(**kwargs):
 
 
 class TestDeleteEnvelope:
-    def test_delete_writes_envelope(self, stub_client, tmp_path: Path):
+    def test_delete_writes_envelope(self, bc, tmp_path: Path):
+        bc.default = {}
         out = tmp_path / "out.json"
         _run_delete(result_out=out)
+        assert bc.last.method == "DELETE"
+        assert bc.last.url.endswith("/companies(c-123)/vendors(vnd-1)")
+        assert bc.last.json_body is None
+        assert bc.last.etag == "*"
         env = json.loads(out.read_text())
         assert env["method"] == "DELETE"
         assert env["endpoint"] == "vendors"
         assert env["record_id"] == "vnd-1"
         assert env["status"] == "succeeded"
 
-    def test_delete_envelope_on_failure(self, stub_client, tmp_path: Path):
-        stub_client.delete.side_effect = ValidationError(
+    def test_delete_envelope_on_failure(self, bc, tmp_path: Path):
+        bc.reply(ValidationError(
             "not found", status_code=404, correlation_id="corr-del",
-        )
+        ))
         out = tmp_path / "out.json"
         with pytest.raises(typer.Exit):
             _run_delete(result_out=out)
@@ -195,7 +215,7 @@ def _run_batch(file: Path, **kwargs):
 
 class TestBatchRunEnvelope:
     def test_batch_run_writes_envelope_all_ok(
-        self, stub_client, tmp_path: Path,
+        self, bc, tmp_path: Path,
     ):
         yaml_file = _write_batch_yaml(tmp_path, """
             name: ok
@@ -207,6 +227,9 @@ class TestBatchRunEnvelope:
         """)
         out = tmp_path / "out.json"
         _run_batch(yaml_file, result_out=out)
+        assert [(r.method, r.json_body) for r in bc.sent] == [
+            ("POST", {"displayName": "Acme"}),
+        ]
         env = json.loads(out.read_text())
         assert env["method"] == "BATCH_RUN"
         # Batch envelope identifies the manifest stem, not a single endpoint
@@ -222,11 +245,11 @@ class TestBatchRunEnvelope:
         assert env["resolved_url"] is None
 
     def test_batch_run_envelope_failed_when_any_step_fails(
-        self, stub_client, tmp_path: Path,
+        self, bc, tmp_path: Path,
     ):
-        stub_client.post.side_effect = ValidationError(
+        bc.reply(ValidationError(
             "boom", status_code=400, correlation_id="corr-batch",
-        )
+        ))
         yaml_file = _write_batch_yaml(tmp_path, """
             name: oops
             steps:

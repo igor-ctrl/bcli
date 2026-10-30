@@ -186,9 +186,11 @@ Each entry is one JSON object with the following keys:
 - `dry_run` — the user passed `--dry-run`; no HTTP call fired but the intent
   is recorded.
 
-The SDK (`AsyncBCClient`) does NOT auto-emit. Audit is a CLI-layer ergonomic;
-programmatic SDK users get unfiltered access by design and can wire their own
-logging.
+Entries are emitted by the SDK's write operation (`client.write`), so every
+write path is covered: CLI verbs, `batch run` and rollback, MCP record writes,
+`SafeContext`, and profile-based SDK clients. `caller` says which (`cli`,
+`mcp`, `sdk`). A programmatic client (`AsyncBCClient(tenant_id=...)`) has no
+config file and so no audit log.
 
 ## File Locations
 

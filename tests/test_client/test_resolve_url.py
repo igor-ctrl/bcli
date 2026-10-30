@@ -34,13 +34,13 @@ class TestDisableStandardApiLockdown:
     def test_unknown_entity_blocked_when_standard_disabled(self):
         client = _make_client(disable_standard=True)
         with pytest.raises(RegistryError, match="disable_standard_api"):
-            client._resolve_url("salesInvoices")
+            client.resolve("salesInvoices")
 
     def test_error_message_actionable(self):
         """The error should point the user at concrete next commands."""
         client = _make_client(disable_standard=True)
         with pytest.raises(RegistryError) as excinfo:
-            client._resolve_url("vendors")
+            client.resolve("vendors")
         msg = str(excinfo.value)
         assert "bcli endpoint list" in msg
         assert "bcli registry import" in msg
@@ -49,7 +49,7 @@ class TestDisableStandardApiLockdown:
     def test_explicit_override_still_allowed(self):
         """Explicit publisher/group/version is the documented escape hatch."""
         client = _make_client(disable_standard=True)
-        url = client._resolve_url(
+        url = client.resolve(
             "salesInvoices",
             publisher="acme", group="finance", version="v1.5",
         )
@@ -59,12 +59,12 @@ class TestDisableStandardApiLockdown:
     def test_unknown_entity_routes_to_v20_when_standard_enabled(self):
         """Default profile (standard catalog enabled): legacy fallback still works."""
         client = _make_client(disable_standard=False)
-        url = client._resolve_url("vendors")
+        url = client.resolve("vendors")
         assert "/api/v2.0/" in url
         assert url.endswith("vendors")
 
     def test_known_standard_entity_routes_correctly(self):
         """Standard v2.0 catalog → /api/v2.0/ when not disabled."""
         client = _make_client(disable_standard=False)
-        url = client._resolve_url("customers")
+        url = client.resolve("customers")
         assert "/api/v2.0/" in url

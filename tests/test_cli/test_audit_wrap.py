@@ -212,54 +212,60 @@ class TestAuditedWrite:
         assert entry["resolved_url"] == url
 
 
-class TestCommandLevelAuditing:
-    """The command-side wrappers (_audited_post / _audited_patch /
-    _audited_delete) must thread resolved_url through to the audit entry.
-    A null URL there breaks the documented audit contract."""
+_CMD_DEFAULTS = dict(
+    format=None, publisher=None, group=None, version=None, yes=True,
+    result_out=None, result_fd=None, idempotency_key=None,
+)
 
-    def test_audited_post_records_resolved_url(self, audit_state: Path, monkeypatch):
+
+class TestCommandLevelAuditing:
+    """``bcli post/patch/delete`` audit inside the SDK's ``client.write``:
+    exactly one entry per write, carrying the URL that was actually sent,
+    BC's real status and correlation id, and ``caller="cli"``. A null URL
+    there breaks the documented audit contract."""
+
+    def test_post_writes_one_completed_entry(self, audit_state: Path, fake_bc):
         from bcli_cli.commands import post_cmd
 
-        captured_url = "https://api.example.test/api/v2.0/companies(c-123)/customers"
+        post_cmd.post_command(endpoint="customers", data='{"x": 1}', **_CMD_DEFAULTS)
 
-        async def _fake_execute(endpoint, body, **kwargs):
-            return {"id": "abc"}
+        entries = _read_entries(audit_state)
+        assert len(entries) == 1
+        e = entries[0]
+        assert e["outcome"] == "completed"
+        assert e["status"] == 200
+        assert e["correlation_id"] == "corr-test"
+        assert e["caller"] == "cli"
+        assert e["resolved_url"] == fake_bc.last.url
+        assert e["resolved_url"].endswith("/companies(c-123)/customers")
 
-        class _StubClient:
-            def _resolve_url(self, entity, **_):
-                return captured_url
-
-        monkeypatch.setattr(post_cmd, "_execute_post", _fake_execute)
-        monkeypatch.setattr(state, "make_async_client", lambda **_: _StubClient())
-
-        asyncio.run(post_cmd._audited_post("customers", {"x": 1}))
-
-        entry = _read_entries(audit_state)[0]
-        assert entry["resolved_url"] == captured_url
-        assert entry["outcome"] == "completed"
-
-    def test_audited_delete_records_resolved_url(self, audit_state: Path, monkeypatch):
+    def test_delete_records_resolved_url_and_record_id(self, audit_state: Path, fake_bc):
         from bcli_cli.commands import delete_cmd
 
-        captured_url = (
-            "https://api.example.test/api/v2.0/companies(c-123)/items(rec-1)"
+        delete_cmd.delete_command(
+            endpoint="items", record_id="rec-1", etag="*", **_CMD_DEFAULTS,
         )
 
-        async def _fake_execute(endpoint, record_id, **kwargs):
-            return {}
-
-        class _StubClient:
-            def _resolve_url(self, entity, **_):
-                return captured_url
-
-        monkeypatch.setattr(delete_cmd, "_execute_delete", _fake_execute)
-        monkeypatch.setattr(state, "make_async_client", lambda **_: _StubClient())
-
-        asyncio.run(delete_cmd._audited_delete("items", "rec-1"))
-
         entry = _read_entries(audit_state)[0]
-        assert entry["resolved_url"] == captured_url
+        assert entry["resolved_url"] == fake_bc.last.url
+        assert entry["resolved_url"].endswith("/items(rec-1)")
         assert entry["record_id"] == "rec-1"
+
+    def test_failed_post_records_bc_error_metadata(self, audit_state: Path, fake_bc):
+        import typer
+
+        from bcli_cli.commands import post_cmd
+
+        fake_bc.reply(ValidationError("nope", status_code=400, correlation_id="err-corr"))
+        with pytest.raises(typer.Exit):
+            post_cmd.post_command(endpoint="customers", data='{"x": 1}', **_CMD_DEFAULTS)
+
+        entries = _read_entries(audit_state)
+        assert len(entries) == 1
+        assert entries[0]["outcome"] == "failed"
+        assert entries[0]["status"] == 400
+        assert entries[0]["correlation_id"] == "err-corr"
+        assert entries[0]["resolved_url"] == fake_bc.last.url
 
 
 class TestDryRunAudit:

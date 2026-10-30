@@ -63,7 +63,7 @@ class TestBoundActionURLRecognition:
         """``customers(<key>)/Microsoft.NAV.archive`` — parent is in the
         standard v2.0 registry, so the URL should compose cleanly."""
         client = _make_client(disable_standard=False)
-        url = client._resolve_url("customers(abc-123)/Microsoft.NAV.archive")
+        url = client.resolve("customers(abc-123)/Microsoft.NAV.archive")
         assert url.endswith(
             "/companies(company-1)/customers(abc-123)/Microsoft.NAV.archive"
         ), url
@@ -81,7 +81,7 @@ class TestBoundActionURLRecognition:
                 ),
             ],
         )
-        url = client._resolve_url("widgets(42)/Microsoft.NAV.cancel")
+        url = client.resolve("widgets(42)/Microsoft.NAV.cancel")
         assert "/api/acme/custom/v1.0/" in url
         assert url.endswith("/widgets(42)/Microsoft.NAV.cancel")
 
@@ -89,21 +89,21 @@ class TestBoundActionURLRecognition:
         """The validator must not hardcode ``Microsoft.NAV`` — any
         dotted qualified identifier should pass."""
         client = _make_client()
-        url = client._resolve_url("customers(abc-123)/Custom.Ns.doSomething")
+        url = client.resolve("customers(abc-123)/Custom.Ns.doSomething")
         assert url.endswith("/customers(abc-123)/Custom.Ns.doSomething")
 
     def test_bound_action_with_quoted_key(self):
         """OData v4 string keys are single-quoted; the validator should
         not interpret the quotes — just pass them through."""
         client = _make_client()
-        url = client._resolve_url("customers('ALFKI')/Microsoft.NAV.archive")
+        url = client.resolve("customers('ALFKI')/Microsoft.NAV.archive")
         assert url.endswith("/customers('ALFKI')/Microsoft.NAV.archive")
 
     def test_bound_action_with_composite_key(self):
         """OData v4 supports ``(k1='a',k2='b')`` composite keys — the
         validator should not over-validate the inside of the parens."""
         client = _make_client()
-        url = client._resolve_url(
+        url = client.resolve(
             "items(k1='a',k2='b')/Microsoft.NAV.doStuff"
         )
         assert url.endswith("/items(k1='a',k2='b')/Microsoft.NAV.doStuff")
@@ -113,7 +113,7 @@ class TestBoundActionURLRecognition:
         — the parse should still accept them, since ``Namespace`` is
         explicitly multi-part in the OData v4 spec."""
         client = _make_client()
-        url = client._resolve_url("widgets(7)/A.B.C.doStuff")
+        url = client.resolve("widgets(7)/A.B.C.doStuff")
         assert url.endswith("/widgets(7)/A.B.C.doStuff")
 
 
@@ -128,7 +128,7 @@ class TestRegistryGateOnBoundActions:
         catalogue disabled → reject."""
         client = _make_client(disable_standard=True)
         with pytest.raises(RegistryError) as exc:
-            client._resolve_url("examples(99)/Microsoft.NAV.archive")
+            client.resolve("examples(99)/Microsoft.NAV.archive")
         # The error message should name the *parent* entity, not the
         # whole bound-action string. This is the actionable signal — an
         # operator needs to know which entry to add to the registry.
@@ -154,7 +154,7 @@ class TestRegistryGateOnBoundActions:
                 ),
             ],
         )
-        url = client._resolve_url("widgets(7)/Custom.Ns.archive")
+        url = client.resolve("widgets(7)/Custom.Ns.archive")
         assert url.endswith("/widgets(7)/Custom.Ns.archive")
 
 
@@ -168,7 +168,7 @@ class TestUnboundActionAtServiceRoot:
 
     def test_unbound_action_resolves_via_standard_route(self):
         client = _make_client(disable_standard=False)
-        url = client._resolve_url("Microsoft.NAV.refreshAll")
+        url = client.resolve("Microsoft.NAV.refreshAll")
         assert url.endswith(
             "/companies(company-1)/Microsoft.NAV.refreshAll"
         ), url
@@ -178,7 +178,7 @@ class TestUnboundActionAtServiceRoot:
         """Explicit publisher/group/version routes the unbound action
         under the matching custom API path."""
         client = _make_client(disable_standard=True)
-        url = client._resolve_url(
+        url = client.resolve(
             "Custom.Ns.refreshAll",
             publisher="acme", group="custom", version="v1.0",
         )
@@ -192,7 +192,7 @@ class TestUnboundActionAtServiceRoot:
         v2.0 surface."""
         client = _make_client(disable_standard=True)
         with pytest.raises(RegistryError) as exc:
-            client._resolve_url("Microsoft.NAV.refreshAll")
+            client.resolve("Microsoft.NAV.refreshAll")
         assert "disable_standard_api" in str(exc.value)
         assert "publisher" in str(exc.value).lower()
 
@@ -200,5 +200,5 @@ class TestUnboundActionAtServiceRoot:
         """A non-Microsoft namespace must also route, not be rejected
         for ``not yet supported``."""
         client = _make_client(disable_standard=False)
-        url = client._resolve_url("Custom.Ns.doStuff")
+        url = client.resolve("Custom.Ns.doStuff")
         assert url.endswith("/companies(company-1)/Custom.Ns.doStuff")

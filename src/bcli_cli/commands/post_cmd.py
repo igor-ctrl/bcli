@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import Optional
 
 import typer
-from rich.console import Console
 
 from bcli_cli._data_arg import parse_data_argument
-from bcli_cli._envelope_wrap import capture, validate_flags
+from bcli_cli._envelope_wrap import validate_flags
 from bcli_cli._state import state
+from bcli_cli._write_cmd import run_write
 from bcli_cli.output import format_output, print_context_banner
-
-console = Console(stderr=True)
 
 
 def post_command(
@@ -51,71 +48,10 @@ def post_command(
 
     print_context_banner()
 
-    body = parse_data_argument(data)
-
-    with capture(
-        method="POST",
-        endpoint=endpoint,
-        result_out=result_out,
-        result_fd=result_fd,
-    ) as cap:
-        from bcli_cli._safety import confirm_write_or_exit
-        from bcli_cli._url_resolve import try_resolve_url
-
-        cap.set_resolved_url(try_resolve_url(
-            endpoint,
-            publisher=publisher,
-            group=group,
-            version=version,
-        ))
-
-        # Policy gate runs *inside* the capture block so a refused write
-        # still emits a failed envelope. The ``capture()`` salvage path
-        # turns the ``typer.Exit(1)`` into a status="failed" envelope.
-        # See PR #15 review.
-        confirm_write_or_exit("POST", endpoint, yes=yes)
-
-        if state.dry_run:
-            from bcli_cli._dry_run import render_dry_run
-            cap.mark_dry_run()
-            cap.emit_success()
-            render_dry_run(
-                "POST", endpoint, body=body,
-                publisher=publisher, group=group, version=version,
-            )
-
-        try:
-            result = asyncio.run(_audited_post(
-                endpoint, body,
-                publisher=publisher, group=group, version=version,
-                idempotency_key=idempotency_key,
-            ))
-            cap.extract_record_id_from(result)
-            cap.emit_success()
-            format_output([result] if result else [], output_format)
-        except Exception as e:
-            cap.emit_failure(e)
-            console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(1)
-
-
-async def _audited_post(endpoint, body, **kwargs):
-    from bcli_cli._audit_wrap import audited_write
-    from bcli_cli._url_resolve import try_resolve_url
-    resolved_url = try_resolve_url(
-        endpoint,
-        publisher=kwargs.get("publisher"),
-        group=kwargs.get("group"),
-        version=kwargs.get("version"),
+    result = run_write(
+        "POST", endpoint, body=parse_data_argument(data),
+        publisher=publisher, group=group, version=version,
+        idempotency_key=idempotency_key,
+        yes=yes, result_out=result_out, result_fd=result_fd,
     )
-    return await audited_write(
-        _execute_post(endpoint, body, **kwargs),
-        method="POST", endpoint=endpoint, body=body,
-        resolved_url=resolved_url,
-    )
-
-
-async def _execute_post(endpoint, body, **kwargs):
-    async with state.make_async_client() as client:
-        # ``client.post`` accepts ``idempotency_key``; passthrough.
-        return await client.post(endpoint, body, **kwargs)
+    format_output([result.body] if result.body else [], output_format)

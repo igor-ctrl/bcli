@@ -111,6 +111,7 @@ class CLIState:
             new_profiles = dict(cfg.profiles)
             new_profiles[profile_name] = self.profile
             cfg = cfg.model_copy(update={"profiles": new_profiles})
+        kwargs.setdefault("caller", "cli")
         return AsyncBCClient(profile=profile_name, config=cfg, **kwargs)
 
 

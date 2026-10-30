@@ -130,7 +130,7 @@ class HttpEvent:
 
     ``url`` arrives here already URL-scrubbed (query params replaced
     with ``?key=[REDACTED]``). ``correlation_id`` is the BC
-    ``x-ms-correlation-request-id`` header, useful for cross-checking
+    ``request-id`` header (BC's CorrelationId), useful for cross-checking
     against an Azure Application Insights record.
     """
 

@@ -1,15 +1,15 @@
 """bcli-aware adapter for the generic ETL source.
 
-This is the ONLY module in bcli.etl that may import from bcli.*.
-It translates bcli-specific concepts (profile, registry, token cache) into
-the generic source's abstractions (AuthProvider, EntityDef list).
+Translates bcli-specific concepts (profile, registry, auth provider) into
+the generic source's abstractions (AuthProvider, EntityDef list). The
+generic source itself never sees a profile; its HTTP goes through bcli's
+transport (see ``bcli.etl._client``).
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from bcli.etl._auth import StaticTokenAuth
 from bcli.etl._generic import EntityDef, business_central as _generic_business_central
 from bcli.etl._stamper_factory import build_stampers
 from bcli.etl._stampers import Stamper
@@ -20,13 +20,16 @@ def load_entities_from_bcli_registry(
 ) -> list[EntityDef]:
     """Translate bcli's EndpointRegistry into a list of EntityDef.
 
-    Only entities supporting GET are included.
+    Only entities supporting GET are included. The registry is the profile's
+    own, so ``disable_standard_api`` and the allowed category/endpoint lists
+    apply exactly as they do to ``bcli get``.
     """
-    from bcli.registry._registry import EndpointRegistry
+    from bcli import AsyncBCClient
 
-    registry = EndpointRegistry(profile_name=profile)
-    endpoints = registry.list_all(custom_only=custom_only)
+    return _entities(AsyncBCClient(profile=profile).registry, custom_only)
 
+
+def _entities(registry: Any, custom_only: bool) -> list[EntityDef]:
     return [
         EntityDef(
             name=ep.entity_set_name,
@@ -35,23 +38,9 @@ def load_entities_from_bcli_registry(
             api_group=ep.api_group,
             api_version=ep.api_version,
         )
-        for ep in endpoints
+        for ep in registry.list_all(custom_only=custom_only)
         if "GET" in ep.supports
     ]
-
-
-def _build_token_provider(profile: str):
-    """Return an async callable that yields a fresh bearer token via bcli."""
-
-    async def _token() -> str:
-        from bcli import AsyncBCClient
-
-        async with AsyncBCClient(profile=profile) as client:
-            transport = client._ensure_transport()
-            # bcli's transport handles caching + refresh internally
-            return await transport._auth.get_access_token()
-
-    return _token
 
 
 def bcli_profile(
@@ -87,17 +76,15 @@ def bcli_profile(
     Returns:
         A dlt source ready to pass to ``pipeline.run(...)``.
     """
-    # Resolve environment from the profile
+    from bcli import AsyncBCClient
     from bcli.config import load_config
 
     config = load_config()
-    bc_profile = config.get_profile(profile)
-    environment = bc_profile.environment
+    client = AsyncBCClient(profile=profile, config=config)
+    environment = client.profile.environment
 
     # Translate registry → EntityDef list
-    all_entities = load_entities_from_bcli_registry(
-        profile, custom_only=not include_standard
-    )
+    all_entities = _entities(client.registry, custom_only=not include_standard)
     if entities is not None:
         name_set = set(entities)
         available = {e.name for e in all_entities}
@@ -115,11 +102,10 @@ def bcli_profile(
     if extra_stampers:
         resolved_stampers.extend(extra_stampers)
 
-    # Wrap bcli's auth as an AuthProvider
-    auth = StaticTokenAuth(_build_token_provider(profile))
-
+    # bcli's own provider: one instance, so its token cache and refresh
+    # carry across every page and company.
     return _generic_business_central(
-        auth=auth,
+        auth=client.auth,
         environment=environment,
         entities=all_entities,
         multi_company=multi_company,

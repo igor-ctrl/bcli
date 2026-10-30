@@ -9,8 +9,7 @@ across command paths — that's the alternate-path bypass strix flagged.
 
 These tests assert that:
   * a non-interactive batch with a mutating step on a read-only profile
-    aborts with ``typer.Exit(1)`` and does NOT call any client write
-    methods;
+    aborts with ``typer.Exit(8)`` and sends nothing to BC;
   * the same batch with ``--yes`` proceeds (scripted use);
   * a batch composed exclusively of GET steps is unaffected by the
     disable_writes flag (read-only is fine on read-only profile);
@@ -22,7 +21,6 @@ from __future__ import annotations
 import sys
 import textwrap
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
 
 import pytest
 import typer
@@ -92,19 +90,6 @@ def writable_state():
 
 
 @pytest.fixture
-def fake_client():
-    """Async client whose write methods would be called if the gate failed."""
-    c = AsyncMock()
-    c.__aenter__ = AsyncMock(return_value=c)
-    c.__aexit__ = AsyncMock(return_value=False)
-    c.post = AsyncMock(return_value={"id": "created"})
-    c.patch = AsyncMock(return_value={"id": "patched"})
-    c.delete = AsyncMock(return_value=None)
-    c.get = AsyncMock(return_value=AsyncMock(value=[]))
-    return c
-
-
-@pytest.fixture
 def non_interactive(monkeypatch):
     """Pretend stdin is not a TTY — matches CI/automation."""
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
@@ -128,7 +113,7 @@ def _isolate_ledger_home(tmp_path, monkeypatch):
 
 class TestReadonlyProfileBlocksMutatingSteps:
     def test_post_step_aborts_without_yes(
-        self, readonly_state, non_interactive, fake_client, tmp_path,
+        self, readonly_state, non_interactive, fake_bc, tmp_path,
     ):
         f = _write_yaml(tmp_path, "post.yaml", """
             name: bypass-post
@@ -139,20 +124,16 @@ class TestReadonlyProfileBlocksMutatingSteps:
                 data:
                   displayName: "batch write"
         """)
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            with pytest.raises(typer.Exit) as excinfo:
-                run_batch(
-                    file=f, dry_run=False, output=None, format=None,
-                    set_params=None, params_file=None, yes=False,
-                )
+        with pytest.raises(typer.Exit) as excinfo:
+            run_batch(
+                file=f, dry_run=False, output=None, format=None,
+                set_params=None, params_file=None, yes=False,
+            )
         assert excinfo.value.exit_code == 8  # AIP §Phase 4a: EXIT_POLICY
-        fake_client.post.assert_not_awaited()
+        assert fake_bc.sent == []
 
     def test_patch_step_aborts_without_yes(
-        self, readonly_state, non_interactive, fake_client, tmp_path,
+        self, readonly_state, non_interactive, fake_bc, tmp_path,
     ):
         f = _write_yaml(tmp_path, "patch.yaml", """
             name: bypass-patch
@@ -165,19 +146,15 @@ class TestReadonlyProfileBlocksMutatingSteps:
                 data:
                   displayName: "batch patch"
         """)
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            with pytest.raises(typer.Exit):
-                run_batch(
-                    file=f, dry_run=False, output=None, format=None,
-                    set_params=None, params_file=None, yes=False,
-                )
-        fake_client.patch.assert_not_awaited()
+        with pytest.raises(typer.Exit):
+            run_batch(
+                file=f, dry_run=False, output=None, format=None,
+                set_params=None, params_file=None, yes=False,
+            )
+        assert fake_bc.sent == []
 
     def test_delete_step_aborts_without_yes(
-        self, readonly_state, non_interactive, fake_client, tmp_path,
+        self, readonly_state, non_interactive, fake_bc, tmp_path,
     ):
         f = _write_yaml(tmp_path, "delete.yaml", """
             name: bypass-delete
@@ -188,19 +165,15 @@ class TestReadonlyProfileBlocksMutatingSteps:
                 id: "record-2"
                 etag: "*"
         """)
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            with pytest.raises(typer.Exit):
-                run_batch(
-                    file=f, dry_run=False, output=None, format=None,
-                    set_params=None, params_file=None, yes=False,
-                )
-        fake_client.delete.assert_not_awaited()
+        with pytest.raises(typer.Exit):
+            run_batch(
+                file=f, dry_run=False, output=None, format=None,
+                set_params=None, params_file=None, yes=False,
+            )
+        assert fake_bc.sent == []
 
     def test_mixed_steps_with_one_mutation_aborts(
-        self, readonly_state, non_interactive, fake_client, tmp_path,
+        self, readonly_state, non_interactive, fake_bc, tmp_path,
     ):
         """A single mutating step among many gets caught by the gate."""
         f = _write_yaml(tmp_path, "mixed.yaml", """
@@ -217,19 +190,14 @@ class TestReadonlyProfileBlocksMutatingSteps:
                 data:
                   displayName: "batch write"
         """)
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            with pytest.raises(typer.Exit):
-                run_batch(
-                    file=f, dry_run=False, output=None, format=None,
-                    set_params=None, params_file=None, yes=False,
-                )
-        fake_client.post.assert_not_awaited()
+        with pytest.raises(typer.Exit):
+            run_batch(
+                file=f, dry_run=False, output=None, format=None,
+                set_params=None, params_file=None, yes=False,
+            )
         # No GET happens either — we abort BEFORE any step runs, so the
         # whole batch is refused atomically.
-        fake_client.get.assert_not_awaited()
+        assert fake_bc.sent == []
 
 
 # ── --yes overrides the gate (scripted use) ──────────────────────────────
@@ -237,7 +205,7 @@ class TestReadonlyProfileBlocksMutatingSteps:
 
 class TestReadonlyProfileWithYesProceeds:
     def test_yes_flag_lets_mutating_batch_proceed(
-        self, readonly_state, non_interactive, fake_client, tmp_path,
+        self, readonly_state, non_interactive, fake_bc, tmp_path,
     ):
         f = _write_yaml(tmp_path, "post.yaml", """
             steps:
@@ -247,15 +215,11 @@ class TestReadonlyProfileWithYesProceeds:
                 data:
                   displayName: "batch write"
         """)
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            run_batch(
-                file=f, dry_run=False, output=None, format=None,
-                set_params=None, params_file=None, yes=True,
-            )
-        fake_client.post.assert_awaited_once()
+        run_batch(
+            file=f, dry_run=False, output=None, format=None,
+            set_params=None, params_file=None, yes=True,
+        )
+        assert [s.method for s in fake_bc.sent] == ["POST"]
 
 
 # ── Read-only batches are unaffected ─────────────────────────────────────
@@ -263,7 +227,7 @@ class TestReadonlyProfileWithYesProceeds:
 
 class TestReadOnlyBatchUnaffected:
     def test_get_only_batch_runs_on_readonly_profile(
-        self, readonly_state, non_interactive, fake_client, tmp_path,
+        self, readonly_state, non_interactive, fake_bc, tmp_path,
     ):
         """A GET-only batch must still work on a disable_writes profile —
         otherwise read-only profiles become useless for read-heavy automation.
@@ -277,20 +241,13 @@ class TestReadOnlyBatchUnaffected:
                 action: get
                 endpoint: vendors
         """)
-        # Make get() return a stub ODataResponse-like with .value
-        fake_client.get = AsyncMock(
-            return_value=type("R", (), {"value": [], "raw": None})()
+        fake_bc.default = {"value": []}
+        run_batch(
+            file=f, dry_run=False, output=None, format=None,
+            set_params=None, params_file=None, yes=False,
         )
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            run_batch(
-                file=f, dry_run=False, output=None, format=None,
-                set_params=None, params_file=None, yes=False,
-            )
         # Both GET calls executed, no prompt/abort.
-        assert fake_client.get.await_count == 2
+        assert [s.method for s in fake_bc.sent] == ["GET", "GET"]
 
 
 # ── Writable profile is unaffected ───────────────────────────────────────
@@ -298,7 +255,7 @@ class TestReadOnlyBatchUnaffected:
 
 class TestWritableProfileUnaffected:
     def test_mutating_batch_runs_on_writable_profile(
-        self, writable_state, non_interactive, fake_client, tmp_path,
+        self, writable_state, non_interactive, fake_bc, tmp_path,
     ):
         f = _write_yaml(tmp_path, "post.yaml", """
             steps:
@@ -308,15 +265,11 @@ class TestWritableProfileUnaffected:
                 data:
                   displayName: "ok"
         """)
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            run_batch(
-                file=f, dry_run=False, output=None, format=None,
-                set_params=None, params_file=None, yes=False,
-            )
-        fake_client.post.assert_awaited_once()
+        run_batch(
+            file=f, dry_run=False, output=None, format=None,
+            set_params=None, params_file=None, yes=False,
+        )
+        assert [s.method for s in fake_bc.sent] == ["POST"]
 
 
 # ── Dry-run skips both execution and the gate ────────────────────────────
@@ -324,7 +277,7 @@ class TestWritableProfileUnaffected:
 
 class TestDryRunSkipsGate:
     def test_dry_run_does_not_prompt_or_abort(
-        self, readonly_state, non_interactive, fake_client, tmp_path,
+        self, readonly_state, non_interactive, fake_bc, tmp_path,
     ):
         """``--dry-run`` already short-circuits before any execution,
         so the gate must not trigger either — otherwise read-only users
@@ -338,12 +291,8 @@ class TestDryRunSkipsGate:
                 data:
                   displayName: "preview"
         """)
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            run_batch(
-                file=f, dry_run=True, output=None, format=None,
-                set_params=None, params_file=None, yes=False,
-            )
-        fake_client.post.assert_not_awaited()
+        run_batch(
+            file=f, dry_run=True, output=None, format=None,
+            set_params=None, params_file=None, yes=False,
+        )
+        assert fake_bc.sent == []

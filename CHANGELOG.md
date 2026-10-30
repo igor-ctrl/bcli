@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- One write operation in the SDK: `client.plan(...)` resolves a mutation once
+  (`WritePlan`), `client.write(plan)` sends it and returns a `WriteResult` with
+  the body, HTTP status and BC correlation id. `post` / `patch` / `delete` /
+  `action`, `batch run` steps, batch rollback, `SafeContext`, MCP record writes
+  and plain `client.post(...)` all go through it.
+- Public `client.resolve(...)` (replaces the private `_resolve_url`),
+  `client.pages(entity, query, company_id=...)`, `client.auth`, and
+  `plan` / `write` / `resolve` / `count()` on the sync `BCClient`.
+- Batch steps accept `publisher` / `group` / `version`; batch dry-run shows each
+  write step's resolved URL.
+
+### Changed
+
+- Audit entries are emitted by the SDK. Profile-based SDK clients now audit
+  when `[audit] enabled = true` (previously CLI only); `batch run` writes and
+  rollback deletes are now audited; `caller` is `cli` / `mcp` / `sdk`.
+- `--dry-run` on `post` / `patch` / `delete` / `action` now fails (exit 1) for
+  an endpoint the real run cannot route, instead of previewing a null URL.
+- MCP `bcli_post` / `bcli_patch` / `bcli_delete` run in-process via the SDK and
+  return the envelope plus `body`; other subprocess-backed tools no longer
+  block the server's event loop.
+- The dlt source uses bcli's transport and URL validation, and
+  `bcli_profile` / `load_entities_from_bcli_registry` honour the profile's
+  `disable_standard_api` and allow-lists. An unknown profile now raises
+  `ConfigError` instead of returning no entities.
+- A batch patch/delete step without `id` reports `missing 'id' field`.
+
+### Fixed
+
+- The BC correlation id was read from `x-ms-correlation-request-id`, an Azure
+  Resource Manager header BC never sends, so it was always empty — on errors
+  too. It is now read from BC's `request-id` header, the value BC's own error
+  messages quote as `CorrelationId` (verified against SBEnvQD).
+- Success audit entries, result envelopes and batch ledger rows recorded
+  `status=200, correlation_id=None` regardless of the response; they now carry
+  the real status and BC correlation id.
+- `get --company all` let a registry route override an explicit `--publisher`
+  and read only the first page even with `--all`.
+- `get --all` and saved queries with `all_pages` dropped `--top`, `--skip` and
+  `--count`.
+
 ## [0.8.3] - 2026-10-30
 
 ### Fixed
