@@ -193,6 +193,19 @@ class TestAzureMonitorSink:
         sink.emit(*events.startup(profile="x"))  # over the cap → dropped
         assert len(self._spooled(tmp_path)) == 1
 
+    def test_full_spool_still_starts_the_shipper(self, tmp_path, monkeypatch):
+        # A later command that only hits the cap must still drain the backlog,
+        # or a full spool would never ship again.
+        monkeypatch.setattr(_azure_monitor, "MAX_SPOOL_BYTES", 1)
+        (tmp_path / "outbox-1.jsonl").write_text("{}\n")
+        calls = []
+        monkeypatch.setattr(_azure_monitor.subprocess, "Popen", lambda argv, **kw: calls.append(argv))
+        sink = AzureMonitorSink(connection_string=CS, spool_dir=tmp_path)
+        sink.emit(*events.startup(profile="x"))
+        assert self._spooled(tmp_path) == []  # dropped
+        sink.flush()
+        assert len(calls) == 1
+
     def test_unwritable_spool_never_raises(self, tmp_path):
         blocker = tmp_path / "not-a-dir"
         blocker.write_text("")

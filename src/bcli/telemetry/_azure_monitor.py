@@ -98,7 +98,7 @@ class AzureMonitorSink:
 
             spool_dir = TELEMETRY_DIR
         self._spool_dir = spool_dir
-        self._spooled = False
+        self._pending = False  # events are waiting on disk to be shipped
         self._unavailable = not self._ikey
         if self._unavailable:
             _diag_logger.debug(
@@ -121,23 +121,26 @@ class AzureMonitorSink:
         try:
             self._spool_dir.mkdir(parents=True, exist_ok=True)
             if _spool_bytes(self._spool_dir) >= MAX_SPOOL_BYTES:
+                # Drop this event, but the backlog still needs a shipper —
+                # otherwise a full spool would never drain.
+                self._pending = True
                 return
             line = json.dumps(_envelope(self._ikey, name, properties), default=str)
             # One write() of one line in append mode: concurrent bcli
             # processes don't interleave within a line.
             with open(self._spool_dir / SPOOL_NAME, "a", encoding="utf-8") as f:
                 f.write(line + "\n")
-            self._spooled = True
+            self._pending = True
         except Exception:  # noqa: BLE001
             _diag_logger.debug("Failed to spool telemetry event %s", name, exc_info=True)
 
     def flush(self, timeout: float = 2.0) -> None:  # noqa: ARG002
-        """Start a detached shipper if this process spooled anything.
+        """Start a detached shipper if events are waiting on disk.
 
         Never waits for it: the command has finished, and the shipper owns
         the network round trip from here.
         """
-        if not self._spooled:
+        if not self._pending:
             return
         try:
             kwargs: dict[str, Any] = {
