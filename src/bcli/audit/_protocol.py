@@ -38,7 +38,7 @@ class AuditEntry:
     * ``request_body``       — redacted body that was sent; ``None`` for DELETE.
     * ``status``             — HTTP status code; ``None`` if the call never
                                 fired (dry-run, pre-call failure).
-    * ``correlation_id``     — BC ``x-ms-correlation-request-id`` header; useful
+    * ``correlation_id``     — BC ``request-id`` header (BC's CorrelationId); useful
                                 when grepping BC server-side logs.
     * ``latency_ms``         — round-trip latency; ``None`` if no call fired.
     * ``cli_version``        — bcli version string.

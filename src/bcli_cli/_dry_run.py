@@ -1,9 +1,10 @@
 """Shared ``--dry-run`` renderer for write commands.
 
-One helper, one shape, every write command. Used by ``bcli post``,
-``patch``, ``delete``, ``attach upload``, ``attach test``, and
-``batch run`` so an agent driving any of those gets the same machine-
-readable preview without each command rolling its own format.
+One shape, every write command. ``post`` / ``patch`` / ``delete`` / ``action``
+and ``batch run`` preview a ``WritePlan`` (see ``_write_cmd.render_plan``);
+``attach upload`` / ``attach test`` build theirs with :func:`render_dry_run`.
+Both end in :func:`render_preview`, so an agent driving any of them gets the
+same machine-readable preview.
 
 Output format follows the active CLI ``--format``:
 
@@ -55,7 +56,6 @@ def render_dry_run(
     ``/api/v2.0/`` route, matching what the actual write would hit.
     """
     profile = state.profile
-    profile_name = state.active_profile_name
 
     # strict=True: a preview must not report success for a request the real
     # command would refuse. An unresolvable endpoint still previews with a null
@@ -86,7 +86,6 @@ def render_dry_run(
         "method": method.upper(),
         "endpoint": endpoint,
         "resolved_url": resolved_url,
-        "profile": profile_name,
         "environment": profile.environment,
         "company_id": profile.company_id,
     }
@@ -96,12 +95,6 @@ def render_dry_run(
         payload["body"] = body
     if extra:
         payload.update(extra)
-
-    if state.format in _MACHINE_FORMATS:
-        indent = 2 if state.format == "json" else None
-        print(json.dumps(payload, indent=indent, default=str))
-    else:
-        _render_human(payload)
 
     # Record the dry-run in the audit log when the user has it enabled,
     # so a paper trail captures every "would have done X" intent in
@@ -114,6 +107,26 @@ def render_dry_run(
         record_id=record_id,
         resolved_url=resolved_url,
     )
+
+    render_preview(payload)
+
+
+def render_preview(payload: dict[str, Any]) -> None:
+    """Print a dry-run ``payload`` in the active format and ``typer.Exit(0)``.
+
+    Adds the active profile name; the caller is responsible for auditing.
+    """
+    keys = list(payload)
+    at = keys.index("resolved_url") + 1 if "resolved_url" in keys else len(keys)
+    items = list(payload.items())
+    items.insert(at, ("profile", state.active_profile_name))
+    payload = dict(items)
+
+    if state.format in _MACHINE_FORMATS:
+        indent = 2 if state.format == "json" else None
+        print(json.dumps(payload, indent=indent, default=str))
+    else:
+        _render_human(payload)
 
     raise typer.Exit()
 

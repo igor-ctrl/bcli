@@ -118,7 +118,7 @@ def get_command(
         try:
             records = asyncio.run(
                 _execute_get_all_companies(
-                    endpoint, query, top,
+                    endpoint, query, top, all_pages=all_pages,
                     publisher=publisher, group=group, version=version,
                 )
             )
@@ -173,6 +173,7 @@ async def _execute_get_all_companies(
     query: Query,
     top: int | None,
     *,
+    all_pages: bool = False,
     publisher: str | None = None,
     group: str | None = None,
     version: str | None = None,
@@ -192,39 +193,16 @@ async def _execute_get_all_companies(
             display = alias or company_name or company_id[:8]
             console.print(f"[dim]Querying {endpoint} in {display}...[/dim]")
 
-            # Override the company for this query
-            url = client._resolve_url(
-                endpoint,
-                publisher=publisher,
-                group=group,
-                version=version,
+            records: list[dict] = []
+            pages = client.pages(
+                endpoint, query,
+                publisher=publisher, group=group, version=version,
+                company_id=company_id,
             )
-            # Replace the company_id in the URL
-            from bcli._url import build_url
-            ep = client.registry.get(endpoint)
-            if ep and ep.is_custom:
-                url = build_url(
-                    environment=profile.environment,
-                    company_id=company_id,
-                    entity_set_name=endpoint,
-                    publisher=ep.api_publisher,
-                    group=ep.api_group,
-                    version=ep.api_version,
-                )
-            else:
-                url = build_url(
-                    environment=profile.environment,
-                    company_id=company_id,
-                    entity_set_name=endpoint,
-                    publisher=publisher,
-                    group=group,
-                    version=version,
-                )
-
-            transport = client._ensure_transport()
-            params = query.to_params()
-            data = await transport.get(url, params=params)
-            records = data.get("value", [])
+            async for page in pages:
+                records.extend(page)
+                if not all_pages:
+                    break
 
             # Tag each record with _company
             for record in records:
@@ -398,20 +376,9 @@ async def _execute_get(
     async with state.make_async_client() as client:
         if all_pages:
             all_records: list[dict] = []
-            bound = client.query(endpoint)
-            if publisher and group and version:
-                bound.route(publisher, group, version)
-            if not query.is_empty:
-                for f in query._params.filters:
-                    bound.filter(f)
-                for s in query._params.selects:
-                    bound.select(s)
-                for e in query._params.expands:
-                    bound.expand(e)
-                if query._params.orderby:
-                    bound.orderby(query._params.orderby)
-
-            pages = await bound.pages()
+            pages = client.pages(
+                endpoint, query, publisher=publisher, group=group, version=version,
+            )
             async for page in pages:
                 all_records.extend(page)
             return all_records

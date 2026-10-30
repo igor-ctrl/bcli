@@ -97,33 +97,17 @@ def test_case_insensitive_host_check():
     ) is True
 
 
-# ── ETL module's inline copy stays in sync ───────────────────────────────
+# ── ETL path uses the same check ────────────────────────────────────────
 
 
-def test_etl_inline_check_matches_canonical():
-    """The duplicated check in bcli.etl._client must reject the same URLs.
-
-    The ETL layer keeps an inline copy because ``bcli.etl.*`` deliberately
-    avoids importing from outer ``bcli.*`` modules. Skipped when the
-    optional ``dlt`` extra isn't installed (matches the rest of
-    ``tests/test_etl/``).
+def test_etl_has_no_private_origin_check():
+    """The ETL client used to keep its own copy of the host allowlist; it now
+    pages through ``BCTransport.get_absolute``, which calls ``assert_bc_origin``.
+    The end-to-end refusal of an off-origin nextLink on the ETL path lives in
+    ``tests/test_etl/test_generic.py::test_bcclient_refuses_off_origin_nextlink``.
     """
     pytest.importorskip("dlt")
-    from bcli.etl._client import _assert_bc_origin as etl_assert
+    import bcli.etl._client as etl_client
 
-    # Allowed
-    etl_assert(
-        f"https://api.businesscentral.dynamics.com/v2.0/Production/api/v2.0/companies({_COMPANY_ID})/customers"
-    )
-    etl_assert(f"/v2.0/Production/api/v2.0/companies({_COMPANY_ID})/customers")
-
-    # Rejected
-    for bad in [
-        "https://attacker.example/leak",
-        "https://evilbusinesscentral.dynamics.com.attacker.example/leak",
-        "file:///etc/passwd",
-        # https-only: cleartext to a BC host is still refused.
-        "http://api.businesscentral.dynamics.com/leak",
-    ]:
-        with pytest.raises(ValueError):
-            etl_assert(bad)
+    assert not hasattr(etl_client, "_assert_bc_origin")
+    assert not hasattr(etl_client, "_ALLOWED_HOST_SUFFIXES")

@@ -1,7 +1,9 @@
 """Generic dlt source for Microsoft Business Central.
 
-No bcli coupling. Works with any BC tenant given auth + entity definitions.
-This module must not import from bcli.* (enforced by CI grep).
+No profile or registry coupling. Works with any BC tenant given auth + entity
+definitions; HTTP goes through bcli's transport.
+Only bcli.etl.* imports here; bcli.etl._client is the one door to bcli's transport
+(enforced by tests/test_etl/test_generic.py).
 """
 
 from __future__ import annotations

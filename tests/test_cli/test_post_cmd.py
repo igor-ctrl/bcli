@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 import typer
@@ -50,14 +49,10 @@ def cli_state():
 
 
 @pytest.fixture
-def fake_client(monkeypatch):
-    c = AsyncMock()
-    c.__aenter__ = AsyncMock(return_value=c)
-    c.__aexit__ = AsyncMock(return_value=False)
-    c.post = AsyncMock(return_value={"result": "ok"})
-    c._resolve_url = lambda entity, **kw: f"https://example.test/{entity}"
-    monkeypatch.setattr(state, "make_async_client", lambda **_: c)
-    return c
+def bc(fake_bc):
+    """The real client against the fake transport; BC answers ``{"result": "ok"}``."""
+    fake_bc.default = {"result": "ok"}
+    return fake_bc
 
 
 @pytest.fixture(autouse=True)
@@ -78,28 +73,29 @@ def _run(*, endpoint="vendors", data='{"displayName": "Acme"}', yes=True, **kwar
 
 
 class TestValidData:
-    def test_inline_json_literal_parsed(self, cli_state, fake_client):
+    def test_inline_json_literal_parsed(self, cli_state, bc):
         _run(data='{"a": 1, "b": "two"}')
-        body_arg = fake_client.post.await_args.args[1]
-        assert body_arg == {"a": 1, "b": "two"}
+        assert bc.last.method == "POST"
+        assert bc.last.url.endswith("/companies(c-123)/vendors")
+        assert bc.last.json_body == {"a": 1, "b": "two"}
 
-    def test_data_from_file(self, cli_state, fake_client, tmp_path: Path):
+    def test_data_from_file(self, cli_state, bc, tmp_path: Path):
         f = tmp_path / "payload.json"
         f.write_text('{"loaded": "from-file"}', encoding="utf-8")
         _run(data=f"@{f}")
-        body_arg = fake_client.post.await_args.args[1]
+        body_arg = bc.last.json_body
         assert body_arg == {"loaded": "from-file"}
 
 
 class TestMalformedData:
-    def test_malformed_inline_json_raises_bad_parameter(self, cli_state, fake_client):
+    def test_malformed_inline_json_raises_bad_parameter(self, cli_state, bc):
         with pytest.raises(typer.BadParameter):
             _run(data="{not valid json")
         # Must fail before any network call goes out.
-        fake_client.post.assert_not_called()
+        assert bc.sent == []
 
     def test_bare_file_path_without_at_prefix_hints_the_fix(
-        self, cli_state, fake_client, tmp_path: Path,
+        self, cli_state, bc, tmp_path: Path,
     ):
         f = tmp_path / "payload.json"
         f.write_text('{"x": 1}', encoding="utf-8")
@@ -107,30 +103,35 @@ class TestMalformedData:
             _run(data=str(f))
         assert "looks like a file path" in str(exc_info.value)
         assert f"-d @{f}" in str(exc_info.value)
-        fake_client.post.assert_not_called()
+        assert bc.sent == []
 
-    def test_missing_at_file_keeps_file_not_found(self, cli_state, fake_client):
+    def test_missing_at_file_keeps_file_not_found(self, cli_state, bc):
         with pytest.raises(typer.BadParameter) as exc_info:
             _run(data="@/no/such/file.json")
         assert "File not found" in str(exc_info.value)
-        fake_client.post.assert_not_called()
+        assert bc.sent == []
 
     def test_malformed_at_file_names_the_file(
-        self, cli_state, fake_client, tmp_path: Path,
+        self, cli_state, bc, tmp_path: Path,
     ):
         f = tmp_path / "bad.json"
         f.write_text("{not valid json", encoding="utf-8")
         with pytest.raises(typer.BadParameter) as exc_info:
             _run(data=f"@{f}")
         assert str(f) in str(exc_info.value)
-        fake_client.post.assert_not_called()
+        assert bc.sent == []
 
 
 class TestEnvelope:
-    def test_envelope_written_on_success(self, cli_state, fake_client, tmp_path: Path):
+    def test_envelope_written_on_success(self, cli_state, bc, tmp_path: Path):
         out = tmp_path / "env.json"
         _run(result_out=out)
         env = json.loads(out.read_text())
         assert env["status"] == "succeeded"
         assert env["method"] == "POST"
         assert env["endpoint"] == "vendors"
+
+    def test_envelope_carries_bc_correlation_id(self, cli_state, bc, tmp_path: Path):
+        out = tmp_path / "env.json"
+        _run(result_out=out)
+        assert json.loads(out.read_text())["bc_correlation_id"] == "corr-test"

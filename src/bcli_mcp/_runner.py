@@ -16,8 +16,8 @@ Two entry points:
   back via :func:`bcli.result_envelope.read_envelope`. The envelope is
   the source of truth for outcome; stdout is mostly noise.
 
-We deliberately do NOT import ``bcli`` Python modules here. Subprocess
-delegation is the design — see ``docs/mcp-server.md``.
+Record writes (post / patch / delete) don't come through here — the server
+calls the SDK for those. See ``bcli_mcp._server``.
 """
 
 from __future__ import annotations

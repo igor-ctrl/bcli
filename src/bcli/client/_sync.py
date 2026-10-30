@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from bcli.client._async import AsyncBCClient
+from bcli.client._write import WritePlan, WriteResult
 from bcli.config import BCConfig
 from bcli.odata._query import Query
 from bcli.odata._response import ODataResponse
@@ -81,6 +82,15 @@ class BCClient:
     def delete(self, entity_set_name: str, record_id: str, **kwargs) -> dict[str, Any]:
         return self._run(self._async.delete(entity_set_name, record_id, **kwargs))
 
+    def resolve(self, entity_set_name: str, **kwargs) -> str:
+        return self._async.resolve(entity_set_name, **kwargs)
+
+    def plan(self, method: str, entity_set_name: str, **kwargs) -> WritePlan:
+        return self._async.plan(method, entity_set_name, **kwargs)
+
+    def write(self, plan: WritePlan) -> WriteResult:
+        return self._run(self._async.write(plan))
+
     def upload_attachment(
         self,
         parent_type: str,
@@ -154,6 +164,10 @@ class SyncBoundQuery:
 
     def skip(self, n: int) -> SyncBoundQuery:
         self._query.skip(n)
+        return self
+
+    def count(self, enabled: bool = True) -> SyncBoundQuery:
+        self._query.count(enabled)
         return self
 
     def route(self, publisher: str, group: str, version: str) -> SyncBoundQuery:

@@ -59,7 +59,7 @@ def try_resolve_url(
                 record_id=record_id,
             )
         client = state.make_async_client()
-        return client._resolve_url(
+        return client.resolve(
             endpoint,
             record_id=record_id,
             publisher=publisher,

@@ -55,7 +55,7 @@ def test_make_async_client_applies_company_override(state_with_config):
         assert client.profile.company_name == "LLC Co"
 
         # URL resolution uses the overridden company_id.
-        url = client._resolve_url("customers")
+        url = client.resolve("customers")
         assert "companies(llc-guid)" in url
     finally:
         # No transport was built (lazy), but calling close is still safe.
@@ -68,7 +68,7 @@ def test_make_async_client_no_override_uses_default(state_with_config):
     client = state_with_config.make_async_client()
     try:
         assert client.profile.company_id == "default-guid"
-        url = client._resolve_url("customers")
+        url = client.resolve("customers")
         assert "companies(default-guid)" in url
     finally:
         import asyncio
@@ -82,7 +82,7 @@ def test_make_async_client_env_override(state_with_config):
     client = state_with_config.make_async_client()
     try:
         assert client.profile.environment == "Sandbox"
-        url = client._resolve_url("customers")
+        url = client.resolve("customers")
         assert "/Sandbox/" in url
     finally:
         import asyncio

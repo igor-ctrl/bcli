@@ -6,26 +6,34 @@ and turns each command into one FastMCP tool via
 :func:`bcli_mcp._tool_generator.generate_tools`. New CLI commands light
 up automatically; deprecated ones disappear.
 
-Two invocation paths:
+Three invocation paths:
 
+* **Record writes** (``bcli_post`` / ``bcli_patch`` / ``bcli_delete``) —
+  in-process through the SDK's write operation (``client.plan`` +
+  ``client.write``): the same planning, audit (``caller="mcp"``) and
+  correlation id as the CLI, with typed errors instead of scraped stderr.
 * **Read** (``effects: ["read"]``) — append ``--format json``, parse
   stdout, return the parsed JSON.
-* **Mutating** (``emits_result_envelope: True``) — pass
-  ``--result-out <tmp>``, read the envelope back, return its content
-  as the tool result. A ``status="failed"`` envelope surfaces as an
-  MCP ``ToolError`` with the envelope's correlation id quoted for the
-  agent to cite.
+* **Other mutating** (``emits_result_envelope: True``: attach upload,
+  batch run) — pass ``--result-out <tmp>``, read the envelope back, return
+  its content as the tool result. A ``status="failed"`` envelope surfaces
+  as an MCP ``ToolError`` with the envelope's correlation id quoted for
+  the agent to cite.
+
+Subprocess calls run in a worker thread so one slow command never stalls
+the server's event loop.
 
 If ``bcli describe`` fails on startup (bcli not on PATH, broken install,
 etc.), the server still starts — with zero tools registered and a stderr
 warning. The operator can fix the install and reconnect.
 
-The subprocess boundary inherits auth, retry, telemetry, profile gates
-for free — that's the whole point. No Python imports from ``bcli`` core.
+Every path returns the same envelope shape (``bcli.result_envelope``)
+for writes, so agents parse one format.
 """
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import os
@@ -129,7 +137,7 @@ def _make_read_handler(tool: GeneratedTool):
         inputs = {k: v for k, v in inputs.items() if v is not None}
         profile = inputs.pop("profile", None)
         args = tool.build_argv(inputs)
-        result = run_bcli_json(*args, profile=profile)
+        result = await asyncio.to_thread(run_bcli_json, *args, profile=profile)
         # Single-record dict from ``bcli get <entity> <id>`` is wrapped
         # so the return type stays stable for the agent.
         if tool.name == "bcli_get" and isinstance(result, dict):
@@ -159,7 +167,8 @@ def _make_mutating_handler(tool: GeneratedTool):
         fd, env_path = tempfile.mkstemp(prefix="bcli-mcp-", suffix=".json")
         os.close(fd)
         try:
-            exit_code, _stdout, stderr = run_bcli_with_envelope(
+            exit_code, _stdout, stderr = await asyncio.to_thread(
+                run_bcli_with_envelope,
                 args, env=env, capture_envelope_path=env_path,
             )
             try:
@@ -194,6 +203,89 @@ def _make_mutating_handler(tool: GeneratedTool):
     return handler
 
 
+#: Tools served in-process by the SDK write operation rather than a subprocess.
+_SDK_WRITE_METHODS = {"bcli_post": "POST", "bcli_patch": "PATCH", "bcli_delete": "DELETE"}
+
+
+def _make_sdk_write_handler(tool: GeneratedTool, method: str):
+    """Record write through ``client.plan`` + ``client.write``, in-process.
+
+    Mirrors the CLI's non-interactive rules: a ``disable_writes`` profile is
+    refused unless the agent passes ``yes=true`` (after the user confirmed).
+    Returns a ``ResultEnvelope`` dict plus the response ``body``.
+    """
+    async def handler(**inputs: Any) -> dict[str, Any]:
+        import time
+        import uuid
+        from dataclasses import asdict
+        from datetime import datetime, timezone
+
+        from bcli import AsyncBCClient
+        from bcli._version import __version__
+        from bcli.exit_codes import EXIT_OK
+        from bcli.result_envelope import ENVELOPE_VERSION, ResultEnvelope
+        from bcli_cli._data_arg import parse_data_argument
+        from bcli_cli._envelope_wrap import record_id_from
+
+        inputs = {k: v for k, v in inputs.items() if v is not None}
+        endpoint = inputs.get("endpoint", "")
+        started_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        t0 = time.monotonic()
+        try:
+            client = AsyncBCClient(profile=inputs.get("profile"), caller="mcp")
+            if client.profile.disable_writes and not inputs.get("yes"):
+                raise ToolError(
+                    f"Refusing {method} {endpoint}: profile is read-only "
+                    "(disable_writes = true). Pass yes=true once the user has "
+                    "confirmed this write."
+                )
+            data = inputs.get("data")
+            plan = client.plan(
+                method, endpoint,
+                body=parse_data_argument(data) if data is not None else None,
+                record_id=inputs.get("record_id"),
+                etag=inputs.get("etag", "*"),
+                idempotency_key=inputs.get("idempotency_key"),
+                publisher=inputs.get("publisher"),
+                group=inputs.get("group"),
+                version=inputs.get("version"),
+            )
+            async with client:
+                result = await client.write(plan)
+        except ToolError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — every failure goes back to the agent
+            corr = getattr(exc, "correlation_id", None) or "n/a"
+            raise ToolError(f"{method} {endpoint} failed: {exc} (correlation_id={corr})") from exc
+
+        envelope = ResultEnvelope(
+            version=ENVELOPE_VERSION,
+            invocation_id=uuid.uuid4().hex,
+            tool_version=__version__,
+            profile=client._profile_name,
+            environment=plan.environment,
+            company=plan.company_id,
+            method=method,
+            endpoint=endpoint,
+            resolved_url=plan.url,
+            record_id=record_id_from(result.body) or plan.record_id,
+            dry_run=False,
+            status="succeeded",
+            exit_code=EXIT_OK,
+            bc_correlation_id=result.correlation_id,
+            telemetry_event_id=None,
+            audit_log_offset=None,
+            started_at=started_at,
+            duration_ms=int((time.monotonic() - t0) * 1000),
+        )
+        return {**asdict(envelope), "body": result.body}
+
+    handler.__name__ = tool.name
+    handler.__doc__ = tool.description
+    _apply_dynamic_signature(handler, tool)
+    return handler
+
+
 def _register_tool(mcp: FastMCP, tool: GeneratedTool) -> None:
     """Register one generated tool with FastMCP.
 
@@ -201,7 +293,9 @@ def _register_tool(mcp: FastMCP, tool: GeneratedTool) -> None:
     envelope-reading flow. Profile is always available as an extra
     kwarg the agent can pass to scope the call.
     """
-    if tool.emits_envelope:
+    if tool.name in _SDK_WRITE_METHODS:
+        fn = _make_sdk_write_handler(tool, _SDK_WRITE_METHODS[tool.name])
+    elif tool.emits_envelope:
         fn = _make_mutating_handler(tool)
     else:
         fn = _make_read_handler(tool)

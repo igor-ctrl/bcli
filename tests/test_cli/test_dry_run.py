@@ -23,7 +23,7 @@ from bcli_cli._state import state
 
 
 @pytest.fixture
-def configured_state(monkeypatch):
+def configured_state():
     """Set up a minimal CLIState with one writable profile.
 
     Cleans up afterwards so tests don't bleed into each other.
@@ -43,15 +43,6 @@ def configured_state(monkeypatch):
     state._registry = None
     state.profile_name = None
     state.format = "table"
-
-    # Default: URL resolution returns a deterministic stub. Individual
-    # tests can override by re-monkeypatching make_async_client.
-    class _StubClient:
-        def _resolve_url(self, entity, **_):
-            return f"https://api.example.test/v2.0/companies(c-123)/{entity}"
-
-    monkeypatch.setattr(state, "make_async_client", lambda **_: _StubClient())
-
     yield
     state._config = None
     state._registry = None
@@ -150,7 +141,7 @@ class TestHumanOutput:
             render_dry_run("POST", "items", body={"x": 1})
         captured = capsys.readouterr()
         # URL should appear somewhere in the human output
-        assert "api.example.test" in captured.err
+        assert "api.businesscentral.dynamics.com" in captured.err
 
     def test_human_format_renders_body_on_stdout(self, configured_state, capsys):
         """The body itself is JSON to stdout so users can pipe it; the
@@ -169,10 +160,10 @@ class TestForceStandardResolution:
     about exactly the escape-hatch case the flag exists for."""
 
     def test_force_standard_uses_v2_route(self, configured_state, capsys, monkeypatch):
-        # Stub make_async_client so the client's _resolve_url would lie if
+        # Stub make_async_client so the client's resolve would lie if
         # called. force_standard=True must bypass it entirely.
         class _LyingClient:
-            def _resolve_url(self, *_a, **_kw):
+            def resolve(self, *_a, **_kw):
                 return "https://example.test/CUSTOM/PATH/should-not-be-used"
 
         monkeypatch.setattr(state, "make_async_client", lambda **_: _LyingClient())
@@ -191,20 +182,13 @@ class TestForceStandardResolution:
 
 class TestResolutionFailure:
     def test_failed_url_resolution_does_not_break_dry_run(
-        self, configured_state, capsys, monkeypatch
+        self, configured_state, capsys
     ):
         """If the registry can't resolve the entity (e.g. typo, missing
-        custom registry entry), dry-run still emits — with resolved_url=None
-        — so the user sees what they asked for and can correct."""
-
-        def _failing_client(**_):
-            class _C:
-                def _resolve_url(self, *_a, **_kw):
-                    raise RuntimeError("registry boom")
-
-            return _C()
-
-        monkeypatch.setattr(state, "make_async_client", _failing_client)
+        custom registry entry), ``render_dry_run`` (still used by
+        ``attach upload``) emits — with resolved_url=None — so the user sees
+        what they asked for and can correct."""
+        state.profile.disable_standard_api = True
         state.format = "json"
         with suppress(typer.Exit):
             render_dry_run("POST", "totallyMadeUpEntity", body={"x": 1})
@@ -228,35 +212,14 @@ class TestExitBehaviour:
 
 
 @pytest.fixture
-def real_resolver_state():
-    """Like ``configured_state`` but WITHOUT stubbing ``make_async_client``.
+def real_resolver_state(configured_state):
+    """``configured_state`` under the name these tests were written against.
 
-    ``configured_state``'s ``_StubClient._resolve_url`` ignores ``record_id``
-    entirely and always returns a URL, which is fine for testing the renderer's
-    output shape — but it means the existing dry-run suite never exercises real
-    URL resolution. That is exactly why an empty ``record_id`` could render a
-    clean preview: nothing here ever built a real URL. These tests use the real
-    resolver.
+    The suite once stubbed the resolver, which is why an empty ``record_id``
+    could render a clean preview: nothing built a real URL. Every test here
+    now uses the real resolver.
     """
-    cfg = BCConfig(
-        defaults=BCDefaults(profile="dev"),
-        profiles={
-            "dev": BCProfile(
-                tenant_id="t1",
-                environment="Sandbox",
-                company_id="c-123",
-                disable_writes=False,
-            ),
-        },
-    )
-    state._config = cfg
-    state._registry = None
-    state.profile_name = None
-    state.format = "table"
     yield
-    state._config = None
-    state._registry = None
-    state.format = "table"
 
 
 class TestDryRunMustNotSucceedWhereTheRealRunFails:
@@ -332,3 +295,49 @@ class TestTryResolveUrlStrictMode:
         state.profile.disable_standard_api = True
         state._registry = None
         assert try_resolve_url("definitelyNotAnEndpoint", record_id="x", strict=True) is None
+
+
+def _post_dry_run(endpoint: str, **kwargs) -> None:
+    from bcli_cli.commands import post_cmd
+
+    state.dry_run = True
+    try:
+        post_cmd.post_command(
+            endpoint=endpoint, data='{"x": 1}', format="json", publisher=None,
+            group=None, version=None, yes=True, result_out=None, result_fd=None,
+            idempotency_key=None, **kwargs,
+        )
+    finally:
+        state.dry_run = False
+
+
+class TestWriteCommandDryRun:
+    """``post/patch/delete/action --dry-run`` preview the SDK's write plan."""
+
+    def test_post_previews_the_plan_and_sends_nothing(
+        self, real_resolver_state, fake_bc, capsys,
+    ):
+        with pytest.raises(typer.Exit) as excinfo:
+            _post_dry_run("items")
+        assert excinfo.value.exit_code == 0
+        assert fake_bc.sent == []
+
+        payload = _capture_json_payload(capsys)
+        assert payload["method"] == "POST"
+        assert payload["resolved_url"].endswith("/companies(c-123)/items")
+        assert payload["body"] == {"x": 1}
+        assert "etag" not in payload
+        keys = list(payload)
+        assert keys[keys.index("resolved_url") + 1] == "profile"
+
+    def test_post_to_endpoint_blocked_by_disable_standard_api_fails(
+        self, real_resolver_state, fake_bc, capsys,
+    ):
+        """Previously the preview printed ``resolved_url: null`` and exited 0;
+        the plan now fails exactly where the real run would."""
+        state.profile.disable_standard_api = True
+        with pytest.raises(typer.Exit) as excinfo:
+            _post_dry_run("definitelyNotAnEndpoint")
+        assert excinfo.value.exit_code == 1
+        assert fake_bc.sent == []
+        assert "Error:" in capsys.readouterr().err

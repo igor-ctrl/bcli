@@ -124,16 +124,12 @@ class SafeContext:
                 f"Writes are not allowed for domain '{domain}'."
             )
         safe_body = self._apply_draft_if_needed(body, domain)
-        transport = self._client._ensure_transport()
-        url = self._client._resolve_url_for_target(
-            self._environment,
-            self._company_id,
-            entity_set_name,
-            publisher=publisher,
-            group=group,
-            version=version,
+        plan = self._client.plan(
+            "POST", entity_set_name, body=safe_body,
+            publisher=publisher, group=group, version=version,
+            environment=self._environment, company_id=self._company_id,
         )
-        return await transport.post(url, json_body=safe_body)
+        return (await self._client.write(plan)).body
 
     async def patch(
         self,
@@ -157,17 +153,12 @@ class SafeContext:
             raise SafetyError(
                 f"Writes are not allowed for domain '{domain}'."
             )
-        transport = self._client._ensure_transport()
-        url = self._client._resolve_url_for_target(
-            self._environment,
-            self._company_id,
-            entity_set_name,
-            record_id=record_id,
-            publisher=publisher,
-            group=group,
-            version=version,
+        plan = self._client.plan(
+            "PATCH", entity_set_name, body=body, record_id=record_id, etag=etag,
+            publisher=publisher, group=group, version=version,
+            environment=self._environment, company_id=self._company_id,
         )
-        return await transport.patch(url, json_body=body, etag=etag)
+        return (await self._client.write(plan)).body
 
     async def delete(
         self,
@@ -190,17 +181,12 @@ class SafeContext:
             raise SafetyError(
                 f"Writes are not allowed for domain '{domain}'."
             )
-        transport = self._client._ensure_transport()
-        url = self._client._resolve_url_for_target(
-            self._environment,
-            self._company_id,
-            entity_set_name,
-            record_id=record_id,
-            publisher=publisher,
-            group=group,
-            version=version,
+        plan = self._client.plan(
+            "DELETE", entity_set_name, record_id=record_id, etag=etag,
+            publisher=publisher, group=group, version=version,
+            environment=self._environment, company_id=self._company_id,
         )
-        return await transport.delete(url, etag=etag)
+        return (await self._client.write(plan)).body
 
     @property
     def environment(self) -> str:

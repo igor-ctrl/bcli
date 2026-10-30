@@ -66,6 +66,17 @@ class TestParseBCError:
         assert msg == "Bad filter syntax"
         assert cid == "abc-123"
 
+    def test_bc_request_id_is_the_correlation_id(self):
+        # What BC actually sends (seen on SBEnvQD): no x-ms-correlation-request-id;
+        # the error message's "CorrelationId: …" equals the request-id header.
+        resp = _make_response(
+            404,
+            json_body={"error": {"message": "Not found.  CorrelationId:  feb0b37c."}},
+            headers={"request-id": "feb0b37c", "ms-correlation-x": "8931dbed"},
+        )
+        _, cid = _parse_bc_error(resp)
+        assert cid == "feb0b37c"
+
     def test_empty_body(self):
         resp = _make_response(500, content=b"")
         msg, cid = _parse_bc_error(resp)

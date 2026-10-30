@@ -6,12 +6,14 @@ The server now:
 2. Builds the tool list from the describe output via
    ``_tool_generator.generate_tools``.
 3. Registers each generated tool with FastMCP. Read tools shell out via
-   ``run_bcli_json`` and return parsed stdout. Mutating tools pass
-   ``--result-out <tmpfile>``, subprocess the CLI, and return the
-   envelope content as the tool result.
+   ``run_bcli_json`` and return parsed stdout. Record writes
+   (``bcli_post`` / ``bcli_patch`` / ``bcli_delete``) run in-process
+   through the SDK write operation. Other mutating tools (attach upload,
+   batch run) pass ``--result-out <tmpfile>``, subprocess the CLI, and
+   return the envelope content as the tool result.
 
-These tests mock the describe subprocess + the bcli subprocesses so no
-real bcli is invoked.
+These tests mock the describe subprocess + the bcli subprocesses, and
+drive in-process writes against ``fake_bc``, so no real bcli or BC is hit.
 """
 
 from __future__ import annotations
@@ -65,6 +67,20 @@ _DESCRIBE_FIXTURE = {
             "emits_result_envelope": True,
         },
         {
+            "path": ["attach", "upload"],
+            "summary": "Attach a file to an existing record.",
+            "options": [
+                {"name": "--file", "type": "str"},
+                {"name": "--yes", "type": "bool"},
+            ],
+            "positionals": [
+                {"name": "endpoint", "type": "str", "required": True},
+            ],
+            "effects": ["mutating"],
+            "supported_formats": ["json"],
+            "emits_result_envelope": True,
+        },
+        {
             "path": ["company", "list"],
             "summary": "List companies on the active environment.",
             "options": [],
@@ -78,6 +94,36 @@ _DESCRIBE_FIXTURE = {
         "disable_writes": False, "disable_standard_api": False, "allowed_categories": None,
     },
 }
+
+
+@pytest.fixture
+def mcp_config(tmp_path, monkeypatch):
+    """A hermetic config: ``dev`` (Sandbox), ``prod`` (Production) and a
+    read-only ``locked`` profile. Never the developer's real config."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        '[defaults]\nprofile = "dev"\n\n'
+        '[profiles.dev]\ntenant_id = "t1"\nenvironment = "Sandbox"\ncompany_id = "c-dev"\n\n'
+        '[profiles.prod]\ntenant_id = "t1"\nenvironment = "Production"\ncompany_id = "c-prod"\n\n'
+        '[profiles.locked]\ntenant_id = "t1"\nenvironment = "Sandbox"\ncompany_id = "c-dev"\n'
+        "disable_writes = true\n"
+    )
+    monkeypatch.setattr("bcli.config._loader.CONFIG_FILE", config_file)
+    monkeypatch.setattr("bcli.config._loader._find_project_config", lambda: None)
+    import bcli.registry._registry as registry_mod
+
+    monkeypatch.setattr(registry_mod, "REGISTRIES_DIR", tmp_path / "registries")
+
+
+@pytest.fixture
+def no_subprocess(monkeypatch):
+    """In-process writes must never shell out."""
+    def boom(*a, **kw):
+        raise AssertionError("record write shelled out to bcli")
+
+    monkeypatch.setattr("subprocess.run", boom)
+    monkeypatch.setattr("bcli_mcp._server.run_bcli_with_envelope", boom)
+    monkeypatch.setattr("bcli_mcp._server.run_bcli_json", boom)
 
 
 @pytest.fixture
@@ -95,7 +141,7 @@ class TestToolListMirrorsDescribe:
     def test_one_tool_per_command_in_describe(self, fresh_server):
         """Every command entry → one MCP tool. No extras, no missing."""
         registered = set(fresh_server._tool_manager._tools.keys())
-        assert registered == {"bcli_get", "bcli_post", "bcli_company_list"}
+        assert registered == {"bcli_get", "bcli_post", "bcli_attach_upload", "bcli_company_list"}
 
     def test_other_effects_excluded(self):
         """``effects: ["other"]`` (e.g. ``auth login``, ``config init``)
@@ -150,7 +196,92 @@ class TestReadToolInvocation:
         assert run.call_args.kwargs["profile"] == "prod"
 
 
-# ── Tool invocation: mutating path ────────────────────────────────────
+# ── Tool invocation: record writes (in-process SDK) ───────────────────
+
+
+class TestSdkWriteInvocation:
+    @pytest.mark.asyncio
+    async def test_post_runs_in_process_and_returns_correlation_id(
+        self, fresh_server, mcp_config, fake_bc, no_subprocess,
+    ):
+        fake_bc.reply({"id": "vnd-9", "number": "V1"})
+        fake_bc.status = 201
+        fake_bc.correlation_id = "corr-abc"
+
+        tool = fresh_server._tool_manager._tools["bcli_post"]
+        result = await tool.fn(endpoint="vendors", data='{"x":1}', yes=True)
+
+        assert [(s.method, s.json_body) for s in fake_bc.sent] == [("POST", {"x": 1})]
+        assert result["bc_correlation_id"] == "corr-abc"
+        assert result["status"] == "succeeded"
+        assert result["exit_code"] == 0
+        assert result["method"] == "POST"
+        assert result["endpoint"] == "vendors"
+        assert result["resolved_url"] == fake_bc.last.url
+        assert result["record_id"] == "vnd-9"
+        assert result["profile"] == "dev"
+        assert result["environment"] == "Sandbox"
+        assert result["company"] == "c-dev"
+        assert result["body"] == {"id": "vnd-9", "number": "V1"}
+
+    @pytest.mark.asyncio
+    async def test_failed_write_raises_toolerror_with_correlation_id(
+        self, fresh_server, mcp_config, fake_bc, no_subprocess,
+    ):
+        """A BC error surfaces as an MCP ``ToolError`` quoting the
+        correlation id so the agent can cite it in a support ticket."""
+        from mcp.server.fastmcp.exceptions import ToolError
+
+        from bcli.errors import ValidationError
+
+        fake_bc.reply(ValidationError("bad field", status_code=400, correlation_id="corr-xyz"))
+        tool = fresh_server._tool_manager._tools["bcli_post"]
+        with pytest.raises(ToolError) as excinfo:
+            await tool.fn(endpoint="vendors", data='{"x":1}', yes=True)
+        assert "corr-xyz" in str(excinfo.value)
+
+    @pytest.mark.asyncio
+    async def test_profile_selects_write_target(
+        self, fresh_server, mcp_config, fake_bc, no_subprocess,
+    ):
+        tool = fresh_server._tool_manager._tools["bcli_post"]
+        result = await tool.fn(endpoint="vendors", data="{}", yes=True, profile="prod")
+        assert "/Production/" in fake_bc.last.url
+        assert "c-prod" in fake_bc.last.url
+        assert result["profile"] == "prod"
+        assert result["environment"] == "Production"
+
+    @pytest.mark.asyncio
+    async def test_disable_writes_profile_requires_yes(
+        self, fresh_server, mcp_config, fake_bc, no_subprocess,
+    ):
+        from mcp.server.fastmcp.exceptions import ToolError
+
+        tool = fresh_server._tool_manager._tools["bcli_post"]
+        with pytest.raises(ToolError, match="disable_writes"):
+            await tool.fn(endpoint="vendors", data="{}", profile="locked")
+        assert fake_bc.sent == []
+
+        await tool.fn(endpoint="vendors", data="{}", profile="locked", yes=True)
+        assert [s.method for s in fake_bc.sent] == ["POST"]
+
+
+# ── Tool invocation: other mutating tools (subprocess + envelope) ─────
+
+
+def _envelope(**overrides):
+    env = {
+        "version": "0.1", "invocation_id": "inv-1", "tool_version": "0.4.0",
+        "profile": "dev", "environment": "Sandbox", "company": "c-1",
+        "method": "UPLOAD", "endpoint": "salesInvoices",
+        "resolved_url": "https://x/salesInvoices", "record_id": "si-9",
+        "dry_run": False, "status": "succeeded", "exit_code": 0,
+        "bc_correlation_id": None, "telemetry_event_id": None,
+        "audit_log_offset": None, "started_at": "2026-05-17T00:00:00Z",
+        "duration_ms": 42,
+    }
+    env.update(overrides)
+    return env
 
 
 class TestMutatingToolInvocation:
@@ -160,25 +291,16 @@ class TestMutatingToolInvocation:
     ):
         """The server must pass ``--result-out <tmp>`` and return the
         envelope content. Stdout is dropped (envelope has everything)."""
-        envelope = {
-            "version": "0.1", "invocation_id": "inv-1", "tool_version": "0.4.0",
-            "profile": "dev", "environment": "Sandbox", "company": "c-1",
-            "method": "POST", "endpoint": "vendors",
-            "resolved_url": "https://x/vendors", "record_id": "vnd-9",
-            "dry_run": False, "status": "succeeded", "exit_code": 0,
-            "bc_correlation_id": None, "telemetry_event_id": None,
-            "audit_log_offset": None, "started_at": "2026-05-17T00:00:00Z",
-            "duration_ms": 42,
-        }
+        envelope = _envelope()
 
         def _fake_run(argv, env, capture_envelope_path):
             # Write the envelope where the runner expects it.
             Path(capture_envelope_path).write_text(json.dumps(envelope))
             return 0, "", ""
 
-        tool = fresh_server._tool_manager._tools["bcli_post"]
+        tool = fresh_server._tool_manager._tools["bcli_attach_upload"]
         with patch("bcli_mcp._server.run_bcli_with_envelope", side_effect=_fake_run):
-            result = await tool.fn(endpoint="vendors", data='{"x":1}', yes=True)
+            result = await tool.fn(endpoint="salesInvoices", file="a.pdf", yes=True)
         assert result == envelope
 
     @pytest.mark.asyncio
@@ -188,24 +310,19 @@ class TestMutatingToolInvocation:
         ``exit_code``, ``bc_correlation_id``, etc."""
         from mcp.server.fastmcp.exceptions import ToolError
 
-        failed = {
-            "version": "0.1", "invocation_id": "inv-2", "tool_version": "0.4.0",
-            "profile": "dev", "environment": "Sandbox", "company": "c-1",
-            "method": "POST", "endpoint": "vendors", "resolved_url": None,
-            "record_id": None, "dry_run": False, "status": "failed",
-            "exit_code": 6, "bc_correlation_id": "corr-xyz",
-            "telemetry_event_id": None, "audit_log_offset": None,
-            "started_at": "2026-05-17T00:00:00Z", "duration_ms": 11,
-        }
+        failed = _envelope(
+            invocation_id="inv-2", resolved_url=None, record_id=None,
+            status="failed", exit_code=6, bc_correlation_id="corr-xyz",
+        )
 
         def _fake_run(argv, env, capture_envelope_path):
             Path(capture_envelope_path).write_text(json.dumps(failed))
             return 6, "", ""
 
-        tool = fresh_server._tool_manager._tools["bcli_post"]
+        tool = fresh_server._tool_manager._tools["bcli_attach_upload"]
         with patch("bcli_mcp._server.run_bcli_with_envelope", side_effect=_fake_run):
             with pytest.raises(ToolError) as excinfo:
-                await tool.fn(endpoint="vendors", data='{"x":1}', yes=True)
+                await tool.fn(endpoint="salesInvoices", file="a.pdf", yes=True)
         # The exception message includes the correlation id so the agent
         # can quote it back when raising a support ticket.
         assert "corr-xyz" in str(excinfo.value)
@@ -221,61 +338,43 @@ class TestMutatingToolInvocation:
         The runner-side contract is exercised in ``test_runner.py``;
         here we just pin the server side: it shouldn't be re-adding
         either flag itself."""
-        envelope = {
-            "version": "0.1", "invocation_id": "x", "tool_version": "0.4.0",
-            "profile": "dev", "environment": "Sandbox", "company": "c-1",
-            "method": "POST", "endpoint": "vendors", "resolved_url": None,
-            "record_id": None, "dry_run": False, "status": "succeeded",
-            "exit_code": 0, "bc_correlation_id": None,
-            "telemetry_event_id": None, "audit_log_offset": None,
-            "started_at": "x", "duration_ms": 0,
-        }
         captured_argv = {}
 
         def _fake_run(argv, env, capture_envelope_path):
             captured_argv["v"] = argv
-            Path(capture_envelope_path).write_text(json.dumps(envelope))
+            Path(capture_envelope_path).write_text(json.dumps(_envelope()))
             return 0, "", ""
 
-        tool = fresh_server._tool_manager._tools["bcli_post"]
+        tool = fresh_server._tool_manager._tools["bcli_attach_upload"]
         with patch("bcli_mcp._server.run_bcli_with_envelope", side_effect=_fake_run):
-            await tool.fn(endpoint="vendors", data="{}", yes=True)
+            await tool.fn(endpoint="salesInvoices", file="a.pdf", yes=True)
         argv = captured_argv["v"]
         # Positional first, options after.
-        assert argv[:2] == ["post", "vendors"]
-        assert "--data" in argv
-        assert argv[argv.index("--data") + 1] == "{}"
+        assert argv[:3] == ["attach", "upload", "salesInvoices"]
+        assert "--file" in argv
+        assert argv[argv.index("--file") + 1] == "a.pdf"
         # The server passes a clean argv — runner adds --result-out / --format.
         assert "--result-out" not in argv
         assert "--format" not in argv
 
 
-# ── Profile passthrough on mutating tools ─────────────────────────────
+# ── Profile passthrough on subprocess mutating tools ──────────────────
 
 
 class TestMutatingProfilePassthrough:
     @pytest.mark.asyncio
     async def test_profile_propagates_to_subprocess(self, fresh_server, tmp_path):
-        envelope = {
-            "version": "0.1", "invocation_id": "x", "tool_version": "0.4.0",
-            "profile": "prod", "environment": "Production", "company": "c-1",
-            "method": "POST", "endpoint": "v", "resolved_url": None,
-            "record_id": None, "dry_run": False, "status": "succeeded",
-            "exit_code": 0, "bc_correlation_id": None,
-            "telemetry_event_id": None, "audit_log_offset": None,
-            "started_at": "x", "duration_ms": 0,
-        }
         captured = {}
 
         def _fake_run(argv, env, capture_envelope_path):
             captured["argv"] = argv
             captured["env"] = env
-            Path(capture_envelope_path).write_text(json.dumps(envelope))
+            Path(capture_envelope_path).write_text(json.dumps(_envelope(profile="prod")))
             return 0, "", ""
 
-        tool = fresh_server._tool_manager._tools["bcli_post"]
+        tool = fresh_server._tool_manager._tools["bcli_attach_upload"]
         with patch("bcli_mcp._server.run_bcli_with_envelope", side_effect=_fake_run):
-            await tool.fn(endpoint="v", data="{}", yes=True, profile="prod")
+            await tool.fn(endpoint="v", file="a.pdf", yes=True, profile="prod")
         assert "--profile" in captured["argv"]
         assert captured["argv"][captured["argv"].index("--profile") + 1] == "prod"
         assert captured["env"]["BCLI_PROFILE"] == "prod"

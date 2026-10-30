@@ -1,11 +1,11 @@
-"""Tests for the generic ETL layer — no bcli coupling."""
+"""Tests for the generic ETL layer — no profile/registry coupling."""
 
 from __future__ import annotations
 
-import json
 import sys
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 pytest.importorskip("dlt")
@@ -80,51 +80,95 @@ class TestStaticTokenAuth:
 # ─── BCClient ────────────────────────────────────────────────────────
 
 
+_BASE = (
+    "https://api.businesscentral.dynamics.com/v2.0/Sandbox/api/v2.0/"
+    "companies(00000000-0000-0000-0000-000000000000)/customers"
+)
+
+
+def _serve(client: BCClient, *responses: httpx.Response) -> list[httpx.Request]:
+    """Answer the client's requests from ``responses`` in order; return what was sent."""
+    seen: list[httpx.Request] = []
+    queue = list(responses)
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return queue.pop(0)
+
+    client._t()._client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
+    return seen
+
+
 @pytest.mark.asyncio
 async def test_bcclient_get_injects_bearer():
     auth = StaticTokenAuth(lambda: _async_val("tok-1"))
 
     async with BCClient(auth=auth, environment="Sandbox") as client:
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-        mock_response.content = b'{"value": []}'
-        mock_response.json = lambda: {"value": []}
-        with patch.object(client._http, "request", return_value=mock_response) as mock_req:
-            await client.get("https://api.businesscentral.dynamics.com/v2.0/Sandbox/api/v2.0/companies(00000000-0000-0000-0000-000000000000)/customers")
-        call = mock_req.await_args
-        assert call.kwargs["headers"]["Authorization"] == "Bearer tok-1"
+        seen = _serve(client, httpx.Response(200, json={"value": []}))
+        await client.get(_BASE)
+    assert seen[0].headers["Authorization"] == "Bearer tok-1"
+
+
+@pytest.mark.asyncio
+async def test_bcclient_accepts_bcli_auth_provider():
+    """A bcli provider (``get_access_token``) is used as-is, no adapter."""
+    auth = AsyncMock()
+    auth.get_access_token = AsyncMock(return_value="tok-bcli")
+
+    async with BCClient(auth=auth, environment="Sandbox") as client:
+        seen = _serve(client, httpx.Response(200, json={"value": []}))
+        await client.get(_BASE)
+    assert seen[0].headers["Authorization"] == "Bearer tok-bcli"
 
 
 @pytest.mark.asyncio
 async def test_bcclient_404_raises_not_found():
     auth = StaticTokenAuth(lambda: _async_val("tok"))
     async with BCClient(auth=auth, environment="Sandbox") as client:
-        mock_response = AsyncMock()
-        mock_response.status_code = 404
-        mock_response.content = b""
-        with patch.object(client._http, "request", return_value=mock_response):
-            with pytest.raises(NotFoundError):
-                await client.get("https://api.businesscentral.dynamics.com/v2.0/Sandbox/api/v2.0/companies(00000000-0000-0000-0000-000000000000)/customers")
+        _serve(client, httpx.Response(404, json={"error": {"code": "NotFound", "message": "x"}}))
+        with pytest.raises(NotFoundError):
+            await client.get(_BASE)
 
 
 @pytest.mark.asyncio
 async def test_bcclient_paginates_nextlink():
     auth = StaticTokenAuth(lambda: _async_val("tok"))
     async with BCClient(auth=auth, environment="Sandbox") as client:
-        base = (
-            "https://api.businesscentral.dynamics.com/v2.0/Sandbox/api/v2.0/"
-            "companies(00000000-0000-0000-0000-000000000000)/customers"
+        seen = _serve(
+            client,
+            httpx.Response(200, json={
+                "value": [{"id": "1"}, {"id": "2"}],
+                "@odata.nextLink": f"{_BASE}?$skiptoken=p2",
+            }),
+            httpx.Response(200, json={"value": [{"id": "3"}]}),
         )
-        page1 = _mock_ok_response({
-            "value": [{"id": "1"}, {"id": "2"}],
-            "@odata.nextLink": f"{base}?$skiptoken=p2",
-        })
-        page2 = _mock_ok_response({"value": [{"id": "3"}]})
-        with patch.object(client._http, "request", side_effect=[page1, page2]):
-            results = [page async for page in client.paginate(f"{base}?$skiptoken=p1")]
-        assert len(results) == 2
-        assert results[0] == [{"id": "1"}, {"id": "2"}]
-        assert results[1] == [{"id": "3"}]
+        results = [page async for page in client.paginate(_BASE, params={"$top": "2"})]
+    assert results == [[{"id": "1"}, {"id": "2"}], [{"id": "3"}]]
+    assert seen[0].url.params["$top"] == "2"
+    assert seen[1].url.params["$skiptoken"] == "p2"
+
+
+@pytest.mark.asyncio
+async def test_bcclient_refuses_off_origin_nextlink():
+    """An off-origin ``@odata.nextLink`` never receives the bearer token."""
+    auth = StaticTokenAuth(lambda: _async_val("tok"))
+    async with BCClient(auth=auth, environment="Sandbox") as client:
+        seen = _serve(client, httpx.Response(200, json={
+            "value": [{"id": "1"}],
+            "@odata.nextLink": "https://attacker.example/leak",
+        }))
+        with pytest.raises(ValueError, match="off-origin"):
+            [page async for page in client.paginate(_BASE)]
+    assert [str(r.url.host) for r in seen] == ["api.businesscentral.dynamics.com"]
+
+
+def test_build_entity_url_rejects_bad_segment():
+    with pytest.raises(ValueError):
+        build_entity_url(
+            environment="Sandbox",
+            company_id="00000000-0000-0000-0000-000000000000",
+            entity_set_name="customers/../../evil",
+        )
 
 
 # ─── business_central source ─────────────────────────────────────────
@@ -165,11 +209,13 @@ class TestBusinessCentralSource:
 
 
 class TestGenericHasNoBcliCoupling:
-    """The generic layer must be importable with only bcli.etl modules loaded.
+    """The generic layer never sees a profile, registry, config or bcli auth.
 
-    If any of _generic.py, _client.py, _auth.py, _stampers.py,
-    _stamper_factory.py imports from bcli.registry, bcli.client,
-    bcli.config, or bcli.auth, this test fails.
+    ``_client.py`` runs on bcli's transport, so it alone may import the
+    transport-level modules (``bcli._url``, ``bcli.client._transport``,
+    ``bcli.errors``, ``bcli.odata``). Nothing in the generic layer may import
+    ``bcli.registry``, ``bcli.config`` or ``bcli.auth``, nor the client
+    package beyond its transport.
     """
 
     def test_generic_does_not_import_bcli_sdk(self):
@@ -180,21 +226,20 @@ class TestGenericHasNoBcliCoupling:
         etl_dir = pathlib.Path(
             sys.modules["bcli.etl"].__file__  # type: ignore[arg-type]
         ).parent
-        forbidden_prefixes = ("bcli.registry", "bcli.client", "bcli.config", "bcli.auth", "bcli.errors")
+        transport_only = ("bcli._url", "bcli.client._transport", "bcli.errors", "bcli.odata")
 
         for module_name in ("_generic.py", "_client.py", "_auth.py", "_stampers.py", "_stamper_factory.py"):
-            path = etl_dir / module_name
-            tree = ast.parse(path.read_text())
+            allowed = ("bcli.etl",) + (transport_only if module_name == "_client.py" else ())
+            tree = ast.parse((etl_dir / module_name).read_text())
             for node in ast.walk(tree):
+                names = []
                 if isinstance(node, ast.ImportFrom) and node.module:
-                    assert not node.module.startswith(forbidden_prefixes), (
-                        f"{module_name} imports forbidden {node.module}"
-                    )
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        assert not alias.name.startswith(forbidden_prefixes), (
-                            f"{module_name} imports forbidden {alias.name}"
-                        )
+                    names = [node.module]
+                elif isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                for name in names:
+                    if name == "bcli" or name.startswith("bcli."):
+                        assert name.startswith(allowed), f"{module_name} imports forbidden {name}"
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────
@@ -202,12 +247,3 @@ class TestGenericHasNoBcliCoupling:
 
 async def _async_val(v):
     return v
-
-
-def _mock_ok_response(body: dict):
-    from unittest.mock import AsyncMock
-    m = AsyncMock()
-    m.status_code = 200
-    m.content = json.dumps(body).encode()
-    m.json = lambda: body
-    return m

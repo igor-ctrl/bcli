@@ -113,7 +113,7 @@ def fake_client():
     c.upload_attachment = AsyncMock(
         return_value={"id": "att-9", "fileName": "x.pdf", "byteSize": 12}
     )
-    c._resolve_url = lambda entity, **kw: f"https://example.test/{entity}"
+    c.resolve = lambda entity, **kw: f"https://example.test/{entity}"
     return c
 
 

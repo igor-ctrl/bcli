@@ -2,8 +2,8 @@
 outcome row after, surviving SIGKILL in the gap.
 
 These are integration tests against ``run_batch`` — they patch HOME so the
-ledger lands in tmp_path, patch ``make_async_client`` to inject a fake
-async client, and assert on the resulting SQLite file.
+ledger lands in tmp_path, drive the real client against the ``fake_bc``
+transport, and assert on what was sent and on the resulting SQLite file.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from __future__ import annotations
 import sqlite3
 import textwrap
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -59,28 +58,25 @@ def ledger_home(tmp_path, monkeypatch):
     yield ledger_dir
 
 
-@pytest.fixture
-def fake_client():
-    c = AsyncMock()
-    c.__aenter__ = AsyncMock(return_value=c)
-    c.__aexit__ = AsyncMock(return_value=False)
-    c.post = AsyncMock(return_value={"id": "rec-1", "@odata.context": "x"})
-    c.patch = AsyncMock(return_value={"id": "rec-1"})
-    c.delete = AsyncMock(return_value=None)
-    c.get = AsyncMock(
-        return_value=type("R", (), {"value": [], "raw": None})()
-    )
-    # Used so the ledger can compose a rollback URL for POSTs.
-    c._resolve_url = lambda entity, record_id=None, **_: (
-        f"https://x/{entity}({record_id})" if record_id else f"https://x/{entity}"
-    )
-    return c
-
-
 def _write_yaml(tmp_path: Path, name: str, content: str) -> Path:
     f = tmp_path / name
     f.write_text(textwrap.dedent(content).strip(), encoding="utf-8")
     return f
+
+
+def _run(f: Path) -> None:
+    run_batch(
+        file=f, dry_run=False, output=None, format=None,
+        set_params=None, params_file=None, yes=True,
+    )
+
+
+def _steps(ledger_home: Path) -> list[dict]:
+    db_files = list(ledger_home.glob("*.db"))
+    assert len(db_files) == 1
+    with sqlite3.connect(db_files[0]) as conn:
+        conn.row_factory = sqlite3.Row
+        return [dict(r) for r in conn.execute("SELECT * FROM step ORDER BY seq")]
 
 
 # ─── Intent before HTTP ──────────────────────────────────────────────
@@ -88,15 +84,15 @@ def _write_yaml(tmp_path: Path, name: str, content: str) -> Path:
 
 class TestIntentBeforeHttp:
     def test_intent_written_before_post(
-        self, writable_state, ledger_home, fake_client, tmp_path,
+        self, writable_state, ledger_home, fake_bc, tmp_path, monkeypatch,
     ):
-        """When the fake client's POST is invoked, an intent row must
-        already exist in the ledger DB. The test enforces ordering via a
-        side_effect that reads the DB at the moment of the call.
+        """When the POST reaches the transport, an intent row must
+        already exist in the ledger DB. The test enforces ordering by
+        reading the DB at the moment of the request.
         """
-        captured = {}
+        send = fake_bc.request
 
-        async def post_side_effect(entity, body, **kwargs):
+        async def checking_request(method, url, **kwargs):
             # Scan the batch ledger dir for any *.db that contains an
             # intent row for this POST. Done at call time so we catch a
             # write-order regression.
@@ -117,10 +113,9 @@ class TestIntentBeforeHttp:
             assert all(r["outcome_ts"] is None for r in rows), (
                 "outcome must NOT be written before HTTP returns"
             )
-            captured["body"] = body
-            return {"id": "created-1"}
+            return await send(method, url, **kwargs)
 
-        fake_client.post.side_effect = post_side_effect
+        monkeypatch.setattr(fake_bc, "request", checking_request)
 
         f = _write_yaml(tmp_path, "p.yaml", """
             steps:
@@ -130,49 +125,29 @@ class TestIntentBeforeHttp:
                 data:
                   displayName: "ok"
         """)
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            run_batch(
-                file=f, dry_run=False, output=None, format=None,
-                set_params=None, params_file=None, yes=True,
-            )
+        _run(f)
 
-        # Post-run: outcome row populated.
-        db_files = list(ledger_home.glob("*.db"))
-        assert len(db_files) == 1
-        with sqlite3.connect(db_files[0]) as conn:
-            conn.row_factory = sqlite3.Row
-            rows = [
-                dict(r) for r in conn.execute(
-                    "SELECT * FROM step ORDER BY seq"
-                )
-            ]
+        assert [(s.method, s.json_body) for s in fake_bc.sent] == [
+            ("POST", {"displayName": "ok"}),
+        ]
+        # Post-run: outcome row populated; intent URL is the URL sent.
+        rows = _steps(ledger_home)
         assert len(rows) == 1
         assert rows[0]["status"] == "committed"
         assert rows[0]["outcome_ts"] is not None
         assert rows[0]["method"] == "POST"
-        assert "items" in rows[0]["url"]
+        assert rows[0]["url"] == fake_bc.last.url
+        assert rows[0]["url"].endswith("/items")
 
     def test_partially_committed_after_simulated_crash(
-        self, writable_state, ledger_home, fake_client, tmp_path,
+        self, writable_state, ledger_home, fake_bc, tmp_path,
     ):
         """Step 1 succeeds; step 2 'crashes' (raises mid-flight) — the run
         ledger surfaces ``partially_committed`` on read.
         """
-        call_count = {"n": 0}
-
-        async def post_side_effect(entity, body, **kwargs):
-            call_count["n"] += 1
-            if call_count["n"] == 2:
-                # Simulate SIGKILL between intent + outcome by raising a
-                # BaseException that batch_cmd cannot catch with `except
-                # Exception:`.
-                raise BaseException("simulated SIGKILL")
-            return {"id": f"rec-{call_count['n']}"}
-
-        fake_client.post.side_effect = post_side_effect
+        # Simulate SIGKILL between intent + outcome on step 2 by raising a
+        # BaseException that batch_cmd cannot catch with `except Exception:`.
+        fake_bc.reply({"id": "rec-1"}, BaseException("simulated SIGKILL"))
 
         f = _write_yaml(tmp_path, "two.yaml", """
             steps:
@@ -185,15 +160,8 @@ class TestIntentBeforeHttp:
                 endpoint: items
                 data: {x: 2}
         """)
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            with pytest.raises(BaseException, match="simulated SIGKILL"):
-                run_batch(
-                    file=f, dry_run=False, output=None, format=None,
-                    set_params=None, params_file=None, yes=True,
-                )
+        with pytest.raises(BaseException, match="simulated SIGKILL"):
+            _run(f)
 
         # Read the ledger after the crash.
         from bcli.batch.ledger import Ledger
@@ -205,7 +173,7 @@ class TestIntentBeforeHttp:
         assert rows[0]["state"] == "partially_committed"
 
     def test_normal_completion_marks_completed(
-        self, writable_state, ledger_home, fake_client, tmp_path,
+        self, writable_state, ledger_home, fake_bc, tmp_path,
     ):
         f = _write_yaml(tmp_path, "ok.yaml", """
             steps:
@@ -214,14 +182,7 @@ class TestIntentBeforeHttp:
                 endpoint: items
                 data: {x: 1}
         """)
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            run_batch(
-                file=f, dry_run=False, output=None, format=None,
-                set_params=None, params_file=None, yes=True,
-            )
+        _run(f)
 
         from bcli.batch.ledger import Ledger
         rows = Ledger.list_runs(base_dir=ledger_home)
@@ -234,10 +195,10 @@ class TestIntentBeforeHttp:
 
 class TestRollbackUrlCapture:
     def test_post_step_stores_rollback_url(
-        self, writable_state, ledger_home, fake_client, tmp_path,
+        self, writable_state, ledger_home, fake_bc, tmp_path,
     ):
         """POST that returns an ``id`` → rollback_url = entity_url(id)."""
-        fake_client.post.return_value = {"id": "VND-1"}
+        fake_bc.reply({"id": "VND-1"})
         f = _write_yaml(tmp_path, "p.yaml", """
             steps:
               - name: create_vendor
@@ -245,21 +206,71 @@ class TestRollbackUrlCapture:
                 endpoint: vendors
                 data: {name: "AAR"}
         """)
-        with patch(
-            "bcli_cli.commands.batch_cmd.state.make_async_client",
-            return_value=fake_client,
-        ):
-            run_batch(
-                file=f, dry_run=False, output=None, format=None,
-                set_params=None, params_file=None, yes=True,
-            )
+        _run(f)
 
-        db_files = list(ledger_home.glob("*.db"))
-        with sqlite3.connect(db_files[0]) as conn:
-            conn.row_factory = sqlite3.Row
-            row = dict(
-                conn.execute("SELECT * FROM step LIMIT 1").fetchone()
-            )
-        assert row["rollback_url"]
-        assert "vendors" in row["rollback_url"]
-        assert "VND-1" in row["rollback_url"]
+        row = _steps(ledger_home)[0]
+        assert row["rollback_url"] == f"{fake_bc.last.url}(VND-1)"
+
+
+# ─── Batch writes go through the SDK write operation ─────────────────
+
+
+class TestBatchWriteOperation:
+    def test_post_outcome_records_bc_correlation_id(
+        self, writable_state, ledger_home, fake_bc, tmp_path,
+    ):
+        f = _write_yaml(tmp_path, "p.yaml", """
+            steps:
+              - name: create
+                action: post
+                endpoint: items
+                data: {x: 1}
+        """)
+        _run(f)
+
+        assert _steps(ledger_home)[0]["bc_correlation_id"] == "corr-test"
+
+    def test_post_step_writes_one_audit_entry(
+        self, writable_state, ledger_home, fake_bc, tmp_path,
+    ):
+        import json
+
+        from bcli.config._model import AuditConfig
+
+        audit_file = tmp_path / "audit.jsonl"
+        state._config = state._config.model_copy(
+            update={"audit": AuditConfig(enabled=True, path=str(audit_file))},
+        )
+        f = _write_yaml(tmp_path, "p.yaml", """
+            steps:
+              - name: create
+                action: post
+                endpoint: items
+                data: {x: 1}
+        """)
+        _run(f)
+
+        entries = [json.loads(line) for line in audit_file.read_text().splitlines()]
+        assert len(entries) == 1
+        assert entries[0]["outcome"] == "completed"
+        assert entries[0]["method"] == "POST"
+        assert entries[0]["resolved_url"] == fake_bc.last.url
+        assert entries[0]["correlation_id"] == "corr-test"
+
+    def test_step_route_override_sends_to_custom_api(
+        self, writable_state, ledger_home, fake_bc, tmp_path,
+    ):
+        f = _write_yaml(tmp_path, "p.yaml", """
+            steps:
+              - name: create
+                action: post
+                endpoint: widgets
+                publisher: acme
+                group: ops
+                version: v1.0
+                data: {x: 1}
+        """)
+        _run(f)
+
+        assert "/api/acme/ops/v1.0/" in fake_bc.last.url
+        assert fake_bc.last.url.endswith("/widgets")

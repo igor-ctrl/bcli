@@ -56,9 +56,8 @@ def _assert_policy_failure_envelope(envelope_path: Path, *, method: str, endpoin
 
 class TestPostEnvelopeOnPolicyViolation:
     def test_post_emits_failed_envelope_when_disable_writes_blocks(
-        self, readonly_state, fake_client, monkeypatch, tmp_path: Path,
+        self, readonly_state, fake_bc, tmp_path: Path,
     ):
-        monkeypatch.setattr(state, "make_async_client", lambda **_: fake_client)
         out = tmp_path / "post-refused.json"
         with pytest.raises(typer.Exit) as excinfo:
             post_cmd.post_command(
@@ -74,14 +73,13 @@ class TestPostEnvelopeOnPolicyViolation:
             )
         assert excinfo.value.exit_code == 8
         _assert_policy_failure_envelope(out, method="POST", endpoint="vendors")
-        fake_client.post.assert_not_awaited()
+        assert fake_bc.sent == []
 
 
 class TestPatchEnvelopeOnPolicyViolation:
     def test_patch_emits_failed_envelope_when_disable_writes_blocks(
-        self, readonly_state, fake_client, monkeypatch, tmp_path: Path,
+        self, readonly_state, fake_bc, tmp_path: Path,
     ):
-        monkeypatch.setattr(state, "make_async_client", lambda **_: fake_client)
         out = tmp_path / "patch-refused.json"
         with pytest.raises(typer.Exit) as excinfo:
             patch_cmd.patch_command(
@@ -103,14 +101,13 @@ class TestPatchEnvelopeOnPolicyViolation:
         # is now inside the capture block.
         env = json.loads(out.read_text())
         assert env["record_id"] == "vnd-1"
-        fake_client.patch.assert_not_awaited()
+        assert fake_bc.sent == []
 
 
 class TestDeleteEnvelopeOnPolicyViolation:
     def test_delete_emits_failed_envelope_when_disable_writes_blocks(
-        self, readonly_state, fake_client, monkeypatch, tmp_path: Path,
+        self, readonly_state, fake_bc, tmp_path: Path,
     ):
-        monkeypatch.setattr(state, "make_async_client", lambda **_: fake_client)
         out = tmp_path / "delete-refused.json"
         with pytest.raises(typer.Exit) as excinfo:
             delete_cmd.delete_command(
@@ -129,7 +126,7 @@ class TestDeleteEnvelopeOnPolicyViolation:
         _assert_policy_failure_envelope(out, method="DELETE", endpoint="vendors")
         env = json.loads(out.read_text())
         assert env["record_id"] == "vnd-1"
-        fake_client.delete.assert_not_awaited()
+        assert fake_bc.sent == []
 
 
 class TestAttachUploadEnvelopeOnPolicyViolation:

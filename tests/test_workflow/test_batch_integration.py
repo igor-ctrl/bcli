@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import textwrap
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
-
 import pytest
 
-from bcli.odata._response import ODataResponse
+from bcli.config._model import BCConfig, BCDefaults, BCProfile
 from bcli.workflow._models import WorkflowContext
+from bcli_cli._state import state
 from bcli_cli.commands.batch_cmd import (
     _build_workflow_params,
     _execute_batch,
@@ -22,12 +21,18 @@ from bcli_cli.commands.batch_cmd import (
 # ─── Helpers ─────────────────────────────────────────────────────────
 
 
-def _mock_client() -> AsyncMock:
-    """AsyncBCClient mock that returns predictable responses."""
-    client = AsyncMock()
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=False)
-    return client
+@pytest.fixture
+def bc(fake_bc):
+    """A writable profile whose real client talks to ``fake_bc``."""
+    state._config = BCConfig(
+        defaults=BCDefaults(profile="dev"),
+        profiles={"dev": BCProfile(tenant_id="t1", environment="Sandbox", company_id="c-1")},
+    )
+    state._registry = None
+    state.profile_name = None
+    yield fake_bc
+    state._config = None
+    state._registry = None
 
 
 def _write_yaml(tmp_path: Path, content: str) -> Path:
@@ -103,14 +108,13 @@ class TestHasReferences:
 
 class TestExecuteBatchWorkflow:
     @pytest.mark.asyncio
-    async def test_post_chain_resolves_step_reference(self):
+    async def test_post_chain_resolves_step_reference(self, bc):
         """POST step 1 creates a record; step 2 uses its 'no' field."""
-        client = _mock_client()
         # Step 1: POST returns a header with 'no' field
-        client.post.side_effect = [
+        bc.reply(
             {"no": "PI-001", "id": "header-1"},
             {"id": "line-1", "documentNo": "PI-001"},
-        ]
+        )
 
         steps = [
             {
@@ -128,22 +132,20 @@ class TestExecuteBatchWorkflow:
         ]
         context = WorkflowContext(params={})
 
-        with patch("bcli_cli.commands.batch_cmd.state.make_async_client", return_value=client):
-            results = await _execute_batch(steps, context=context, output_format=None)
+        results = await _execute_batch(steps, context=context, output_format=None)
 
         assert len(results) == 2
         assert results[0]["status"] == "ok"
         assert results[1]["status"] == "ok"
 
-        # Verify second POST was called with resolved documentNo
-        second_post_body = client.post.call_args_list[1][0][1]
-        assert second_post_body["documentNo"] == "PI-001"
+        # Verify second POST was sent with resolved documentNo
+        assert bc.sent[1].url.endswith("/purchaseLines")
+        assert bc.sent[1].json_body["documentNo"] == "PI-001"
 
     @pytest.mark.asyncio
-    async def test_param_resolution_in_data(self):
+    async def test_param_resolution_in_data(self, bc):
         """Runtime params resolve in step data."""
-        client = _mock_client()
-        client.post.return_value = {"id": "new-1"}
+        bc.reply({"id": "new-1"})
 
         steps = [
             {
@@ -155,19 +157,15 @@ class TestExecuteBatchWorkflow:
         ]
         context = WorkflowContext(params={"vendor_no": "V00011"})
 
-        with patch("bcli_cli.commands.batch_cmd.state.make_async_client", return_value=client):
-            results = await _execute_batch(steps, context=context)
+        results = await _execute_batch(steps, context=context)
 
         assert results[0]["status"] == "ok"
-        post_body = client.post.call_args[0][1]
-        assert post_body["vendorNo"] == "V00011"
+        assert bc.last.json_body["vendorNo"] == "V00011"
 
     @pytest.mark.asyncio
-    async def test_get_result_chained(self):
+    async def test_get_result_chained(self, bc):
         """GET results can be indexed in subsequent steps."""
-        client = _mock_client()
-        client.get.return_value = ODataResponse({"value": [{"id": "vendor-1", "name": "AAR"}]})
-        client.post.return_value = {"id": "new-1"}
+        bc.reply({"value": [{"id": "vendor-1", "name": "AAR"}]}, {"id": "new-1"})
 
         steps = [
             {"name": "fetch_vendor", "action": "get", "endpoint": "vendors", "params": {"top": 1}},
@@ -180,19 +178,17 @@ class TestExecuteBatchWorkflow:
         ]
         context = WorkflowContext(params={})
 
-        with patch("bcli_cli.commands.batch_cmd.state.make_async_client", return_value=client):
-            results = await _execute_batch(steps, context=context)
+        results = await _execute_batch(steps, context=context)
 
         assert results[0]["status"] == "ok"
         assert results[1]["status"] == "ok"
-        post_body = client.post.call_args[0][1]
-        assert post_body["vendorId"] == "vendor-1"
+        assert [s.method for s in bc.sent] == ["GET", "POST"]
+        assert bc.last.json_body["vendorId"] == "vendor-1"
 
     @pytest.mark.asyncio
-    async def test_failed_step_skips_dependents(self):
+    async def test_failed_step_skips_dependents(self, bc):
         """If step 1 fails, step 2 referencing it gets a resolution error."""
-        client = _mock_client()
-        client.post.side_effect = Exception("API error")
+        bc.reply(Exception("API error"))
 
         steps = [
             {"name": "create_header", "action": "post", "endpoint": "items", "data": {"x": 1}},
@@ -205,25 +201,23 @@ class TestExecuteBatchWorkflow:
         ]
         context = WorkflowContext(params={})
 
-        with patch("bcli_cli.commands.batch_cmd.state.make_async_client", return_value=client):
-            results = await _execute_batch(steps, context=context)
+        results = await _execute_batch(steps, context=context)
 
         assert results[0]["status"] == "error"
         assert results[1]["status"] == "error"
         assert "failed step" in results[1]["error"]
+        assert len(bc.sent) == 1  # the dependent step never reached BC
 
     @pytest.mark.asyncio
-    async def test_no_context_backward_compat(self):
+    async def test_no_context_backward_compat(self, bc):
         """Without context (non-workflow mode), batch works as before."""
-        client = _mock_client()
-        client.get.return_value = ODataResponse({"value": [{"id": "1"}]})
+        bc.reply({"value": [{"id": "1"}]})
 
         steps = [
             {"action": "get", "endpoint": "items", "params": {}},
         ]
 
-        with patch("bcli_cli.commands.batch_cmd.state.make_async_client", return_value=client):
-            results = await _execute_batch(steps, context=None)
+        results = await _execute_batch(steps, context=None)
 
         assert len(results) == 1
         assert results[0]["status"] == "ok"

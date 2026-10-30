@@ -491,17 +491,7 @@ async def _run_saved_query(endpoint: str, resolved: ResolvedQuery) -> list[dict]
     async with state.make_async_client() as client:
         if resolved.all_pages:
             records: list[dict] = []
-            bound = client.query(endpoint)
-            for f in query._params.filters:
-                bound.filter(f)
-            for s in query._params.selects:
-                bound.select(s)
-            for ex in query._params.expands:
-                bound.expand(ex)
-            if query._params.orderby:
-                bound.orderby(query._params.orderby)
-            pages = await bound.pages()
-            async for page in pages:
+            async for page in client.pages(endpoint, query):
                 records.extend(page)
             return records
 

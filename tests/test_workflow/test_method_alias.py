@@ -68,11 +68,10 @@ class TestBatchRunnerHonoursMethodAlias:
     ``action:`` must produce the right HTTP verb on the client, not a
     silent GET."""
 
-    def test_method_post_calls_client_post(
-        self, tmp_path, monkeypatch,
+    def test_method_post_sends_post(
+        self, tmp_path, monkeypatch, fake_bc,
     ):
         from pathlib import Path
-        from unittest.mock import AsyncMock
 
         from bcli.config._model import BCConfig, BCDefaults, BCProfile
         from bcli_cli._state import state
@@ -99,17 +98,7 @@ class TestBatchRunnerHonoursMethodAlias:
         state.dry_run = False
         state.quiet = True
 
-        fake = AsyncMock()
-        fake.__aenter__ = AsyncMock(return_value=fake)
-        fake.__aexit__ = AsyncMock(return_value=False)
-        fake.post = AsyncMock(return_value={"id": "x-1"})
-        fake.get = AsyncMock(side_effect=AssertionError(
-            "client.get must NOT be called — method: POST should reach "
-            "client.post via the action alias."
-        ))
-        fake._resolve_url = lambda entity, **kw: f"https://x/{entity}"
-
-        monkeypatch.setattr(state, "make_async_client", lambda **_: fake)
+        fake_bc.reply({"id": "x-1"})
 
         # Non-interactive: bypass the --yes prompt.
         import sys
@@ -145,9 +134,7 @@ class TestBatchRunnerHonoursMethodAlias:
             state._config = None
             state._registry = None
 
-        # The fix: client.post is what should have been called. The
-        # AsyncMock raises in client.get if the runner downgraded.
-        assert fake.post.await_count == 1, (
-            f"Expected client.post to be called once, "
-            f"got post={fake.post.await_count}, get={fake.get.await_count}"
-        )
+        # The fix: a POST carrying the step body went out — not a GET.
+        assert [(s.method, s.json_body) for s in fake_bc.sent] == [
+            ("POST", {"flag": True}),
+        ], f"Expected one POST, got {[s.method for s in fake_bc.sent]}"

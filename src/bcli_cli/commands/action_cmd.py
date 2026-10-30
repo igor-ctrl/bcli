@@ -26,18 +26,19 @@ Spec-conformance notes:
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import Optional
 
 import typer
 from rich.console import Console
 
+from bcli.client import WriteResult
 from bcli.errors import BCLIError
 from bcli_cli._data_arg import parse_data_argument
-from bcli_cli._envelope_wrap import capture, validate_flags
+from bcli_cli._envelope_wrap import validate_flags
 from bcli_cli._out_path import atomic_write_bytes, prepare_out_path
 from bcli_cli._state import state
+from bcli_cli._write_cmd import run_write
 from bcli_cli.output import format_output, print_context_banner
 
 console = Console(stderr=True)
@@ -159,89 +160,37 @@ def action_command(
 
     print_context_banner()
 
-    with capture(
-        method="POST",
-        endpoint=composed,
-        result_out=result_out,
-        result_fd=result_fd,
-    ) as cap:
-        from bcli_cli._safety import confirm_write_or_exit
-        from bcli_cli._url_resolve import try_resolve_url
+    written: list[int] = []
 
-        cap.set_resolved_url(try_resolve_url(
-            composed,
-            publisher=publisher, group=group, version=version,
-        ))
+    def _decode_to_out(result: WriteResult) -> None:
+        # Decode *before* the success envelope: a return value we can't turn
+        # into bytes means the caller didn't get what they asked for, and the
+        # envelope has to say failed. The POST already happened either way —
+        # that's what the envelope records.
+        if dest is not None:
+            written.append(_write_decoded_payload(result.body, dest, overwrite=overwrite))
 
-        # disable_writes / read-only-profile gate. Same policy as ``post``
-        # — actions are mutating writes from the agent's perspective.
-        confirm_write_or_exit("ACTION", composed, yes=yes)
-
-        if state.dry_run:
-            from bcli_cli._dry_run import render_dry_run
-            cap.mark_dry_run()
-            cap.emit_success()
-            render_dry_run(
-                "POST", composed, body=body,
-                publisher=publisher, group=group, version=version,
-            )
-
-        try:
-            result = asyncio.run(_audited_post(
-                composed, body,
-                publisher=publisher, group=group, version=version,
-                idempotency_key=idempotency_key,
-            ))
-            cap.extract_record_id_from(result)
-
-            written: int | None = None
-            if dest is not None:
-                # Decode *before* emit_success: a return value we can't turn
-                # into bytes means the caller didn't get what they asked for,
-                # and the envelope has to say failed. The POST already
-                # happened either way — that's what the envelope records.
-                written = _write_decoded_payload(result, dest, overwrite=overwrite)
-
-            cap.emit_success()
-
-            if dest is not None:
-                # Deliberately no format_output here: the payload is base64,
-                # and dumping it to stdout after writing the decoded file is
-                # noise at best and a wrecked pipe at worst.
-                console.print(f"[green]✓[/green] Decoded {written:,} bytes to {dest}")
-            elif result:
-                format_output([result], output_format)
-            else:
-                # 204 No Content — common for actions that mutate but
-                # don't return a payload. Stay quiet on machine-readable
-                # formats, print a friendly line on table/markdown.
-                if output_format in (None, "table", "markdown"):
-                    console.print("[green]✓[/green] Action invoked (204 No Content)")
-        except Exception as e:
-            cap.emit_failure(e)
-            console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(1)
-
-
-async def _audited_post(endpoint, body, **kwargs):
-    from bcli_cli._audit_wrap import audited_write
-    from bcli_cli._url_resolve import try_resolve_url
-    resolved_url = try_resolve_url(
-        endpoint,
-        publisher=kwargs.get("publisher"),
-        group=kwargs.get("group"),
-        version=kwargs.get("version"),
-    )
-    return await audited_write(
-        _execute_post(endpoint, body, **kwargs),
-        method="POST", endpoint=endpoint, body=body,
-        resolved_url=resolved_url,
+    # Same disable_writes gate as ``post`` — actions are mutating writes from
+    # the agent's perspective — labelled ACTION in the prompt.
+    result = run_write(
+        "POST", composed, body=body,
+        publisher=publisher, group=group, version=version,
+        idempotency_key=idempotency_key,
+        yes=yes, result_out=result_out, result_fd=result_fd,
+        gate_label="ACTION", check=_decode_to_out,
     )
 
-
-async def _execute_post(endpoint, body, **kwargs):
-    async with state.make_async_client() as client:
-        return await client.post(endpoint, body, **kwargs)
+    if dest is not None:
+        # Deliberately no format_output here: the payload is base64, and
+        # dumping it to stdout after writing the decoded file is noise at
+        # best and a wrecked pipe at worst.
+        console.print(f"[green]✓[/green] Decoded {written[0]:,} bytes to {dest}")
+    elif result.body:
+        format_output([result.body], output_format)
+    elif output_format in (None, "table", "markdown"):
+        # 204 No Content — common for actions that mutate but don't return a
+        # payload. Stay quiet on machine-readable formats.
+        console.print("[green]✓[/green] Action invoked (204 No Content)")
 
 
 def _decode_base64_payload(result: dict | str) -> bytes:
